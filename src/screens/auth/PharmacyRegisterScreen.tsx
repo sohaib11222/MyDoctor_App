@@ -1,0 +1,313 @@
+import React, { useState } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  KeyboardAvoidingView,
+  Platform,
+  TouchableOpacity,
+  Image,
+  Switch,
+} from 'react-native';
+import { useNavigation } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { useForm, Controller } from 'react-hook-form';
+import { yupResolver } from '@hookform/resolvers/yup';
+import * as yup from 'yup';
+import { AuthStackParamList } from '../../navigation/types';
+import { Input } from '../../components/common/Input';
+import { Button } from '../../components/common/Button';
+import { useAuth } from '../../contexts/AuthContext';
+import { colors } from '../../constants/colors';
+import { Ionicons } from '@expo/vector-icons';
+
+type PharmacyRegisterScreenNavigationProp = NativeStackNavigationProp<AuthStackParamList>;
+
+const schema = yup.object({
+  name: yup.string().min(3, 'Name must be at least 3 characters').required('Name is required'),
+  phone: yup.string().required('Phone number is required'),
+  password: yup.string().min(6, 'Password must be at least 6 characters').required('Password is required'),
+});
+
+interface PharmacyRegisterFormData {
+  name: string;
+  phone: string;
+  password: string;
+}
+
+export const PharmacyRegisterScreen = () => {
+  const navigation = useNavigation<PharmacyRegisterScreenNavigationProp>();
+  const { register: registerUser } = useAuth();
+  const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+
+  const {
+    control,
+    handleSubmit,
+    formState: { errors },
+  } = useForm<PharmacyRegisterFormData>({
+    resolver: yupResolver(schema),
+    defaultValues: {
+      name: '',
+      phone: '',
+      password: '',
+    },
+  });
+
+  const onSubmit = async (data: PharmacyRegisterFormData) => {
+    setLoading(true);
+    try {
+      await registerUser(
+        {
+          name: data.name,
+          email: `${data.phone}@pharmacy.temp`, // Temporary email for pharmacy
+          password: data.password,
+        },
+        'pharmacy'
+      );
+      // Navigate to step 1 after registration
+      navigation.navigate('PharmacyRegisterStep1');
+    } catch (error) {
+      // Error is handled in AuthContext
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <KeyboardAvoidingView
+      style={styles.container}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+    >
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Header Image Section */}
+        <View style={styles.imageContainer}>
+          <View style={styles.imagePlaceholder}>
+            <Ionicons name="medical" size={80} color={colors.primary} />
+          </View>
+        </View>
+
+        {/* Registration Form */}
+        <View style={styles.formContainer}>
+          <View style={styles.headerRow}>
+            <Text style={styles.title}>Pharmacy Register</Text>
+            <TouchableOpacity
+              onPress={() => navigation.navigate('DoctorRegister')}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.linkText}>Are you a Doctor?</Text>
+            </TouchableOpacity>
+          </View>
+          <Text style={styles.subtitle}>Create your pharmacy account</Text>
+
+          <View style={styles.form}>
+            <Controller
+              control={control}
+              name="name"
+              render={({ field: { onChange, onBlur, value } }) => (
+                <Input
+                  label="Name"
+                  placeholder="Enter pharmacy name"
+                  value={value}
+                  onChangeText={onChange}
+                  onBlur={onBlur}
+                  error={errors.name?.message}
+                  autoCapitalize="words"
+                />
+              )}
+            />
+
+            <Controller
+              control={control}
+              name="phone"
+              render={({ field: { onChange, onBlur, value } }) => (
+                <Input
+                  label="Phone"
+                  placeholder="Enter phone number"
+                  value={value}
+                  onChangeText={onChange}
+                  onBlur={onBlur}
+                  error={errors.phone?.message}
+                  keyboardType="phone-pad"
+                />
+              )}
+            />
+
+            <Controller
+              control={control}
+              name="password"
+              render={({ field: { onChange, onBlur, value } }) => (
+                <Input
+                  label="Create Password"
+                  placeholder="Enter password"
+                  value={value}
+                  onChangeText={onChange}
+                  onBlur={onBlur}
+                  error={errors.password?.message}
+                  secureTextEntry={!showPassword}
+                  rightIcon={
+                    <TouchableOpacity
+                      onPress={() => setShowPassword(!showPassword)}
+                      activeOpacity={0.7}
+                    >
+                      <Ionicons
+                        name={showPassword ? 'eye-off-outline' : 'eye-outline'}
+                        size={20}
+                        color={colors.textSecondary}
+                      />
+                    </TouchableOpacity>
+                  }
+                />
+              )}
+            />
+
+            <Button
+              title="Sign Up"
+              onPress={handleSubmit(onSubmit)}
+              loading={loading}
+              style={styles.submitButton}
+            />
+
+            <View style={styles.divider}>
+              <View style={styles.dividerLine} />
+              <Text style={styles.dividerText}>or</Text>
+              <View style={styles.dividerLine} />
+            </View>
+
+            <TouchableOpacity style={styles.socialButton} activeOpacity={0.7}>
+              <Ionicons name="logo-google" size={20} color={colors.text} />
+              <Text style={styles.socialButtonText}>Sign in With Google</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.socialButton} activeOpacity={0.7}>
+              <Ionicons name="logo-facebook" size={20} color={colors.primary} />
+              <Text style={styles.socialButtonText}>Sign in With Facebook</Text>
+            </TouchableOpacity>
+
+            <View style={styles.loginLink}>
+              <Text style={styles.loginLinkText}>Already have account? </Text>
+              <TouchableOpacity onPress={() => navigation.navigate('Login')} activeOpacity={0.7}>
+                <Text style={styles.loginLinkButton}>Sign In</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </ScrollView>
+    </KeyboardAvoidingView>
+  );
+};
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: colors.backgroundLight,
+  },
+  scrollContent: {
+    flexGrow: 1,
+  },
+  imageContainer: {
+    height: 200,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingTop: 60,
+    paddingBottom: 40,
+    borderBottomRightRadius: 30,
+    borderBottomLeftRadius: 30,
+    backgroundColor: colors.primaryLight,
+  },
+  imagePlaceholder: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    backgroundColor: '#00000080',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  formContainer: {
+    flex: 1,
+    backgroundColor: colors.background,
+    borderTopLeftRadius: 30,
+    borderTopRightRadius: 30,
+    paddingHorizontal: 24,
+    paddingTop: 32,
+    paddingBottom: 40,
+  },
+  headerRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  title: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: colors.text,
+  },
+  linkText: {
+    fontSize: 14,
+    color: colors.primary,
+    fontWeight: '500',
+  },
+  subtitle: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    marginBottom: 32,
+  },
+  form: {
+    gap: 20,
+  },
+  submitButton: {
+    marginTop: 8,
+  },
+  divider: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: 24,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: colors.border,
+  },
+  dividerText: {
+    marginHorizontal: 16,
+    fontSize: 14,
+    color: colors.textSecondary,
+  },
+  socialButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.background,
+    gap: 12,
+  },
+  socialButtonText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: colors.text,
+  },
+  loginLink: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    marginTop: 24,
+  },
+  loginLinkText: {
+    fontSize: 14,
+    color: colors.textSecondary,
+  },
+  loginLinkButton: {
+    fontSize: 14,
+    color: colors.primary,
+    fontWeight: '600',
+  },
+});
+
