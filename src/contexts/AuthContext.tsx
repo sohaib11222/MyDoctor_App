@@ -1,19 +1,24 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Toast from 'react-native-toast-message';
+import * as authApi from '../services/auth';
 
-export type UserRole = 'patient' | 'doctor' | 'pharmacy';
+export type UserRole = 'patient' | 'doctor';
 
 export interface User {
-  id: string;
+  _id?: string;
+  id?: string;
   email: string;
   role: UserRole;
-  name: string;
+  name?: string;
+  fullName?: string;
   avatar?: string;
+  profileImage?: string;
   token?: string;
   // Doctor specific
   isVerified?: boolean;
   verificationStatus?: 'pending' | 'approved' | 'rejected';
+  status?: 'PENDING' | 'APPROVED' | 'REJECTED' | 'BLOCKED';
   // Patient specific
   phone?: string;
 }
@@ -21,18 +26,19 @@ export interface User {
 interface AuthContextType {
   user: User | null;
   isLoading: boolean;
-  login: (email: string, password: string, role?: UserRole) => Promise<void>;
+  login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   register: (data: RegisterData, role: UserRole) => Promise<void>;
-  updateUser: (userData: Partial<User>) => void;
+  updateUser: (userData: Partial<User> | User) => Promise<void>;
 }
 
 export interface RegisterData {
-  name: string;
+  fullName: string;
   email: string;
   password: string;
   password_confirmation?: string;
   phone?: string;
+  gender?: 'MALE' | 'FEMALE' | 'OTHER';
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -52,14 +58,43 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const checkAuth = async () => {
     try {
-      const [userData, token] = await Promise.all([
-        AsyncStorage.getItem(STORAGE_KEYS.USER),
-        AsyncStorage.getItem(STORAGE_KEYS.TOKEN),
-      ]);
-
-      if (userData && token) {
-        const parsedUser = JSON.parse(userData);
-        setUser({ ...parsedUser, token });
+      const token = await AsyncStorage.getItem(STORAGE_KEYS.TOKEN);
+      
+      if (token) {
+        // Try to get user from API (this will refresh token if needed)
+        try {
+          const userData = await authApi.getUser();
+          
+          // Map backend user to app User interface
+          const mappedUser: User = {
+            _id: userData._id,
+            id: userData._id || userData.id,
+            email: userData.email,
+            role: mapBackendRoleToAppRole(userData.role),
+            name: userData.fullName || userData.name,
+            fullName: userData.fullName || userData.name,
+            avatar: userData.profileImage,
+            profileImage: userData.profileImage,
+            token,
+            isVerified: userData.status === 'APPROVED',
+            verificationStatus: mapBackendStatusToAppStatus(userData.status),
+            status: userData.status,
+            phone: userData.phone,
+          };
+          
+          setUser(mappedUser);
+          await AsyncStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(mappedUser));
+        } catch (apiError) {
+          // If API call fails, try to use stored user data
+          const userData = await AsyncStorage.getItem(STORAGE_KEYS.USER);
+          if (userData) {
+            const parsedUser = JSON.parse(userData);
+            setUser({ ...parsedUser, token });
+          } else {
+            // Clear token if no user data
+            await AsyncStorage.removeItem(STORAGE_KEYS.TOKEN);
+          }
+        }
       }
     } catch (error) {
       console.error('Auth check error:', error);
@@ -70,54 +105,74 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   };
 
-  const login = async (email: string, password: string, role: UserRole = 'patient') => {
+  // Helper function to map backend role to app role
+  const mapBackendRoleToAppRole = (backendRole: string): UserRole => {
+    const roleMap: Record<string, UserRole> = {
+      PATIENT: 'patient',
+      DOCTOR: 'doctor',
+    };
+    return roleMap[backendRole] || 'patient';
+  };
+
+  // Helper function to map backend status to app status
+  const mapBackendStatusToAppStatus = (backendStatus?: string): 'pending' | 'approved' | 'rejected' => {
+    if (!backendStatus) return 'pending';
+    const statusMap: Record<string, 'pending' | 'approved' | 'rejected'> = {
+      PENDING: 'pending',
+      APPROVED: 'approved',
+      REJECTED: 'rejected',
+      BLOCKED: 'rejected',
+    };
+    return statusMap[backendStatus] || 'pending';
+  };
+
+  const login = async (email: string, password: string) => {
     try {
-      // TODO: Replace with actual API call
-      // For now, using mock data based on role
-      const mockUsers: Record<UserRole, User> = {
-        patient: {
-          id: '1',
-          email,
-          role: 'patient',
-          name: 'John Doe',
-          phone: '+1234567890',
-        },
-        doctor: {
-          id: '2',
-          email,
-          role: 'doctor',
-          name: 'Dr. Jane Smith',
-          isVerified: true,
-          verificationStatus: 'approved',
-        },
-        pharmacy: {
-          id: '3',
-          email,
-          role: 'pharmacy',
-          name: 'Pharmacy Name',
-        },
-      };
+      const response = await authApi.login({ email, password });
+      
+      if (response.data?.user && response.data?.token) {
+        const backendUser = response.data.user;
+        
+        // Map backend user to app User interface
+        const mappedUser: User = {
+          _id: backendUser._id,
+          id: backendUser._id || backendUser.id,
+          email: backendUser.email,
+          role: mapBackendRoleToAppRole(backendUser.role),
+          name: backendUser.fullName || backendUser.name,
+          fullName: backendUser.fullName || backendUser.name,
+          avatar: backendUser.profileImage,
+          profileImage: backendUser.profileImage,
+          token: response.data.token,
+          isVerified: backendUser.status === 'APPROVED',
+          verificationStatus: mapBackendStatusToAppStatus(backendUser.status),
+          status: backendUser.status,
+          phone: backendUser.phone,
+        };
 
-      const mockToken = `mock_token_${Date.now()}`;
-      const userData = mockUsers[role];
-      const userWithToken = { ...userData, token: mockToken };
+        setUser(mappedUser);
+        await AsyncStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(mappedUser));
 
-      // Store user and token
-      await AsyncStorage.multiSet([
-        [STORAGE_KEYS.USER, JSON.stringify(userData)],
-        [STORAGE_KEYS.TOKEN, mockToken],
-      ]);
-
-      setUser(userWithToken);
-
-      Toast.show({
-        type: 'success',
-        text1: 'Login Successful',
-        text2: `Welcome back, ${userData.name}!`,
-      });
-    } catch (error) {
+        // For pending doctors, they will be redirected to verification upload by AuthNavigator
+        if (mappedUser.role === 'doctor' && mappedUser.verificationStatus === 'pending') {
+          Toast.show({
+            type: 'info',
+            text1: 'Verification Required',
+            text2: 'Please complete verification to continue',
+          });
+        } else {
+          Toast.show({
+            type: 'success',
+            text1: 'Login Successful',
+            text2: `Welcome back, ${mappedUser.name || mappedUser.fullName || 'User'}!`,
+          });
+        }
+      } else {
+        throw new Error('Invalid response from server');
+      }
+    } catch (error: any) {
       console.error('Login error:', error);
-      const errorMessage = error instanceof Error ? error.message : 'Please check your credentials';
+      const errorMessage = error?.response?.data?.message || error?.message || 'Please check your credentials';
       Toast.show({
         type: 'error',
         text1: 'Login Failed',
@@ -129,76 +184,59 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const register = async (data: RegisterData, role: UserRole) => {
     try {
-      // TODO: Replace with actual API call
-      const newUser: User = {
-        id: Date.now().toString(),
-        email: data.email,
-        role,
-        name: data.name,
-        phone: data.phone,
-        // Doctor specific
-        ...(role === 'doctor' && {
-          isVerified: false,
-          verificationStatus: 'pending' as const,
-        }),
-      };
-
-      const mockToken = `mock_token_${Date.now()}`;
-      const userWithToken = { ...newUser, token: mockToken };
-
-      // For doctors, don't log them in until verification is complete
-      // Store registration data temporarily but don't set user state
-      if (role === 'doctor' && !newUser.isVerified) {
-        // Store registration data temporarily for verification flow
-        await AsyncStorage.setItem('pending_doctor_registration', JSON.stringify(newUser));
+      const response = await authApi.register(data, role);
+      
+      if (response.data?.user && response.data?.token) {
+        const backendUser = response.data.user;
         
+        // Map backend user to app User interface
+        const mappedUser: User = {
+          _id: backendUser._id,
+          id: backendUser._id || backendUser.id,
+          email: backendUser.email,
+          role: mapBackendRoleToAppRole(backendUser.role),
+          name: backendUser.fullName || backendUser.name,
+          fullName: backendUser.fullName || backendUser.name,
+          avatar: backendUser.profileImage,
+          profileImage: backendUser.profileImage,
+          token: response.data.token,
+          isVerified: backendUser.status === 'APPROVED',
+          verificationStatus: mapBackendStatusToAppStatus(backendUser.status),
+          status: backendUser.status,
+          phone: backendUser.phone,
+        };
+
+        // For doctors, set user but keep them in AuthNavigator for verification flow
+        if (role === 'doctor' && mappedUser.verificationStatus === 'pending') {
+          // Store user and token so they're logged in but stay in AuthNavigator
+          setUser(mappedUser);
+          await AsyncStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(mappedUser));
+          
+          Toast.show({
+            type: 'success',
+            text1: 'Registration Successful',
+            text2: 'Please complete verification to continue',
+          });
+          
+          // User will be redirected to DoctorVerificationUpload by AuthNavigator
+          return;
+        }
+
+        // For patients or approved doctors, log them in
+        setUser(mappedUser);
+        await AsyncStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(mappedUser));
+
         Toast.show({
           type: 'success',
           text1: 'Registration Successful',
-          text2: 'Please complete verification to continue',
+          text2: `Welcome, ${mappedUser.name || mappedUser.fullName || 'User'}!`,
         });
-
-        Toast.show({
-          type: 'info',
-          text1: 'Verification Required',
-          text2: 'Please complete doctor verification',
-        });
-        
-        // Don't set user, so they stay in AuthNavigator
-        return;
+      } else {
+        throw new Error('Invalid response from server');
       }
-
-      // For pharmacy, don't log them in until registration steps are complete
-      if (role === 'pharmacy') {
-        // Store registration data temporarily for multi-step registration flow
-        await AsyncStorage.setItem('pending_pharmacy_registration', JSON.stringify(newUser));
-        
-        Toast.show({
-          type: 'success',
-          text1: 'Registration Started',
-          text2: 'Please complete registration steps',
-        });
-        
-        // Don't set user, so they stay in AuthNavigator
-        return;
-      }
-
-      // For non-doctor/pharmacy roles or verified doctors, log them in
-      await AsyncStorage.multiSet([
-        [STORAGE_KEYS.USER, JSON.stringify(newUser)],
-        [STORAGE_KEYS.TOKEN, mockToken],
-      ]);
-
-      setUser(userWithToken);
-
-      Toast.show({
-        type: 'success',
-        text1: 'Registration Successful',
-        text2: `Welcome, ${newUser.name}!`,
-      });
-    } catch (error) {
+    } catch (error: any) {
       console.error('Register error:', error);
-      const errorMessage = error instanceof Error ? error.message : 'Please try again';
+      const errorMessage = error?.response?.data?.message || error?.message || 'Please try again';
       Toast.show({
         type: 'error',
         text1: 'Registration Failed',
@@ -210,7 +248,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const logout = async () => {
     try {
-      await AsyncStorage.multiRemove([STORAGE_KEYS.USER, STORAGE_KEYS.TOKEN]);
+      await authApi.logout();
       setUser(null);
       Toast.show({
         type: 'success',
@@ -219,29 +257,38 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       });
     } catch (error) {
       console.error('Logout error:', error);
+      // Even if API call fails, clear local storage
+      await AsyncStorage.multiRemove([STORAGE_KEYS.USER, STORAGE_KEYS.TOKEN]);
+      setUser(null);
     }
   };
 
-  const updateUser = (userData: Partial<User> | User) => {
+  const updateUser = async (userData: Partial<User> | User) => {
     // If userData has all required fields, treat it as a full user
     if ('id' in userData && 'email' in userData && 'role' in userData) {
       const fullUser = userData as User;
       setUser(fullUser);
       // Store user without token in AsyncStorage
       const { token, ...userWithoutToken } = fullUser;
-      AsyncStorage.multiSet([
+      const storageItems: [string, string][] = [
         [STORAGE_KEYS.USER, JSON.stringify(userWithoutToken)],
-        ...(token ? [[STORAGE_KEYS.TOKEN, token]] : []),
-      ]);
+      ];
+      if (token) {
+        storageItems.push([STORAGE_KEYS.TOKEN, token]);
+      }
+      await AsyncStorage.multiSet(storageItems);
     } else if (user) {
       // Otherwise, update existing user
       const updatedUser = { ...user, ...userData };
       setUser(updatedUser);
       const { token, ...userWithoutToken } = updatedUser;
-      AsyncStorage.multiSet([
+      const storageItems: [string, string][] = [
         [STORAGE_KEYS.USER, JSON.stringify(userWithoutToken)],
-        ...(token ? [[STORAGE_KEYS.TOKEN, token]] : []),
-      ]);
+      ];
+      if (token) {
+        storageItems.push([STORAGE_KEYS.TOKEN, token]);
+      }
+      await AsyncStorage.multiSet(storageItems);
     }
   };
 

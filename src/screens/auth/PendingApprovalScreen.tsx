@@ -14,27 +14,96 @@ import { AuthStackParamList } from '../../navigation/types';
 import { useAuth } from '../../contexts/AuthContext';
 import { colors } from '../../constants/colors';
 import { Ionicons } from '@expo/vector-icons';
+import * as userApi from '../../services/user';
+import Toast from 'react-native-toast-message';
 
 type PendingApprovalScreenNavigationProp = NativeStackNavigationProp<AuthStackParamList>;
 
 export const PendingApprovalScreen = () => {
   const navigation = useNavigation<PendingApprovalScreenNavigationProp>();
-  const { logout } = useAuth();
+  const { user, logout, updateUser } = useAuth();
   const [checkingStatus, setCheckingStatus] = useState(true);
+  const [currentStatus, setCurrentStatus] = useState<string | null>(null);
 
   useEffect(() => {
     const checkApprovalStatus = async () => {
       try {
-        // TODO: Replace with actual API call
-        // const response = await axios.get('/api/doctors/verification-status')
-        // if (response.data.status === 'approved') {
-        //   navigation.navigate('Main')
-        // } else if (response.data.status === 'rejected') {
-        //   navigation.navigate('DoctorVerificationUpload')
-        // }
+        // Check user status from AuthContext first
+        if (user) {
+          const status = user.status?.toUpperCase();
+          setCurrentStatus(status || 'PENDING');
 
-        // Simulate API call
-        await new Promise((resolve) => setTimeout(resolve, 1000));
+          if (status === 'APPROVED') {
+            // Doctor is approved, redirect to dashboard
+            Toast.show({
+              type: 'success',
+              text1: 'Account Approved',
+              text2: 'Your account has been approved! Redirecting to dashboard...',
+            });
+            // Navigation will be handled by AppNavigator based on user status
+            setCheckingStatus(false);
+            return;
+          } else if (status === 'REJECTED' || status === 'BLOCKED') {
+            // Doctor is rejected or blocked
+            Toast.show({
+              type: 'error',
+              text1: 'Account Status',
+              text2: 'Your account has been rejected or blocked. Please contact support.',
+            });
+            setCheckingStatus(false);
+            return;
+          }
+        }
+
+        // If user status is not in context, try to get from API
+        if (user?._id || user?.id) {
+          try {
+            const userId = user._id || user.id;
+            // Get user by ID (requires authentication token)
+            const userData = await userApi.getUserById(userId);
+            const userStatus = userData.status?.toUpperCase();
+
+            if (userStatus) {
+              setCurrentStatus(userStatus);
+
+              // Update user in context
+              await updateUser({
+                ...user,
+                status: userStatus as any,
+                isVerified: userStatus === 'APPROVED',
+                verificationStatus:
+                  userStatus === 'APPROVED'
+                    ? 'approved'
+                    : userStatus === 'REJECTED'
+                    ? 'rejected'
+                    : 'pending',
+              });
+
+              if (userStatus === 'APPROVED') {
+                Toast.show({
+                  type: 'success',
+                  text1: 'Account Approved',
+                  text2: 'Your account has been approved! Redirecting to dashboard...',
+                });
+                setCheckingStatus(false);
+                return;
+              } else if (userStatus === 'REJECTED' || userStatus === 'BLOCKED') {
+                Toast.show({
+                  type: 'error',
+                  text1: 'Account Status',
+                  text2: 'Your account has been rejected or blocked. Please contact support.',
+                });
+                setCheckingStatus(false);
+                return;
+              }
+            }
+          } catch (apiError) {
+            console.error('Error fetching user status:', apiError);
+            // If API call fails, use status from context
+            setCurrentStatus(user?.status?.toUpperCase() || 'PENDING');
+          }
+        }
+
         setCheckingStatus(false);
       } catch (error) {
         console.error('Error checking approval status:', error);
@@ -47,11 +116,90 @@ export const PendingApprovalScreen = () => {
     // Poll for status updates every 30 seconds
     const interval = setInterval(checkApprovalStatus, 30000);
     return () => clearInterval(interval);
-  }, [navigation]);
+  }, [navigation, user, updateUser]);
 
-  const handleCheckStatus = () => {
+  const handleCheckStatus = async () => {
     setCheckingStatus(true);
-    setTimeout(() => setCheckingStatus(false), 1000);
+    try {
+      if (!user?._id && !user?.id) {
+        Toast.show({
+          type: 'error',
+          text1: 'Error',
+          text2: 'User information not available. Please login again.',
+        });
+        setCheckingStatus(false);
+        return;
+      }
+
+      const userId = user._id || user.id;
+
+      // Try to get user by ID
+      try {
+        const userData = await userApi.getUserById(userId);
+        const userStatus = userData.status?.toUpperCase();
+
+        if (userStatus) {
+          setCurrentStatus(userStatus);
+
+          // Update user in context
+          await updateUser({
+            ...user,
+            status: userStatus as any,
+            isVerified: userStatus === 'APPROVED',
+            verificationStatus:
+              userStatus === 'APPROVED'
+                ? 'approved'
+                : userStatus === 'REJECTED'
+                ? 'rejected'
+                : 'pending',
+          });
+
+          if (userStatus === 'APPROVED') {
+            Toast.show({
+              type: 'success',
+              text1: 'Account Approved',
+              text2: 'Your account has been approved! Redirecting to dashboard...',
+            });
+            setCheckingStatus(false);
+            return;
+          } else if (userStatus === 'REJECTED' || userStatus === 'BLOCKED') {
+            Toast.show({
+              type: 'error',
+              text1: 'Account Status',
+              text2: 'Your account has been rejected or blocked.',
+            });
+          } else {
+            Toast.show({
+              type: 'info',
+              text1: 'Status Update',
+              text2: 'Your account is still pending approval.',
+            });
+          }
+        } else {
+          Toast.show({
+            type: 'warning',
+            text1: 'Status Unknown',
+            text2: 'Unable to determine account status.',
+          });
+        }
+      } catch (error: any) {
+        console.error('Error fetching user:', error);
+        Toast.show({
+          type: 'error',
+          text1: 'Error',
+          text2: 'Failed to check status. Please try again.',
+        });
+      }
+    } catch (error) {
+      console.error('Error checking status:', error);
+      Toast.show({
+        type: 'error',
+        text1: 'Error',
+        text2: 'Failed to check status. Please try again.',
+      });
+    } finally {
+      setCheckingStatus(false);
+    }
   };
 
   const handleUpdateDocuments = () => {

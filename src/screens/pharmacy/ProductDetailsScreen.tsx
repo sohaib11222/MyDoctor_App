@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -9,61 +9,158 @@ import {
   Dimensions,
   SafeAreaView,
   StatusBar,
+  ActivityIndicator,
 } from 'react-native';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { useQuery } from '@tanstack/react-query';
 import { PharmacyStackParamList } from '../../navigation/types';
 import { colors } from '../../constants/colors';
 import { Ionicons } from '@expo/vector-icons';
 import { Button } from '../../components/common/Button';
+import * as productApi from '../../services/product';
+import { useCart } from '../../contexts/CartContext';
+import { API_BASE_URL } from '../../config/api';
+import Toast from 'react-native-toast-message';
 
 type ProductDetailsScreenNavigationProp = NativeStackNavigationProp<PharmacyStackParamList, 'ProductDetails'>;
 type ProductDetailsRouteProp = RouteProp<PharmacyStackParamList, 'ProductDetails'>;
 
 const { width } = Dimensions.get('window');
 
+const normalizeImageUrl = (imageUri: string | undefined | null): string | null => {
+  if (!imageUri || typeof imageUri !== 'string') {
+    return null;
+  }
+  const trimmedUri = imageUri.trim();
+  if (!trimmedUri) {
+    return null;
+  }
+  const baseUrl = API_BASE_URL.replace('/api', '');
+  let deviceHost: string;
+  try {
+    const urlObj = new URL(baseUrl);
+    deviceHost = urlObj.hostname;
+  } catch (e) {
+    const match = baseUrl.match(/https?:\/\/([^\/:]+)/);
+    deviceHost = match ? match[1] : '192.168.0.114';
+  }
+  if (trimmedUri.startsWith('http://') || trimmedUri.startsWith('https://')) {
+    let normalizedUrl = trimmedUri;
+    if (normalizedUrl.includes('localhost')) {
+      normalizedUrl = normalizedUrl.replace('localhost', deviceHost);
+    }
+    if (normalizedUrl.includes('127.0.0.1')) {
+      normalizedUrl = normalizedUrl.replace('127.0.0.1', deviceHost);
+    }
+    return normalizedUrl;
+  }
+  const imagePath = trimmedUri.startsWith('/') ? trimmedUri : `/${trimmedUri}`;
+  return `${baseUrl}${imagePath}`;
+};
+
 export const ProductDetailsScreen = () => {
   const navigation = useNavigation<ProductDetailsScreenNavigationProp>();
   const route = useRoute<ProductDetailsRouteProp>();
   const { productId } = route.params;
-  const [quantity, setQuantity] = useState(10);
+  const { addToCart } = useCart();
+  const [quantity, setQuantity] = useState(1);
 
-  // Mock product data - in real app, fetch based on productId
-  const product = {
-    id: productId,
-    name: 'Benzaxapine Croplex',
-    manufacturer: 'Hamdard (Wakf) Laboratories',
-    price: '$19',
-    originalPrice: '$45',
-    discount: '10% off',
-    inStock: true,
-    image: require('../../../assets/avatar.png'),
-    sku: '2023-02-0057',
-    packSize: '100g',
-    unitCount: '200ml',
-    country: 'Japan',
-    description: 'Safi syrup is best for purifying the blood. As it contains herbal extracts it can cure indigestion, constipation, nose bleeds and acne boils. It helps in the removal of the toxins from the blood. It improves the complexion and gives you a healthy life',
-    highlights: [
-      'Safi syrup is known for its best purifying syrup for blood.',
-      'It helps in eliminating the toxins from the bloodstream.',
-      'It improves digestion.',
-    ],
-    directions: 'Adults: Take 2 tablespoons once a day in a glass full of water.',
-    storage: 'Store this syrup at room temperature protected from sunlight, heat, and moisture. Keep away from reaching out of children and pets. Ensure that the unused medicine is disposed of properly.',
-    appliedFor: [
-      'Moisturization & Nourishment',
-      'Blackhead Removal',
-      'Anti-acne & Pimples',
-      'Whitening & Fairness',
-    ],
+  // Fetch product details
+  const { data: productData, isLoading, error } = useQuery({
+    queryKey: ['product', productId],
+    queryFn: () => productApi.getProductById(productId),
+    enabled: !!productId,
+  });
+
+  const product = productData?.data;
+
+  useEffect(() => {
+    if (product?.stock && quantity > product.stock) {
+      setQuantity(product.stock);
+    }
+  }, [product, quantity]);
+
+  const handleQuantityChange = (delta: number) => {
+    const newQuantity = quantity + delta;
+    if (newQuantity < 1) return;
+    if (product?.stock && newQuantity > product.stock) {
+      Toast.show({
+        type: 'warning',
+        text1: 'Stock Limit',
+        text2: `Only ${product.stock} items available in stock`,
+      });
+      return;
+    }
+    setQuantity(newQuantity);
   };
-
-  const increaseQuantity = () => setQuantity((prev) => prev + 1);
-  const decreaseQuantity = () => setQuantity((prev) => (prev > 1 ? prev - 1 : 1));
 
   const handleAddToCart = () => {
-    navigation.navigate('Cart');
+    if (!product) return;
+    if (product.stock === 0) {
+      Toast.show({
+        type: 'error',
+        text1: 'Out of Stock',
+        text2: 'This product is currently out of stock',
+      });
+      return;
+    }
+    addToCart(product, quantity);
   };
+
+  const handleBuyNow = () => {
+    if (!product) return;
+    if (product.stock === 0) {
+      Toast.show({
+        type: 'error',
+        text1: 'Out of Stock',
+        text2: 'This product is currently out of stock',
+      });
+      return;
+    }
+    addToCart(product, quantity);
+    navigation.navigate('Checkout');
+  };
+
+  if (isLoading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={colors.primary} />
+          <Text style={styles.loadingText}>Loading product details...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (error || !product) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.errorContainer}>
+          <Ionicons name="alert-circle-outline" size={64} color={colors.error} />
+          <Text style={styles.errorTitle}>Product Not Found</Text>
+          <Text style={styles.errorText}>The product you're looking for doesn't exist.</Text>
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => navigation.navigate('ProductCatalog')}
+          >
+            <Text style={styles.backButtonText}>Browse Products</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  const productPrice = product.discountPrice || product.price;
+  const originalPrice = product.discountPrice ? product.price : null;
+  const discountPercent = originalPrice
+    ? Math.round(((originalPrice - productPrice) / originalPrice) * 100)
+    : 0;
+  const productImage = product.images?.[0] || '';
+  const normalizedImageUrl = normalizeImageUrl(productImage);
+  const defaultAvatar = require('../../../assets/avatar.png');
+  const imageSource = normalizedImageUrl ? { uri: normalizedImageUrl } : defaultAvatar;
+  const isInStock = product.stock > 0;
 
   return (
     <SafeAreaView style={styles.container}>
@@ -71,25 +168,29 @@ export const ProductDetailsScreen = () => {
       <ScrollView showsVerticalScrollIndicator={false}>
         {/* Product Image and Basic Info */}
         <View style={styles.productHeader}>
-          <Image source={product.image} style={styles.productImage} />
+          <Image source={imageSource} style={styles.productImage} defaultSource={defaultAvatar} />
           <View style={styles.productInfo}>
             <Text style={styles.productName}>{product.name}</Text>
-            <Text style={styles.manufacturer}>
-              <Text style={styles.manufacturerLabel}>Manufactured By </Text>
-              {product.manufacturer}
+            {product.sellerId && typeof product.sellerId === 'object' && (
+              <Text style={styles.manufacturer}>
+                <Text style={styles.manufacturerLabel}>Sold By </Text>
+                {product.sellerId.fullName || 'Unknown Seller'}
+              </Text>
+            )}
+            <Text style={styles.description}>
+              {product.description || 'No description available.'}
             </Text>
-            <Text style={styles.description}>{product.description}</Text>
-
-            {/* Applied For */}
-            <View style={styles.appliedForSection}>
-              <Text style={styles.appliedForTitle}>Applied for:</Text>
-              {product.appliedFor.map((item, index) => (
-                <View key={index} style={styles.appliedForItem}>
-                  <View style={styles.bulletPoint} />
-                  <Text style={styles.appliedForText}>{item}</Text>
-                </View>
-              ))}
-            </View>
+            {product.tags && product.tags.length > 0 && (
+              <View style={styles.appliedForSection}>
+                <Text style={styles.appliedForTitle}>Tags:</Text>
+                {product.tags.map((tag, index) => (
+                  <View key={index} style={styles.appliedForItem}>
+                    <View style={styles.bulletPoint} />
+                    <Text style={styles.appliedForText}>{tag}</Text>
+                  </View>
+                ))}
+              </View>
+            )}
           </View>
         </View>
 
@@ -101,47 +202,43 @@ export const ProductDetailsScreen = () => {
           {/* Description */}
           <View style={styles.detailItem}>
             <Text style={styles.detailTitle}>Description</Text>
-            <Text style={styles.detailText}>{product.description}</Text>
+            <Text style={styles.detailText}>
+              {product.description || 'No description available for this product.'}
+            </Text>
           </View>
 
-          {/* Highlights */}
-          <View style={styles.detailItem}>
-            <Text style={styles.detailTitle}>Highlights</Text>
-            {product.highlights.map((highlight, index) => (
-              <View key={index} style={styles.highlightItem}>
-                <View style={styles.bulletPoint} />
-                <Text style={styles.highlightText}>{highlight}</Text>
-              </View>
-            ))}
-          </View>
-
-          {/* Directions */}
-          <View style={styles.detailItem}>
-            <Text style={styles.detailTitle}>Directions for use</Text>
-            <Text style={styles.detailText}>{product.directions}</Text>
-          </View>
-
-          {/* Storage */}
-          <View style={styles.detailItem}>
-            <Text style={styles.detailTitle}>Storage</Text>
-            <Text style={styles.detailText}>{product.storage}</Text>
-          </View>
+          {/* Category */}
+          {product.category && (
+            <View style={styles.detailItem}>
+              <Text style={styles.detailTitle}>Category</Text>
+              <Text style={styles.detailText}>{product.category}</Text>
+              {product.subCategory && (
+                <Text style={styles.detailText}>Subcategory: {product.subCategory}</Text>
+              )}
+            </View>
+          )}
         </View>
 
         {/* Product Specifications Sidebar */}
         <View style={styles.sidebar}>
           <View style={styles.priceCard}>
             <View style={styles.priceRow}>
-              <Text style={styles.price}>{product.price}</Text>
-              {product.originalPrice && (
-                <Text style={styles.originalPrice}>{product.originalPrice}</Text>
+              <Text style={styles.price}>${productPrice.toFixed(2)}</Text>
+              {originalPrice && (
+                <>
+                  <Text style={styles.originalPrice}>${originalPrice.toFixed(2)}</Text>
+                  {discountPercent > 0 && (
+                    <View style={styles.discountBadge}>
+                      <Text style={styles.discountText}>{discountPercent}% off</Text>
+                    </View>
+                  )}
+                </>
               )}
-              <View style={styles.discountBadge}>
-                <Text style={styles.discountText}>{product.discount}</Text>
-              </View>
             </View>
-            <View style={styles.stockBadge}>
-              <Text style={styles.stockText}>In stock</Text>
+            <View style={[styles.stockBadge, isInStock ? styles.stockBadgeActive : styles.stockBadgeInactive]}>
+              <Text style={styles.stockText}>
+                {isInStock ? `In stock (${product.stock} available)` : 'Out of stock'}
+              </Text>
             </View>
 
             {/* Quantity Selector */}
@@ -150,14 +247,16 @@ export const ProductDetailsScreen = () => {
               <View style={styles.quantityControls}>
                 <TouchableOpacity
                   style={styles.quantityButton}
-                  onPress={decreaseQuantity}
+                  onPress={() => handleQuantityChange(-1)}
+                  disabled={quantity <= 1}
                 >
                   <Ionicons name="remove" size={18} color={colors.textWhite} />
                 </TouchableOpacity>
                 <Text style={styles.quantityValue}>{quantity}</Text>
                 <TouchableOpacity
                   style={styles.quantityButton}
-                  onPress={increaseQuantity}
+                  onPress={() => handleQuantityChange(1)}
+                  disabled={!isInStock || (product.stock && quantity >= product.stock)}
                 >
                   <Ionicons name="add" size={18} color={colors.textWhite} />
                 </TouchableOpacity>
@@ -168,27 +267,34 @@ export const ProductDetailsScreen = () => {
             <Button
               title="Add To Cart"
               onPress={handleAddToCart}
+              disabled={!isInStock}
               style={styles.addToCartButton}
+            />
+            <Button
+              title="Buy Now"
+              onPress={handleBuyNow}
+              disabled={!isInStock}
+              style={styles.buyNowButton}
             />
 
             {/* Product Specs */}
             <View style={styles.specsCard}>
+              {product.sku && (
+                <View style={styles.specItem}>
+                  <Text style={styles.specLabel}>SKU</Text>
+                  <Text style={styles.specValue}>{product.sku}</Text>
+                </View>
+              )}
               <View style={styles.specItem}>
-                <Text style={styles.specLabel}>SKU</Text>
-                <Text style={styles.specValue}>{product.sku}</Text>
+                <Text style={styles.specLabel}>Stock</Text>
+                <Text style={styles.specValue}>{product.stock || 0} units</Text>
               </View>
-              <View style={styles.specItem}>
-                <Text style={styles.specLabel}>Pack Size</Text>
-                <Text style={styles.specValue}>{product.packSize}</Text>
-              </View>
-              <View style={styles.specItem}>
-                <Text style={styles.specLabel}>Unit Count</Text>
-                <Text style={styles.specValue}>{product.unitCount}</Text>
-              </View>
-              <View style={styles.specItem}>
-                <Text style={styles.specLabel}>Country</Text>
-                <Text style={styles.specValue}>{product.country}</Text>
-              </View>
+              {product.category && (
+                <View style={styles.specItem}>
+                  <Text style={styles.specLabel}>Category</Text>
+                  <Text style={styles.specValue}>{product.category}</Text>
+                </View>
+              )}
             </View>
 
             {/* Benefits Card */}
@@ -419,7 +525,58 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
   },
   addToCartButton: {
+    marginBottom: 12,
+  },
+  buyNowButton: {
     marginBottom: 16,
+  },
+  loadingContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 60,
+  },
+  loadingText: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    marginTop: 12,
+  },
+  errorContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 60,
+    paddingHorizontal: 32,
+  },
+  errorTitle: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: colors.error,
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  errorText: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    textAlign: 'center',
+    marginBottom: 24,
+  },
+  backButton: {
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    backgroundColor: colors.primary,
+    borderRadius: 8,
+  },
+  backButtonText: {
+    color: colors.textWhite,
+    fontWeight: '600',
+    fontSize: 14,
+  },
+  stockBadgeActive: {
+    backgroundColor: colors.success,
+  },
+  stockBadgeInactive: {
+    backgroundColor: colors.error,
   },
   specsCard: {
     backgroundColor: colors.backgroundLight,

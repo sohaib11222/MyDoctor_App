@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import {
   View,
   Text,
@@ -6,83 +6,87 @@ import {
   ScrollView,
   TouchableOpacity,
   SafeAreaView,
+  ActivityIndicator,
+  RefreshControl,
   FlatList,
+  Image,
+  Alert,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { CompositeNavigationProp } from '@react-navigation/native';
+import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
+import { TabParamList, MoreStackParamList } from '../../navigation/types';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { PharmacyStackParamList } from '../../navigation/types';
 import { colors } from '../../constants/colors';
 import { Ionicons } from '@expo/vector-icons';
-import { Button } from '../../components/common/Button';
+import { useAuth } from '../../contexts/AuthContext';
+import * as orderApi from '../../services/order';
+import { API_BASE_URL } from '../../config/api';
+import Toast from 'react-native-toast-message';
 
-type OrderHistoryScreenNavigationProp = NativeStackNavigationProp<PharmacyStackParamList>;
+type OrderHistoryScreenNavigationProp = CompositeNavigationProp<
+  NativeStackNavigationProp<PharmacyStackParamList | MoreStackParamList>,
+  BottomTabNavigationProp<TabParamList>
+>;
 
-interface Order {
-  id: string;
-  orderDate: string;
-  items: Array<{ name: string; quantity: number; total: string }>;
-  total: string;
-  status: 'Delivered' | 'Shipped' | 'Processing' | 'Cancelled' | 'Pending';
-  deliveryDate?: string;
-  trackingNumber?: string;
-}
+const defaultAvatar = require('../../../assets/avatar.png');
 
-const orders: Order[] = [
-  {
-    id: 'ORD001',
-    orderDate: '15 Nov 2024',
-    items: [
-      { name: 'Benzaxapine Croplex', quantity: 2, total: '$38' },
-      { name: 'Ombinazol Bonibamol', quantity: 1, total: '$22' },
-    ],
-    total: '$60',
-    status: 'Delivered',
-    deliveryDate: '18 Nov 2024',
-    trackingNumber: 'TRK123456789',
-  },
-  {
-    id: 'ORD002',
-    orderDate: '10 Nov 2024',
-    items: [
-      { name: 'Dantotate Dantodazole', quantity: 3, total: '$30' },
-    ],
-    total: '$30',
-    status: 'Shipped',
-    deliveryDate: '20 Nov 2024',
-    trackingNumber: 'TRK987654321',
-  },
-  {
-    id: 'ORD003',
-    orderDate: '05 Nov 2024',
-    items: [
-      { name: 'Alispirox Aerorenone', quantity: 1, total: '$26' },
-      { name: 'Benzaxapine Croplex', quantity: 1, total: '$19' },
-    ],
-    total: '$45',
-    status: 'Delivered',
-    deliveryDate: '08 Nov 2024',
-    trackingNumber: 'TRK456789123',
-  },
-  {
-    id: 'ORD004',
-    orderDate: '01 Nov 2024',
-    items: [
-      { name: 'Ombinazol Bonibamol', quantity: 2, total: '$44' },
-    ],
-    total: '$44',
-    status: 'Cancelled',
-  },
-];
+const normalizeImageUrl = (imageUri: string | undefined | null): string | null => {
+  if (!imageUri || typeof imageUri !== 'string') return null;
+  const trimmedUri = imageUri.trim();
+  if (!trimmedUri) return null;
+  const baseUrl = API_BASE_URL.replace('/api', '');
+  let deviceHost: string;
+  try {
+    const urlObj = new URL(baseUrl);
+    deviceHost = urlObj.hostname;
+  } catch (e) {
+    const match = baseUrl.match(/https?:\/\/([^\/:]+)/);
+    deviceHost = match ? match[1] : '192.168.0.114';
+  }
+  if (trimmedUri.startsWith('http://') || trimmedUri.startsWith('https://')) {
+    let normalizedUrl = trimmedUri;
+    if (normalizedUrl.includes('localhost')) normalizedUrl = normalizedUrl.replace('localhost', deviceHost);
+    if (normalizedUrl.includes('127.0.0.1')) normalizedUrl = normalizedUrl.replace('127.0.0.1', deviceHost);
+    return normalizedUrl;
+  }
+  const imagePath = trimmedUri.startsWith('/') ? trimmedUri : `/${trimmedUri}`;
+  return `${baseUrl}${imagePath}`;
+};
 
-const getStatusColor = (status: Order['status']) => {
+const formatDate = (dateString: string | undefined | null): string => {
+  if (!dateString) return 'N/A';
+  const date = new Date(dateString);
+  return date.toLocaleDateString('en-GB', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  });
+};
+
+const formatCurrency = (amount: number | undefined): string => {
+  if (amount === undefined || amount === null) return '$0.00';
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+  }).format(amount);
+};
+
+const getStatusBadgeColor = (status: orderApi.Order['status']) => {
   switch (status) {
-    case 'Delivered':
+    case 'DELIVERED':
       return colors.success;
-    case 'Shipped':
+    case 'SHIPPED':
+      return colors.info;
+    case 'PROCESSING':
+    case 'CONFIRMED':
       return colors.primary;
-    case 'Processing':
+    case 'PENDING':
       return colors.warning;
-    case 'Cancelled':
+    case 'CANCELLED':
+    case 'REFUNDED':
       return colors.error;
     default:
       return colors.textSecondary;
@@ -91,152 +95,285 @@ const getStatusColor = (status: Order['status']) => {
 
 export const OrderHistoryScreen = () => {
   const navigation = useNavigation<OrderHistoryScreenNavigationProp>();
-  const [filter, setFilter] = useState<'all' | 'delivered' | 'shipped' | 'cancelled'>('all');
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
+  const [statusFilter, setStatusFilter] = useState('');
+  const [page, setPage] = useState(1);
+  const [refreshing, setRefreshing] = useState(false);
+  const limit = 10;
 
-  const filteredOrders =
-    filter === 'all'
-      ? orders
-      : orders.filter((order) => order.status.toLowerCase() === filter.toLowerCase());
+  const {
+    data: ordersResponse,
+    isLoading,
+    error,
+    refetch,
+  } = useQuery({
+    queryKey: ['patientOrders', statusFilter, page],
+    queryFn: () =>
+      orderApi.getPatientOrders({
+        status: statusFilter || undefined,
+        page,
+        limit,
+      }),
+    enabled: !!user,
+    placeholderData: (previousData) => previousData,
+  });
 
-  const renderOrder = ({ item }: { item: Order }) => (
-    <View style={styles.orderCard}>
-      <View style={styles.orderHeader}>
-        <View>
-          <Text style={styles.orderId}>Order #{item.id}</Text>
-          <View style={styles.orderDateRow}>
-            <Ionicons name="calendar-outline" size={14} color={colors.textSecondary} />
-            <Text style={styles.orderDate}>Ordered on {item.orderDate}</Text>
+  const orders = useMemo(() => {
+    return ordersResponse?.data?.orders || [];
+  }, [ordersResponse]);
+
+  // Fetch all orders (without status filter) to get counts for each status
+  const { data: allOrdersResponse } = useQuery({
+    queryKey: ['patientOrders', 'all', user?._id || user?.id],
+    queryFn: () =>
+      orderApi.getPatientOrders({
+        page: 1,
+        limit: 1000, // Get all orders for counting
+      }),
+    enabled: !!user,
+  });
+
+  // Calculate counts for each status
+  const statusCounts = useMemo(() => {
+    const allOrders = allOrdersResponse?.data?.orders || [];
+    const counts: Record<string, number> = {
+      'ALL': allOrders.length,
+      'PENDING': 0,
+      'CONFIRMED': 0,
+      'PROCESSING': 0,
+      'SHIPPED': 0,
+      'DELIVERED': 0,
+      'CANCELLED': 0,
+    };
+    
+    allOrders.forEach((order: orderApi.Order) => {
+      const status = order.status;
+      if (counts.hasOwnProperty(status)) {
+        counts[status]++;
+      }
+    });
+    
+    return counts;
+  }, [allOrdersResponse]);
+
+  const handleRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await refetch();
+    setRefreshing(false);
+  }, [refetch]);
+
+  const renderOrderCard = ({ item: order }: { item: orderApi.Order }) => {
+    const pharmacy = typeof order.pharmacyId === 'object' ? order.pharmacyId : null;
+    const pharmacyName = pharmacy?.name || 'Pharmacy';
+    const firstItem = order.items[0];
+    const product = typeof firstItem?.productId === 'object' ? firstItem.productId : null;
+    const productImage = product?.images?.[0];
+    const normalizedImageUrl = normalizeImageUrl(productImage);
+    const imageSource = normalizedImageUrl ? { uri: normalizedImageUrl } : defaultAvatar;
+
+    return (
+      <TouchableOpacity
+        style={styles.orderCard}
+        onPress={() => {
+          navigation.navigate('OrderDetails', { orderId: order._id });
+        }}
+      >
+        <View style={styles.orderHeader}>
+          <View style={styles.orderInfo}>
+            <Text style={styles.orderNumber}>#{order.orderNumber}</Text>
+            <Text style={styles.pharmacyName}>{pharmacyName}</Text>
           </View>
-          {item.deliveryDate && (
-            <View style={styles.orderDateRow}>
-              <Ionicons name="car-outline" size={14} color={colors.textSecondary} />
-              <Text style={styles.orderDate}>Delivered on {item.deliveryDate}</Text>
+          <View style={[styles.statusBadge, { backgroundColor: getStatusBadgeColor(order.status) + '20' }]}>
+            <Text style={[styles.statusText, { color: getStatusBadgeColor(order.status) }]}>
+              {order.status}
+            </Text>
+          </View>
+        </View>
+        <View style={styles.orderBody}>
+          <Image source={imageSource} style={styles.productImage} defaultSource={defaultAvatar} />
+          <View style={styles.orderDetails}>
+            <Text style={styles.itemsCount}>
+              {order.items.length} {order.items.length === 1 ? 'item' : 'items'}
+            </Text>
+            <Text style={styles.orderDate}>Ordered on {formatDate(order.createdAt)}</Text>
+            {order.deliveredAt && (
+              <Text style={styles.deliveredDate}>Delivered on {formatDate(order.deliveredAt)}</Text>
+            )}
+          </View>
+          <Text style={styles.orderTotal}>{formatCurrency(order.total)}</Text>
+        </View>
+        <View style={styles.orderFooter}>
+          <TouchableOpacity
+            style={styles.actionButton}
+            onPress={() => {
+              navigation.navigate('OrderDetails', { orderId: order._id });
+            }}
+          >
+            <Text style={styles.actionButtonText}>View Details</Text>
+          </TouchableOpacity>
+          {/* Only allow cancellation if order is not paid yet */}
+          {(order.status === 'PENDING' || order.status === 'CONFIRMED') && 
+           order.paymentStatus === 'PENDING' && (
+            <TouchableOpacity
+              style={[styles.actionButton, styles.cancelButton]}
+              onPress={() => {
+                Alert.alert(
+                  'Cancel Order',
+                  'Are you sure you want to cancel this order?',
+                  [
+                    { text: 'No', style: 'cancel' },
+                    {
+                      text: 'Yes, Cancel',
+                      style: 'destructive',
+                      onPress: async () => {
+                        try {
+                          await orderApi.cancelOrder(order._id);
+                          queryClient.invalidateQueries({ queryKey: ['patientOrders'] });
+                          Toast.show({
+                            type: 'success',
+                            text1: 'Order Cancelled',
+                            text2: 'Your order has been cancelled successfully',
+                          });
+                        } catch (error: any) {
+                          Toast.show({
+                            type: 'error',
+                            text1: 'Failed to Cancel',
+                            text2: error.response?.data?.message || error.message || 'Please try again',
+                          });
+                        }
+                      },
+                    },
+                  ]
+                );
+              }}
+            >
+              <Text style={[styles.actionButtonText, styles.cancelButtonText]}>Cancel</Text>
+            </TouchableOpacity>
+          )}
+          {/* Show Processing if shipping fee not set yet, Pay Now if shipping fee is set and payment pending */}
+          {(order.status === 'PENDING' || order.status === 'CONFIRMED') && 
+           (order.finalShipping === null || order.finalShipping === undefined) && 
+           order.paymentStatus === 'PENDING' && (
+            <View style={[styles.actionButton, styles.processingButton]}>
+              <Text style={[styles.actionButtonText, styles.processingButtonText]}>Processing...</Text>
             </View>
           )}
+          {(order.paymentStatus === 'PENDING' || order.paymentStatus === 'PARTIAL' || order.requiresPaymentUpdate) && 
+           order.finalShipping !== null && order.finalShipping !== undefined && (
+            <TouchableOpacity
+              style={[styles.actionButton, styles.payButton]}
+              onPress={() => {
+                // Navigate to OrderDetails - works from both PharmacyStack and MoreStack
+                navigation.navigate('OrderDetails' as never, { orderId: order._id } as never);
+              }}
+            >
+              <Text style={[styles.actionButtonText, styles.payButtonText]}>Pay Now</Text>
+            </TouchableOpacity>
+          )}
         </View>
-        <View style={styles.orderStatusContainer}>
-          <View style={[styles.statusBadge, { backgroundColor: getStatusColor(item.status) }]}>
-            <Text style={styles.statusText}>{item.status}</Text>
-          </View>
-          <Text style={styles.orderTotal}>Total: {item.total}</Text>
-        </View>
-      </View>
+      </TouchableOpacity>
+    );
+  };
 
-      {/* Order Items */}
-      <View style={styles.orderItemsSection}>
-        <Text style={styles.orderItemsTitle}>Items:</Text>
-        {item.items.map((orderItem, index) => (
-          <View key={index} style={styles.orderItemRow}>
-            <Text style={styles.orderItemName}>
-              {orderItem.name} <Text style={styles.orderItemQuantity}>x{orderItem.quantity}</Text>
-            </Text>
-            <Text style={styles.orderItemTotal}>{orderItem.total}</Text>
-          </View>
-        ))}
-      </View>
+  if (isLoading && page === 1) {
+    return (
+      <SafeAreaView style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color={colors.primary} />
+        <Text style={styles.loadingText}>Loading orders...</Text>
+      </SafeAreaView>
+    );
+  }
 
-      {/* Tracking Number */}
-      {item.trackingNumber && (
-        <View style={styles.trackingSection}>
-          <Text style={styles.trackingLabel}>Tracking Number: </Text>
-          <Text style={styles.trackingNumber}>{item.trackingNumber}</Text>
-        </View>
-      )}
-
-      {/* Order Actions */}
-      <View style={styles.orderActions}>
-        <TouchableOpacity style={styles.actionButton}>
-          <Ionicons name="download-outline" size={16} color={colors.primary} />
-          <Text style={styles.actionButtonText}>Download Invoice</Text>
+  if (error) {
+    return (
+      <SafeAreaView style={styles.errorContainer}>
+        <Ionicons name="alert-circle-outline" size={64} color={colors.error} />
+        <Text style={styles.errorTitle}>Error Loading Orders</Text>
+        <Text style={styles.errorText}>
+          {error instanceof Error ? error.message : 'Failed to load orders'}
+        </Text>
+        <TouchableOpacity style={styles.retryButton} onPress={() => refetch()}>
+          <Text style={styles.retryButtonText}>Retry</Text>
         </TouchableOpacity>
-        {item.status === 'Delivered' && (
-          <TouchableOpacity style={styles.actionButton}>
-            <Ionicons name="star-outline" size={16} color={colors.warning} />
-            <Text style={styles.actionButtonText}>Rate Order</Text>
-          </TouchableOpacity>
-        )}
-        {item.status !== 'Cancelled' && item.status !== 'Delivered' && (
-          <TouchableOpacity style={styles.actionButton}>
-            <Ionicons name="close-outline" size={16} color={colors.error} />
-            <Text style={[styles.actionButtonText, { color: colors.error }]}>Cancel Order</Text>
-          </TouchableOpacity>
-        )}
-      </View>
-    </View>
-  );
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* Header with Filter Tabs */}
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>Order History</Text>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.filterTabs}
-        >
+      <View style={styles.filterContainer}>
+        <Text style={styles.filterLabel}>Status:</Text>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
           <TouchableOpacity
-            style={[styles.filterTab, filter === 'all' && styles.filterTabActive]}
-            onPress={() => setFilter('all')}
+            style={[styles.filterOption, statusFilter === '' && styles.filterOptionActive]}
+            onPress={() => {
+              setStatusFilter('');
+              setPage(1);
+            }}
           >
-            <Text style={[styles.filterTabText, filter === 'all' && styles.filterTabTextActive]}>
-              All Orders
+            <Text style={[styles.filterOptionText, statusFilter === '' && styles.filterOptionTextActive]}>
+              All
             </Text>
+            {statusCounts['ALL'] > 0 && (
+              <View style={styles.countBadge}>
+                <Text style={styles.countBadgeText}>{statusCounts['ALL']}</Text>
+              </View>
+            )}
           </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.filterTab, filter === 'delivered' && styles.filterTabActive]}
-            onPress={() => setFilter('delivered')}
-          >
-            <Text style={[styles.filterTabText, filter === 'delivered' && styles.filterTabTextActive]}>
-              Delivered
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.filterTab, filter === 'shipped' && styles.filterTabActive]}
-            onPress={() => setFilter('shipped')}
-          >
-            <Text style={[styles.filterTabText, filter === 'shipped' && styles.filterTabTextActive]}>
-              Shipped
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.filterTab, filter === 'cancelled' && styles.filterTabActive]}
-            onPress={() => setFilter('cancelled')}
-          >
-            <Text style={[styles.filterTabText, filter === 'cancelled' && styles.filterTabTextActive]}>
-              Cancelled
-            </Text>
-          </TouchableOpacity>
+          {['PENDING', 'CONFIRMED', 'PROCESSING', 'SHIPPED', 'DELIVERED', 'CANCELLED'].map((status) => (
+            <TouchableOpacity
+              key={status}
+              style={[styles.filterOption, statusFilter === status && styles.filterOptionActive]}
+              onPress={() => {
+                setStatusFilter(status);
+                setPage(1);
+              }}
+            >
+              <Text
+                style={[styles.filterOptionText, statusFilter === status && styles.filterOptionTextActive]}
+              >
+                {status}
+              </Text>
+              {statusCounts[status] > 0 && (
+                <View style={styles.countBadge}>
+                  <Text style={styles.countBadgeText}>{statusCounts[status]}</Text>
+                </View>
+              )}
+            </TouchableOpacity>
+          ))}
         </ScrollView>
-        <Button
-          title="Continue Shopping"
-          onPress={() => navigation.navigate('PharmacyHome')}
-          variant="outline"
-          style={styles.shopButton}
-        />
       </View>
 
-      {/* Orders List */}
-      {filteredOrders.length === 0 ? (
-        <View style={styles.emptyContainer}>
-          <Ionicons name="cube-outline" size={64} color={colors.textSecondary} />
-          <Text style={styles.emptyTitle}>No orders found</Text>
-          <Text style={styles.emptyText}>You haven't placed any orders yet.</Text>
-          <Button
-            title="Start Shopping"
-            onPress={() => navigation.navigate('PharmacyHome')}
-            style={styles.emptyButton}
-          />
-        </View>
-      ) : (
-        <FlatList
-          data={filteredOrders}
-          renderItem={renderOrder}
-          keyExtractor={(item) => item.id}
-          contentContainerStyle={styles.ordersList}
-          showsVerticalScrollIndicator={false}
-        />
-      )}
+      <FlatList
+        data={orders}
+        renderItem={renderOrderCard}
+        keyExtractor={(item) => item._id}
+        contentContainerStyle={styles.listContent}
+        showsVerticalScrollIndicator={false}
+        onEndReached={() => {
+          const totalPages = ordersResponse?.data?.pagination?.pages || 0;
+          if (page < totalPages) {
+            setPage((prev) => prev + 1);
+          }
+        }}
+        onEndReachedThreshold={0.5}
+        ListEmptyComponent={
+          <View style={styles.emptyContainer}>
+            <Ionicons name="receipt-outline" size={64} color={colors.textLight} />
+            <Text style={styles.emptyText}>No orders found</Text>
+            <TouchableOpacity
+              style={styles.shopButton}
+              onPress={() => navigation.navigate('PharmacyHome')}
+            >
+              <Text style={styles.shopButtonText}>Start Shopping</Text>
+            </TouchableOpacity>
+          </View>
+        }
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} colors={[colors.primary]} />
+        }
+      />
     </SafeAreaView>
   );
 };
@@ -246,25 +383,64 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.backgroundLight,
   },
-  header: {
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: colors.backgroundLight,
+  },
+  loadingText: {
+    marginTop: 10,
+    fontSize: 16,
+    color: colors.textSecondary,
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: colors.backgroundLight,
+    padding: 20,
+  },
+  errorTitle: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: colors.error,
+    marginTop: 10,
+  },
+  errorText: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    textAlign: 'center',
+    marginTop: 5,
+    marginBottom: 20,
+  },
+  retryButton: {
+    backgroundColor: colors.primary,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 8,
+  },
+  retryButtonText: {
+    color: colors.textWhite,
+    fontWeight: '600',
+  },
+  filterContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
     backgroundColor: colors.background,
-    paddingHorizontal: 16,
-    paddingTop: 40,
-    paddingBottom: 20,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
   },
-  headerTitle: {
-    fontSize: 20,
+  filterLabel: {
+    fontSize: 14,
     fontWeight: '600',
     color: colors.text,
-    marginBottom: 16,
-    textAlign: 'center',
+    marginRight: 12,
   },
-  filterTabs: {
-    marginBottom: 16,
-  },
-  filterTab: {
+  filterOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 20,
@@ -273,154 +449,165 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
   },
-  filterTabActive: {
+  filterOptionActive: {
     backgroundColor: colors.primary,
     borderColor: colors.primary,
   },
-  filterTabText: {
-    fontSize: 12,
-    fontWeight: '500',
+  filterOptionText: {
+    fontSize: 13,
     color: colors.text,
+    fontWeight: '500',
   },
-  filterTabTextActive: {
+  filterOptionTextActive: {
     color: colors.textWhite,
+    fontWeight: '600',
   },
-  shopButton: {
-    marginTop: 8,
+  countBadge: {
+    backgroundColor: colors.error,
+    borderRadius: 10,
+    minWidth: 20,
+    height: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 6,
+    marginLeft: 6,
   },
-  ordersList: {
+  countBadgeText: {
+    color: colors.textWhite,
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  listContent: {
     padding: 16,
   },
   orderCard: {
     backgroundColor: colors.background,
     borderRadius: 12,
     padding: 16,
-    marginBottom: 16,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
   orderHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 16,
+    alignItems: 'center',
+    marginBottom: 12,
   },
-  orderId: {
-    fontSize: 18,
+  orderInfo: {
+    flex: 1,
+  },
+  orderNumber: {
+    fontSize: 16,
     fontWeight: '600',
     color: colors.text,
-    marginBottom: 8,
+    marginBottom: 4,
   },
-  orderDateRow: {
+  pharmacyName: {
+    fontSize: 14,
+    color: colors.textSecondary,
+  },
+  statusBadge: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+  },
+  statusText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  orderBody: {
     flexDirection: 'row',
     alignItems: 'center',
+    marginBottom: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: colors.borderLight,
+  },
+  productImage: {
+    width: 60,
+    height: 60,
+    borderRadius: 8,
+    marginRight: 12,
+  },
+  orderDetails: {
+    flex: 1,
+  },
+  itemsCount: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.text,
     marginBottom: 4,
   },
   orderDate: {
     fontSize: 12,
     color: colors.textSecondary,
-    marginLeft: 4,
+    marginBottom: 2,
   },
-  orderStatusContainer: {
-    alignItems: 'flex-end',
-  },
-  statusBadge: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 12,
-    marginBottom: 8,
-  },
-  statusText: {
+  deliveredDate: {
     fontSize: 12,
-    fontWeight: '600',
-    color: colors.textWhite,
+    color: colors.success,
   },
   orderTotal: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: '700',
-    color: colors.text,
+    color: colors.primary,
   },
-  orderItemsSection: {
-    marginBottom: 12,
-    paddingBottom: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.borderLight,
-  },
-  orderItemsTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: colors.text,
-    marginBottom: 8,
-  },
-  orderItemRow: {
+  orderFooter: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 8,
-  },
-  orderItemName: {
-    flex: 1,
-    fontSize: 14,
-    color: colors.text,
-  },
-  orderItemQuantity: {
-    color: colors.textSecondary,
-  },
-  orderItemTotal: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: colors.text,
-  },
-  trackingSection: {
-    marginBottom: 12,
-  },
-  trackingLabel: {
-    fontSize: 12,
-    color: colors.textSecondary,
-  },
-  trackingNumber: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: colors.text,
-  },
-  orderActions: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
+    gap: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: colors.borderLight,
   },
   actionButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    flex: 1,
+    paddingVertical: 10,
     borderRadius: 8,
-    borderWidth: 1,
-    borderColor: colors.border,
-    marginRight: 8,
-    marginBottom: 8,
+    backgroundColor: colors.primaryLight,
+    alignItems: 'center',
   },
   actionButtonText: {
-    fontSize: 12,
-    fontWeight: '500',
+    fontSize: 14,
+    fontWeight: '600',
     color: colors.primary,
-    marginLeft: 6,
+  },
+  cancelButton: {
+    backgroundColor: colors.errorLight || colors.backgroundLight,
+  },
+  cancelButtonText: {
+    color: colors.error,
+  },
+  payButton: {
+    backgroundColor: colors.successLight || colors.primaryLight,
+  },
+  payButtonText: {
+    color: colors.success || colors.primary,
   },
   emptyContainer: {
     flex: 1,
-    alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 60,
-  },
-  emptyTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: colors.text,
-    marginTop: 16,
-    marginBottom: 8,
+    alignItems: 'center',
+    paddingVertical: 50,
   },
   emptyText: {
-    fontSize: 14,
+    marginTop: 10,
+    fontSize: 16,
     color: colors.textSecondary,
-    marginBottom: 24,
   },
-  emptyButton: {
-    paddingHorizontal: 32,
+  shopButton: {
+    backgroundColor: colors.primary,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 8,
+    marginTop: 20,
+  },
+  shopButtonText: {
+    color: colors.textWhite,
+    fontWeight: '600',
+    fontSize: 16,
+  },
+  loadingMore: {
+    marginVertical: 20,
   },
 });
-

@@ -9,6 +9,7 @@ import BookingSuccessScreen from '../../screens/shared/BookingSuccessScreen';
 import { StartAppointmentScreen } from '../../screens/doctor/StartAppointmentScreen';
 import { AvailableTimingsScreen } from '../../screens/doctor/AvailableTimingsScreen';
 import { AppointmentRequestsScreen } from '../../screens/doctor/AppointmentRequestsScreen';
+import { MyPatientsScreen } from '../../screens/doctor/MyPatientsScreen';
 import { CustomHeader } from '../../components/common/CustomHeader';
 
 const Stack = createNativeStackNavigator<AppointmentsStackParamList>();
@@ -66,6 +67,11 @@ export const AppointmentsStack = () => {
         name="AppointmentRequests" 
         component={AppointmentRequestsScreen}
         options={{ title: 'Appointment Requests' }}
+      />
+      <Stack.Screen 
+        name="MyPatients" 
+        component={MyPatientsScreen}
+        options={{ title: 'My Patients' }}
       />
     </Stack.Navigator>
   );

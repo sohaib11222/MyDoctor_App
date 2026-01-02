@@ -15,55 +15,63 @@ import { PharmacyStackParamList } from '../../navigation/types';
 import { colors } from '../../constants/colors';
 import { Ionicons } from '@expo/vector-icons';
 import { Button } from '../../components/common/Button';
+import { useCart } from '../../contexts/CartContext';
+import { API_BASE_URL } from '../../config/api';
 
 type CartScreenNavigationProp = NativeStackNavigationProp<PharmacyStackParamList>;
 
-interface CartItem {
-  id: number;
-  name: string;
-  sku: string;
-  price: string;
-  quantity: number;
-  total: string;
-  image: any;
-}
+const normalizeImageUrl = (imageUri: string | undefined | null): string | null => {
+  if (!imageUri || typeof imageUri !== 'string') {
+    return null;
+  }
+  const trimmedUri = imageUri.trim();
+  if (!trimmedUri) {
+    return null;
+  }
+  const baseUrl = API_BASE_URL.replace('/api', '');
+  let deviceHost: string;
+  try {
+    const urlObj = new URL(baseUrl);
+    deviceHost = urlObj.hostname;
+  } catch (e) {
+    const match = baseUrl.match(/https?:\/\/([^\/:]+)/);
+    deviceHost = match ? match[1] : '192.168.0.114';
+  }
+  if (trimmedUri.startsWith('http://') || trimmedUri.startsWith('https://')) {
+    let normalizedUrl = trimmedUri;
+    if (normalizedUrl.includes('localhost')) {
+      normalizedUrl = normalizedUrl.replace('localhost', deviceHost);
+    }
+    if (normalizedUrl.includes('127.0.0.1')) {
+      normalizedUrl = normalizedUrl.replace('127.0.0.1', deviceHost);
+    }
+    return normalizedUrl;
+  }
+  const imagePath = trimmedUri.startsWith('/') ? trimmedUri : `/${trimmedUri}`;
+  return `${baseUrl}${imagePath}`;
+};
 
 export const CartScreen = () => {
   const navigation = useNavigation<CartScreenNavigationProp>();
-  const [cartItems, setCartItems] = useState<CartItem[]>([
-    { id: 1, name: 'Benzaxapine Croplex', sku: '26565', price: '$19', quantity: 10, total: '$19', image: require('../../../assets/avatar.png') },
-    { id: 2, name: 'Ombinazol Bonibamol', sku: '865727', price: '$22', quantity: 10, total: '$22', image: require('../../../assets/avatar.png') },
-    { id: 3, name: 'Dantotate Dantodazole', sku: '978656', price: '$10', quantity: 10, total: '$10', image: require('../../../assets/avatar.png') },
-    { id: 4, name: 'Alispirox Aerorenone', sku: '543252', price: '$26', quantity: 10, total: '$26', image: require('../../../assets/avatar.png') },
-  ]);
+  const { cartItems, updateQuantity, removeFromCart, getCartTotal, clearCart } = useCart();
   const [termsAccepted, setTermsAccepted] = useState(false);
 
-  const updateQuantity = (id: number, change: number) => {
-    setCartItems((items) =>
-      items.map((item) => {
-        if (item.id === id) {
-          const newQuantity = Math.max(1, item.quantity + change);
-          const priceValue = parseFloat(item.price.replace('$', ''));
-          return {
-            ...item,
-            quantity: newQuantity,
-            total: `$${(priceValue * newQuantity).toFixed(2)}`,
-          };
-        }
-        return item;
-      })
-    );
+  const handleQuantityChange = (productId: string, newQuantity: number) => {
+    if (newQuantity < 1) {
+      removeFromCart(productId);
+    } else {
+      updateQuantity(productId, newQuantity);
+    }
   };
 
-  const removeItem = (id: number) => {
-    setCartItems((items) => items.filter((item) => item.id !== id));
+  const handleRemoveItem = (productId: string, productName: string) => {
+    removeFromCart(productId);
   };
 
-  const subtotal = cartItems.reduce((sum, item) => {
-    return sum + parseFloat(item.total.replace('$', ''));
-  }, 0);
-
-  const total = subtotal;
+  const subtotal = getCartTotal();
+  const shipping = subtotal >= 50 ? 0 : 25;
+  const tax = 0;
+  const total = subtotal + shipping + tax;
 
   const handleCheckout = () => {
     if (termsAccepted) {
@@ -88,50 +96,57 @@ export const CartScreen = () => {
               />
             </View>
           ) : (
-            cartItems.map((item) => (
-              <View key={item.id} style={styles.cartItem}>
-                <TouchableOpacity
-                  onPress={() => navigation.navigate('ProductDetails', { productId: item.id.toString() })}
-                >
-                  <Image source={item.image} style={styles.itemImage} />
-                </TouchableOpacity>
-                <View style={styles.itemDetails}>
-                  <TouchableOpacity
-                    onPress={() => navigation.navigate('ProductDetails', { productId: item.id.toString() })}
-                  >
-                    <Text style={styles.itemName}>{item.name}</Text>
-                  </TouchableOpacity>
-                  <Text style={styles.itemSku}>SKU: {item.sku}</Text>
-                  <Text style={styles.itemPrice}>{item.price}</Text>
+            cartItems.map((item) => {
+              const normalizedImageUrl = normalizeImageUrl(item.image);
+              const defaultAvatar = require('../../../assets/avatar.png');
+              const imageSource = normalizedImageUrl ? { uri: normalizedImageUrl } : defaultAvatar;
 
-                  {/* Quantity Controls */}
-                  <View style={styles.quantitySection}>
-                    <View style={styles.quantityControls}>
-                      <TouchableOpacity
-                        style={styles.quantityButton}
-                        onPress={() => updateQuantity(item.id, -1)}
-                      >
-                        <Ionicons name="remove" size={16} color={colors.textWhite} />
-                      </TouchableOpacity>
-                      <Text style={styles.quantityValue}>{item.quantity}</Text>
-                      <TouchableOpacity
-                        style={styles.quantityButton}
-                        onPress={() => updateQuantity(item.id, 1)}
-                      >
-                        <Ionicons name="add" size={16} color={colors.textWhite} />
-                      </TouchableOpacity>
+              return (
+                <View key={item._id} style={styles.cartItem}>
+                  <TouchableOpacity
+                    onPress={() => navigation.navigate('ProductDetails', { productId: item._id })}
+                  >
+                    <Image source={imageSource} style={styles.itemImage} defaultSource={defaultAvatar} />
+                  </TouchableOpacity>
+                  <View style={styles.itemDetails}>
+                    <TouchableOpacity
+                      onPress={() => navigation.navigate('ProductDetails', { productId: item._id })}
+                    >
+                      <Text style={styles.itemName}>{item.name}</Text>
+                    </TouchableOpacity>
+                    {item.sku && <Text style={styles.itemSku}>SKU: {item.sku}</Text>}
+                    <Text style={styles.itemPrice}>${item.price.toFixed(2)}</Text>
+
+                    {/* Quantity Controls */}
+                    <View style={styles.quantitySection}>
+                      <View style={styles.quantityControls}>
+                        <TouchableOpacity
+                          style={styles.quantityButton}
+                          onPress={() => handleQuantityChange(item._id, item.quantity - 1)}
+                        >
+                          <Ionicons name="remove" size={16} color={colors.textWhite} />
+                        </TouchableOpacity>
+                        <Text style={styles.quantityValue}>{item.quantity}</Text>
+                        <TouchableOpacity
+                          style={styles.quantityButton}
+                          onPress={() => handleQuantityChange(item._id, item.quantity + 1)}
+                          disabled={item.stock && item.quantity >= item.stock}
+                        >
+                          <Ionicons name="add" size={16} color={colors.textWhite} />
+                        </TouchableOpacity>
+                      </View>
+                      <Text style={styles.itemTotal}>${(item.price * item.quantity).toFixed(2)}</Text>
                     </View>
-                    <Text style={styles.itemTotal}>{item.total}</Text>
                   </View>
+                  <TouchableOpacity
+                    style={styles.removeButton}
+                    onPress={() => handleRemoveItem(item._id, item.name)}
+                  >
+                    <Ionicons name="close" size={20} color={colors.error} />
+                  </TouchableOpacity>
                 </View>
-                <TouchableOpacity
-                  style={styles.removeButton}
-                  onPress={() => removeItem(item.id)}
-                >
-                  <Ionicons name="close" size={20} color={colors.error} />
-                </TouchableOpacity>
-              </View>
-            ))
+              );
+            })
           )}
         </View>
 
@@ -157,6 +172,14 @@ export const CartScreen = () => {
                   I have read and accept the Terms & Conditions
                 </Text>
               </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.clearCartButton}
+                onPress={() => {
+                  clearCart();
+                }}
+              >
+                <Text style={styles.clearCartButtonText}>Clear Cart</Text>
+              </TouchableOpacity>
             </View>
 
             <View style={styles.totalSection}>
@@ -164,6 +187,22 @@ export const CartScreen = () => {
                 <Text style={styles.totalLabel}>Subtotal</Text>
                 <Text style={styles.totalValue}>${subtotal.toFixed(2)}</Text>
               </View>
+              <View style={styles.totalRow}>
+                <Text style={styles.totalLabel}>Shipping</Text>
+                <Text style={styles.totalValue}>
+                  {shipping === 0 ? (
+                    <Text style={styles.freeShippingText}>Free</Text>
+                  ) : (
+                    `$${shipping.toFixed(2)}`
+                  )}
+                </Text>
+              </View>
+              {tax > 0 && (
+                <View style={styles.totalRow}>
+                  <Text style={styles.totalLabel}>Tax</Text>
+                  <Text style={styles.totalValue}>${tax.toFixed(2)}</Text>
+                </View>
+              )}
               <View style={styles.totalRow}>
                 <Text style={styles.totalLabel}>Total</Text>
                 <Text style={styles.totalValueMain}>${total.toFixed(2)}</Text>
@@ -306,6 +345,20 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: colors.text,
   },
+  clearCartButton: {
+    marginTop: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: colors.error,
+    alignSelf: 'flex-start',
+  },
+  clearCartButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.error,
+  },
   totalSection: {
     backgroundColor: colors.backgroundLight,
     borderRadius: 12,
@@ -333,6 +386,10 @@ const styles = StyleSheet.create({
   },
   checkoutButton: {
     marginTop: 16,
+  },
+  freeShippingText: {
+    color: colors.success,
+    fontWeight: '600',
   },
 });
 

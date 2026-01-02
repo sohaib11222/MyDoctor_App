@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   View,
   Text,
@@ -6,150 +6,210 @@ import {
   ScrollView,
   TouchableOpacity,
   SafeAreaView,
+  ActivityIndicator,
+  RefreshControl,
 } from 'react-native';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useAuth } from '../../contexts/AuthContext';
 import { colors } from '../../constants/colors';
 import { Ionicons } from '@expo/vector-icons';
-
-interface Announcement {
-  id: number;
-  title: string;
-  message: string;
-  date: string;
-  time: string;
-  type: 'feature' | 'maintenance' | 'payment' | 'policy' | 'reminder';
-  priority: 'high' | 'medium' | 'low';
-  pinned: boolean;
-  read: boolean;
-  urgent: boolean;
-}
-
-const announcements: Announcement[] = [
-  {
-    id: 1,
-    title: 'New Feature: Video Consultations Available',
-    message:
-      'We are excited to announce that video consultations are now available for all doctors. You can now conduct virtual appointments with your patients.',
-    date: '15 Nov 2024',
-    time: '10:30 AM',
-    type: 'feature',
-    priority: 'high',
-    pinned: true,
-    read: false,
-    urgent: true,
-  },
-  {
-    id: 2,
-    title: 'System Maintenance Scheduled',
-    message:
-      'Scheduled maintenance will occur on November 20, 2024 from 2:00 AM to 4:00 AM EST. The platform will be temporarily unavailable during this time.',
-    date: '14 Nov 2024',
-    time: '3:15 PM',
-    type: 'maintenance',
-    priority: 'medium',
-    pinned: true,
-    read: true,
-    urgent: false,
-  },
-  {
-    id: 3,
-    title: 'Payment Processing Update',
-    message:
-      'Your payment for November has been processed successfully. You can view the details in your account section.',
-    date: '13 Nov 2024',
-    time: '9:00 AM',
-    type: 'payment',
-    priority: 'low',
-    pinned: false,
-    read: false,
-    urgent: false,
-  },
-  {
-    id: 4,
-    title: 'New Patient Review Guidelines',
-    message:
-      'Please review the updated patient review guidelines. These changes will help improve the quality of patient feedback.',
-    date: '12 Nov 2024',
-    time: '11:45 AM',
-    type: 'policy',
-    priority: 'medium',
-    pinned: false,
-    read: true,
-    urgent: false,
-  },
-  {
-    id: 5,
-    title: 'Holiday Schedule Reminder',
-    message:
-      'Reminder: The platform will operate with limited support during the holiday season. Please plan your appointments accordingly.',
-    date: '10 Nov 2024',
-    time: '2:30 PM',
-    type: 'reminder',
-    priority: 'low',
-    pinned: false,
-    read: true,
-    urgent: false,
-  },
-];
-
-const getTypeBadgeColor = (type: string) => {
-  const colors_map: Record<string, string> = {
-    feature: colors.primary,
-    maintenance: colors.warning,
-    payment: colors.success,
-    policy: colors.info || colors.primary,
-    reminder: colors.textSecondary,
-  };
-  return colors_map[type] || colors.textSecondary;
-};
-
-const getPriorityIcon = (priority: string) => {
-  const icons: Record<string, string> = {
-    high: 'alert-circle',
-    medium: 'information-circle',
-    low: 'checkmark-circle',
-  };
-  return icons[priority] || 'information-circle';
-};
-
-const getPriorityColor = (priority: string) => {
-  const colors_map: Record<string, string> = {
-    high: colors.error,
-    medium: colors.warning,
-    low: colors.success,
-  };
-  return colors_map[priority] || colors.textSecondary;
-};
+import * as announcementApi from '../../services/announcement';
+import Toast from 'react-native-toast-message';
 
 export const AnnouncementsScreen = () => {
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
   const [filter, setFilter] = useState<'all' | 'unread' | 'pinned'>('all');
+  const [page, setPage] = useState(1);
+  const limit = 20;
+  const [refreshing, setRefreshing] = useState(false);
 
-  const filteredAnnouncements = () => {
-    let filtered = announcements;
+  // Fetch announcements for doctor
+  const { data: announcementsData, isLoading, error, refetch } = useQuery({
+    queryKey: ['doctorAnnouncements', filter, page],
+    queryFn: () => {
+      const params: any = {
+        page,
+        limit,
+      };
+      if (filter === 'unread') {
+        params.isRead = false;
+      }
+      return announcementApi.getDoctorAnnouncements(params);
+    },
+    enabled: !!user,
+    refetchInterval: 30000, // Refetch every 30 seconds
+  });
+
+  // Fetch unread count
+  const { data: unreadCountData } = useQuery({
+    queryKey: ['announcementUnreadCount'],
+    queryFn: () => announcementApi.getUnreadAnnouncementCount(),
+    enabled: !!user,
+    refetchInterval: 30000, // Refetch every 30 seconds
+  });
+
+  // Mark as read mutation
+  const markAsReadMutation = useMutation({
+    mutationFn: (id: string) => announcementApi.markAnnouncementAsRead(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['doctorAnnouncements'] });
+      queryClient.invalidateQueries({ queryKey: ['announcementUnreadCount'] });
+      Toast.show({
+        type: 'success',
+        text1: 'Success',
+        text2: 'Announcement marked as read',
+      });
+    },
+    onError: (error: any) => {
+      const errorMessage = error?.response?.data?.message || error?.message || 'Failed to mark as read';
+      Toast.show({
+        type: 'error',
+        text1: 'Error',
+        text2: errorMessage,
+      });
+    },
+  });
+
+  // Extract data from response
+  const announcements = useMemo(() => {
+    if (!announcementsData?.data) return [];
+    return announcementsData.data.announcements || [];
+  }, [announcementsData]);
+
+  const pagination = useMemo(() => {
+    if (!announcementsData?.data) return null;
+    return announcementsData.data.pagination || null;
+  }, [announcementsData]);
+
+  const unreadCount = useMemo(() => {
+    if (!unreadCountData?.data) return 0;
+    return unreadCountData.data.unreadCount || 0;
+  }, [unreadCountData]);
+
+  // Filter announcements based on selected filter
+  const filteredAnnouncements = useMemo(() => {
+    let filtered = [...announcements];
+
     if (filter === 'unread') {
-      filtered = filtered.filter((a) => !a.read);
+      filtered = filtered.filter((a) => !a.isRead);
     } else if (filter === 'pinned') {
-      filtered = filtered.filter((a) => a.pinned);
+      filtered = filtered.filter((a) => a.isPinned);
     }
-    // Sort: pinned first, then by date
+
+    // Sort: pinned first, then by priority (URGENT > IMPORTANT > NORMAL), then by date
     return filtered.sort((a, b) => {
-      if (a.pinned && !b.pinned) return -1;
-      if (!a.pinned && b.pinned) return 1;
-      return new Date(b.date).getTime() - new Date(a.date).getTime();
+      // Pinned first
+      if (a.isPinned && !b.isPinned) return -1;
+      if (!a.isPinned && b.isPinned) return 1;
+
+      // Priority order
+      const priorityOrder: Record<string, number> = { URGENT: 3, IMPORTANT: 2, NORMAL: 1 };
+      const aPriority = priorityOrder[a.priority] || 1;
+      const bPriority = priorityOrder[b.priority] || 1;
+      if (aPriority !== bPriority) return bPriority - aPriority;
+
+      // Then by date (newest first)
+      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
     });
+  }, [announcements, filter]);
+
+  const pinnedCount = useMemo(() => {
+    return announcements.filter((a) => a.isPinned).length;
+  }, [announcements]);
+
+  // Format date
+  const formatDate = (dateString: string): string => {
+    if (!dateString) return '';
+    const date = new Date(dateString);
+    const options: Intl.DateTimeFormatOptions = { day: 'numeric', month: 'short', year: 'numeric' };
+    return date.toLocaleDateString('en-US', options);
   };
 
-  const markAsRead = (id: number) => {
-    // TODO: Update announcement read status via API
-    console.log('Marking announcement as read:', id);
+  // Format time
+  const formatTime = (dateString: string): string => {
+    if (!dateString) return '';
+    const date = new Date(dateString);
+    return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
   };
 
-  const togglePin = (id: number) => {
-    // TODO: Toggle pin status via API
-    console.log('Toggling pin for announcement:', id);
+  // Get priority color
+  const getPriorityColor = (priority: string): string => {
+    const colors_map: Record<string, string> = {
+      URGENT: colors.error,
+      IMPORTANT: colors.warning,
+      NORMAL: colors.success,
+    };
+    return colors_map[priority] || colors.textSecondary;
   };
 
-  const unreadCount = announcements.filter((a) => !a.read).length;
-  const pinnedCount = announcements.filter((a) => a.pinned).length;
+  // Get priority icon
+  const getPriorityIcon = (priority: string): string => {
+    const icons: Record<string, string> = {
+      URGENT: 'alert-circle',
+      IMPORTANT: 'information-circle',
+      NORMAL: 'checkmark-circle',
+    };
+    return icons[priority] || 'information-circle';
+  };
+
+  // Get announcement type badge color
+  const getTypeBadgeColor = (announcementType: string): string => {
+    const colors_map: Record<string, string> = {
+      BROADCAST: colors.primary,
+      TARGETED: colors.textSecondary,
+    };
+    return colors_map[announcementType] || colors.textSecondary;
+  };
+
+  // Handle mark as read
+  const handleMarkAsRead = (id: string) => {
+    markAsReadMutation.mutate(id);
+  };
+
+  // Handle filter change
+  const handleFilterChange = (newFilter: 'all' | 'unread' | 'pinned') => {
+    setFilter(newFilter);
+    setPage(1); // Reset to first page when filter changes
+  };
+
+  // Handle pagination
+  const handlePageChange = (newPage: number) => {
+    if (newPage >= 1 && newPage <= (pagination?.pages || 1)) {
+      setPage(newPage);
+    }
+  };
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await refetch();
+    setRefreshing(false);
+  };
+
+  if (isLoading && !refreshing) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={colors.primary} />
+          <Text style={styles.loadingText}>Loading announcements...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (error) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.errorContainer}>
+          <Ionicons name="alert-circle-outline" size={48} color={colors.error} />
+          <Text style={styles.errorTitle}>Error Loading Announcements</Text>
+          <Text style={styles.errorText}>
+            {(error as any)?.response?.data?.message || (error as any)?.message || 'Failed to load announcements'}
+          </Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container}>
@@ -168,7 +228,7 @@ export const AnnouncementsScreen = () => {
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterTabs}>
           <TouchableOpacity
             style={[styles.filterTab, filter === 'all' && styles.filterTabActive]}
-            onPress={() => setFilter('all')}
+            onPress={() => handleFilterChange('all')}
             activeOpacity={0.7}
           >
             <Text style={[styles.filterTabText, filter === 'all' && styles.filterTabTextActive]}>
@@ -177,7 +237,7 @@ export const AnnouncementsScreen = () => {
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.filterTab, filter === 'unread' && styles.filterTabActive]}
-            onPress={() => setFilter('unread')}
+            onPress={() => handleFilterChange('unread')}
             activeOpacity={0.7}
           >
             <Text style={[styles.filterTabText, filter === 'unread' && styles.filterTabTextActive]}>
@@ -186,7 +246,7 @@ export const AnnouncementsScreen = () => {
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.filterTab, filter === 'pinned' && styles.filterTabActive]}
-            onPress={() => setFilter('pinned')}
+            onPress={() => handleFilterChange('pinned')}
             activeOpacity={0.7}
           >
             <Text style={[styles.filterTabText, filter === 'pinned' && styles.filterTabTextActive]}>
@@ -197,87 +257,138 @@ export const AnnouncementsScreen = () => {
       </View>
 
       {/* Announcements List */}
-      <ScrollView showsVerticalScrollIndicator={false}>
-        {filteredAnnouncements().length === 0 ? (
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />}
+      >
+        {filteredAnnouncements.length === 0 ? (
           <View style={styles.emptyState}>
             <Ionicons name="notifications-off-outline" size={64} color={colors.textLight} />
             <Text style={styles.emptyStateTitle}>No announcements found</Text>
             <Text style={styles.emptyStateText}>You're all caught up!</Text>
           </View>
         ) : (
-          <View style={styles.announcementsList}>
-            {filteredAnnouncements().map((announcement) => (
-              <View
-                key={announcement.id}
-                style={[
-                  styles.announcementCard,
-                  announcement.pinned && styles.pinnedCard,
-                  !announcement.read && styles.unreadCard,
-                  announcement.urgent && styles.urgentCard,
-                ]}
-              >
-                <View style={styles.announcementHeader}>
-                  <View style={styles.announcementIcon}>
-                    <Ionicons
-                      name={getPriorityIcon(announcement.priority) as any}
-                      size={24}
-                      color={getPriorityColor(announcement.priority)}
-                    />
-                  </View>
-                  <View style={styles.announcementContent}>
-                    <View style={styles.announcementTitleRow}>
-                      <View style={styles.titleContent}>
-                        {announcement.pinned && (
-                          <Ionicons name="pin" size={16} color={colors.primary} style={styles.iconMargin} />
-                        )}
-                        {announcement.urgent && (
-                          <Ionicons name="alert-circle" size={16} color={colors.error} style={styles.iconMargin} />
-                        )}
-                        <Text style={styles.announcementTitle}>{announcement.title}</Text>
-                        {!announcement.read && (
-                          <View style={styles.newBadge}>
-                            <Text style={styles.newBadgeText}>New</Text>
-                          </View>
-                        )}
-                      </View>
-                      <TouchableOpacity
-                        onPress={() => togglePin(announcement.id)}
-                        activeOpacity={0.7}
-                        style={styles.pinButton}
-                      >
-                        <Ionicons
-                          name={announcement.pinned ? 'pin' : 'pin-outline'}
-                          size={20}
-                          color={colors.textSecondary}
-                        />
-                      </TouchableOpacity>
+          <>
+            <View style={styles.announcementsList}>
+              {filteredAnnouncements.map((announcement) => (
+                <View
+                  key={announcement._id}
+                  style={[
+                    styles.announcementCard,
+                    announcement.isPinned && styles.pinnedCard,
+                    !announcement.isRead && styles.unreadCard,
+                    announcement.priority === 'URGENT' && styles.urgentCard,
+                  ]}
+                >
+                  <View style={styles.announcementHeader}>
+                    <View style={styles.announcementIcon}>
+                      <Ionicons
+                        name={getPriorityIcon(announcement.priority) as any}
+                        size={24}
+                        color={getPriorityColor(announcement.priority)}
+                      />
                     </View>
-                    <View style={styles.announcementMeta}>
-                      <View style={[styles.typeBadge, { backgroundColor: `${getTypeBadgeColor(announcement.type)}20` }]}>
-                        <Text style={[styles.typeBadgeText, { color: getTypeBadgeColor(announcement.type) }]}>
-                          {announcement.type}
+                    <View style={styles.announcementContent}>
+                      <View style={styles.announcementTitleRow}>
+                        <View style={styles.titleContent}>
+                          {announcement.isPinned && (
+                            <Ionicons name="pin" size={16} color={colors.primary} style={styles.iconMargin} />
+                          )}
+                          {announcement.priority === 'URGENT' && (
+                            <Ionicons name="alert-circle" size={16} color={colors.error} style={styles.iconMargin} />
+                          )}
+                          <Text style={styles.announcementTitle}>{announcement.title}</Text>
+                          {!announcement.isRead && (
+                            <View style={styles.newBadge}>
+                              <Text style={styles.newBadgeText}>New</Text>
+                            </View>
+                          )}
+                        </View>
+                      </View>
+                      <View style={styles.announcementMeta}>
+                        <View
+                          style={[
+                            styles.typeBadge,
+                            { backgroundColor: `${getTypeBadgeColor(announcement.announcementType)}20` },
+                          ]}
+                        >
+                          <Text
+                            style={[
+                              styles.typeBadgeText,
+                              { color: getTypeBadgeColor(announcement.announcementType) },
+                            ]}
+                          >
+                            {announcement.announcementType}
+                          </Text>
+                        </View>
+                        <View
+                          style={[
+                            styles.priorityBadge,
+                            { backgroundColor: `${getPriorityColor(announcement.priority)}20` },
+                          ]}
+                        >
+                          <Text style={[styles.priorityBadgeText, { color: getPriorityColor(announcement.priority) }]}>
+                            {announcement.priority}
+                          </Text>
+                        </View>
+                        <Text style={styles.announcementDate}>
+                          <Ionicons name="calendar-outline" size={12} color={colors.textSecondary} />{' '}
+                          {formatDate(announcement.createdAt)} at {formatTime(announcement.createdAt)}
                         </Text>
                       </View>
-                      <Text style={styles.announcementDate}>
-                        <Ionicons name="calendar-outline" size={12} color={colors.textSecondary} /> {announcement.date}{' '}
-                        at {announcement.time}
-                      </Text>
+                      <Text style={styles.announcementMessage}>{announcement.message}</Text>
+                      {!announcement.isRead && (
+                        <TouchableOpacity
+                          style={styles.markReadButton}
+                          onPress={() => handleMarkAsRead(announcement._id)}
+                          activeOpacity={0.7}
+                          disabled={markAsReadMutation.isPending}
+                        >
+                          <Text style={styles.markReadButtonText}>
+                            {markAsReadMutation.isPending ? 'Marking...' : 'Mark as Read'}
+                          </Text>
+                        </TouchableOpacity>
+                      )}
                     </View>
-                    <Text style={styles.announcementMessage}>{announcement.message}</Text>
-                    {!announcement.read && (
-                      <TouchableOpacity
-                        style={styles.markReadButton}
-                        onPress={() => markAsRead(announcement.id)}
-                        activeOpacity={0.7}
-                      >
-                        <Text style={styles.markReadButtonText}>Mark as Read</Text>
-                      </TouchableOpacity>
-                    )}
                   </View>
                 </View>
+              ))}
+            </View>
+
+            {/* Pagination */}
+            {pagination && pagination.pages > 1 && (
+              <View style={styles.pagination}>
+                <TouchableOpacity
+                  style={[styles.paginationButton, page === 1 && styles.paginationButtonDisabled]}
+                  onPress={() => handlePageChange(page - 1)}
+                  disabled={page === 1}
+                >
+                  <Text
+                    style={[styles.paginationButtonText, page === 1 && styles.paginationButtonTextDisabled]}
+                  >
+                    Previous
+                  </Text>
+                </TouchableOpacity>
+                <Text style={styles.paginationText}>
+                  Page {page} of {pagination.pages}
+                </Text>
+                <TouchableOpacity
+                  style={[styles.paginationButton, page === pagination.pages && styles.paginationButtonDisabled]}
+                  onPress={() => handlePageChange(page + 1)}
+                  disabled={page === pagination.pages}
+                >
+                  <Text
+                    style={[
+                      styles.paginationButtonText,
+                      page === pagination.pages && styles.paginationButtonTextDisabled,
+                    ]}
+                  >
+                    Next
+                  </Text>
+                </TouchableOpacity>
               </View>
-            ))}
-          </View>
+            )}
+          </>
         )}
 
         {/* Info Card */}
@@ -300,6 +411,35 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.backgroundLight,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 40,
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 14,
+    color: colors.textSecondary,
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 40,
+  },
+  errorTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: colors.error,
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  errorText: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    textAlign: 'center',
   },
   headerStats: {
     flexDirection: 'row',
@@ -409,9 +549,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: colors.textWhite,
   },
-  pinButton: {
-    padding: 4,
-  },
   announcementMeta: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -428,6 +565,15 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '500',
     textTransform: 'capitalize',
+  },
+  priorityBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  priorityBadgeText: {
+    fontSize: 11,
+    fontWeight: '500',
   },
   announcementDate: {
     fontSize: 11,
@@ -467,6 +613,35 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: colors.textSecondary,
   },
+  pagination: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+    gap: 16,
+  },
+  paginationButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+    backgroundColor: colors.primary,
+  },
+  paginationButtonDisabled: {
+    backgroundColor: colors.border,
+    opacity: 0.5,
+  },
+  paginationButtonText: {
+    fontSize: 14,
+    color: colors.textWhite,
+    fontWeight: '500',
+  },
+  paginationButtonTextDisabled: {
+    color: colors.textSecondary,
+  },
+  paginationText: {
+    fontSize: 14,
+    color: colors.text,
+  },
   infoCard: {
     flexDirection: 'row',
     backgroundColor: colors.background,
@@ -490,4 +665,3 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
 });
-

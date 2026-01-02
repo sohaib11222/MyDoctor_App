@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   View,
   Text,
@@ -12,102 +12,166 @@ import {
   FlatList,
   Modal,
   StatusBar,
+  ActivityIndicator,
+  RefreshControl,
 } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { useQuery } from '@tanstack/react-query';
 import { PharmacyStackParamList } from '../../navigation/types';
 import { colors } from '../../constants/colors';
 import { Ionicons } from '@expo/vector-icons';
+import * as productApi from '../../services/product';
+import { useCart } from '../../contexts/CartContext';
+import { API_BASE_URL } from '../../config/api';
 
-type ProductCatalogScreenNavigationProp = NativeStackNavigationProp<PharmacyStackParamList>;
+type ProductCatalogScreenNavigationProp = NativeStackNavigationProp<PharmacyStackParamList, 'ProductCatalog'>;
+type ProductCatalogRouteProp = RouteProp<PharmacyStackParamList, 'ProductCatalog'>;
 
 const { width } = Dimensions.get('window');
 
-const products = [
-  { id: 1, name: 'Benzaxapine Croplex', price: '$19.00', originalPrice: '$45.00', image: require('../../../assets/avatar.png') },
-  { id: 2, name: 'Rapalac Neuronium', price: '$16.00', image: require('../../../assets/avatar.png') },
-  { id: 3, name: 'Ombinazol Bonibamol', price: '$22.00', image: require('../../../assets/avatar.png') },
-  { id: 4, name: 'Dantotate Dantodazole', price: '$10.00', originalPrice: '$12.00', image: require('../../../assets/avatar.png') },
-  { id: 5, name: 'Acetrace Amionel', price: '$7.00', image: require('../../../assets/avatar.png') },
-  { id: 6, name: 'Ergorinex Caffeigestin', price: '$15.00', image: require('../../../assets/avatar.png') },
-  { id: 7, name: 'Alispirox Aerorenone', price: '$26.00', image: require('../../../assets/avatar.png') },
-  { id: 8, name: 'Product Name 8', price: '$18.00', image: require('../../../assets/avatar.png') },
-];
-
-const categories = [
-  'Family Care',
-  'Skin Care',
-  'Hair Care',
-  'Lip Care',
-  "Men's Care",
-  "Women's Care",
-  'Baby care',
-];
-
-const sortOptions = ['Select', 'Rating', 'Popular', 'Latest', 'Free'];
+const normalizeImageUrl = (imageUri: string | undefined | null): string | null => {
+  if (!imageUri || typeof imageUri !== 'string') {
+    return null;
+  }
+  const trimmedUri = imageUri.trim();
+  if (!trimmedUri) {
+    return null;
+  }
+  const baseUrl = API_BASE_URL.replace('/api', '');
+  let deviceHost: string;
+  try {
+    const urlObj = new URL(baseUrl);
+    deviceHost = urlObj.hostname;
+  } catch (e) {
+    const match = baseUrl.match(/https?:\/\/([^\/:]+)/);
+    deviceHost = match ? match[1] : '192.168.0.114';
+  }
+  if (trimmedUri.startsWith('http://') || trimmedUri.startsWith('https://')) {
+    let normalizedUrl = trimmedUri;
+    if (normalizedUrl.includes('localhost')) {
+      normalizedUrl = normalizedUrl.replace('localhost', deviceHost);
+    }
+    if (normalizedUrl.includes('127.0.0.1')) {
+      normalizedUrl = normalizedUrl.replace('127.0.0.1', deviceHost);
+    }
+    return normalizedUrl;
+  }
+  const imagePath = trimmedUri.startsWith('/') ? trimmedUri : `/${trimmedUri}`;
+  return `${baseUrl}${imagePath}`;
+};
 
 export const ProductCatalogScreen = () => {
   const navigation = useNavigation<ProductCatalogScreenNavigationProp>();
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedCategories, setSelectedCategories] = useState<string[]>(['Family Care']);
-  const [sortBy, setSortBy] = useState('Select');
-  const [showFilterModal, setShowFilterModal] = useState(false);
-  const [showSortModal, setShowSortModal] = useState(false);
+  const route = useRoute<ProductCatalogRouteProp>();
+  const { addToCart } = useCart();
+  const sellerId = route.params?.sellerId;
+  const sellerType = route.params?.sellerType;
 
-  const toggleCategory = (category: string) => {
-    setSelectedCategories((prev) =>
-      prev.includes(category)
-        ? prev.filter((c) => c !== category)
-        : [...prev, category]
-    );
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState<string>('');
+  const [page, setPage] = useState(1);
+  const [showFilterModal, setShowFilterModal] = useState(false);
+  const limit = 12;
+
+  const { data: productsData, isLoading, error, refetch, isRefreshing } = useQuery({
+    queryKey: ['products', { search: searchQuery, category: selectedCategory, sellerId, sellerType, page, limit }],
+    queryFn: () => {
+      const params: productApi.ProductFilters = { search: searchQuery, page, limit };
+      if (selectedCategory) params.category = selectedCategory;
+      // Ensure sellerId is a string
+      if (sellerId) {
+        params.sellerId = typeof sellerId === 'string' ? sellerId : String(sellerId);
+      }
+      if (sellerType) params.sellerType = sellerType;
+      
+      if (__DEV__) {
+        console.log('🔍 ProductCatalog - Fetching products with params:', params);
+      }
+      
+      return productApi.listProducts(params);
+    },
+    enabled: true, // Always enabled, even if sellerId is not provided (shows all products)
+  });
+
+  const products = productsData?.data?.products || [];
+  const pagination = productsData?.data?.pagination || { page: 1, limit, total: 0, pages: 1 };
+
+  // Get unique categories from products
+  const categories = useMemo(() => {
+    const categorySet = new Set<string>();
+    products.forEach((product) => {
+      if (product.category) categorySet.add(product.category);
+    });
+    return Array.from(categorySet).sort();
+  }, [products]);
+
+  const handleSearch = () => {
+    setPage(1);
+    refetch();
   };
 
-  const filteredProducts = products.filter((product) =>
-    product.name.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const handleCategoryChange = (category: string) => {
+    if (category === selectedCategory) {
+      setSelectedCategory('');
+    } else {
+      setSelectedCategory(category);
+    }
+    setPage(1);
+  };
 
-  const renderProduct = ({ item }: { item: typeof products[0] }) => (
-    <TouchableOpacity
-      style={styles.productCard}
-      onPress={() => navigation.navigate('ProductDetails', { productId: item.id.toString() })}
-    >
-      <View style={styles.productImageContainer}>
-        <Image source={item.image} style={styles.productImage} />
-        <TouchableOpacity style={styles.favoriteButton}>
-          <Ionicons name="bookmark-outline" size={20} color={colors.textSecondary} />
-        </TouchableOpacity>
-      </View>
-      <View style={styles.productContent}>
-        <Text style={styles.productName} numberOfLines={2}>
-          {item.name}
-        </Text>
-        <View style={styles.productPriceRow}>
-          <View style={styles.priceContainer}>
-            <Text style={styles.productPrice}>{item.price}</Text>
-            {item.originalPrice && (
-              <Text style={styles.originalPrice}>{item.originalPrice}</Text>
-            )}
-          </View>
-          <TouchableOpacity
-            style={styles.cartButton}
-            onPress={() => navigation.navigate('Cart')}
-          >
-            <Ionicons name="cart-outline" size={20} color={colors.primary} />
+  const handleAddToCart = (e: any, product: productApi.Product) => {
+    e?.stopPropagation?.();
+    addToCart(product, 1);
+  };
+
+  const renderProduct = ({ item: product }: { item: productApi.Product }) => {
+    const productPrice = product.discountPrice || product.price;
+    const originalPrice = product.discountPrice ? product.price : null;
+    const productImage = product.images?.[0] || '';
+    const normalizedImageUrl = normalizeImageUrl(productImage);
+    const defaultAvatar = require('../../../assets/avatar.png');
+    const imageSource = normalizedImageUrl ? { uri: normalizedImageUrl } : defaultAvatar;
+
+    return (
+      <TouchableOpacity
+        style={styles.productCard}
+        onPress={() => navigation.navigate('ProductDetails', { productId: product._id })}
+      >
+        <View style={styles.productImageContainer}>
+          <Image source={imageSource} style={styles.productImage} defaultSource={defaultAvatar} />
+          <TouchableOpacity style={styles.favoriteButton}>
+            <Ionicons name="bookmark-outline" size={20} color={colors.textSecondary} />
           </TouchableOpacity>
         </View>
-      </View>
-    </TouchableOpacity>
-  );
+        <View style={styles.productContent}>
+          <Text style={styles.productName} numberOfLines={2}>
+            {product.name}
+          </Text>
+          <View style={styles.productPriceRow}>
+            <View style={styles.priceContainer}>
+              <Text style={styles.productPrice}>${productPrice.toFixed(2)}</Text>
+              {originalPrice && (
+                <Text style={styles.originalPrice}>${originalPrice.toFixed(2)}</Text>
+              )}
+            </View>
+            <TouchableOpacity
+              style={styles.cartButton}
+              onPress={(e) => handleAddToCart(e, product)}
+            >
+              <Ionicons name="cart-outline" size={20} color={colors.primary} />
+            </TouchableOpacity>
+          </View>
+        </View>
+      </TouchableOpacity>
+    );
+  };
 
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar backgroundColor={colors.primary} barStyle="light-content" />
       {/* Search and Filter Section */}
       <View style={styles.searchSection}>
-        <View style={styles.locationRow}>
-          <Ionicons name="location" size={16} color={colors.textSecondary} />
-          <Text style={styles.locationText}>96 Red Hawk Road Cyrus, MN 56323</Text>
-        </View>
         <View style={styles.searchContainer}>
           <Ionicons name="search-outline" size={20} color={colors.textSecondary} />
           <TextInput
@@ -116,7 +180,11 @@ export const ProductCatalogScreen = () => {
             placeholderTextColor={colors.textLight}
             value={searchQuery}
             onChangeText={setSearchQuery}
+            onSubmitEditing={handleSearch}
           />
+          <TouchableOpacity onPress={handleSearch}>
+            <Ionicons name="search" size={20} color={colors.primary} />
+          </TouchableOpacity>
         </View>
         <View style={styles.filterRow}>
           <TouchableOpacity
@@ -126,27 +194,84 @@ export const ProductCatalogScreen = () => {
             <Ionicons name="filter" size={18} color={colors.primary} />
             <Text style={styles.filterButtonText}>Filter</Text>
           </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.filterButton}
-            onPress={() => setShowSortModal(true)}
-          >
-            <Ionicons name="swap-vertical" size={18} color={colors.primary} />
-            <Text style={styles.filterButtonText}>Sort: {sortBy}</Text>
-          </TouchableOpacity>
-          <Text style={styles.productCount}>Showing {filteredProducts.length} of {products.length} products</Text>
+          <Text style={styles.productCount}>
+            Showing {products.length} of {pagination.total} products
+            {sellerId && sellerType && ' from this seller'}
+          </Text>
         </View>
       </View>
 
       {/* Products List */}
-      <FlatList
-        data={filteredProducts}
-        renderItem={renderProduct}
-        keyExtractor={(item) => item.id.toString()}
-        numColumns={2}
-        contentContainerStyle={styles.productsList}
-        columnWrapperStyle={styles.productRow}
-        showsVerticalScrollIndicator={false}
-      />
+      {isLoading && page === 1 ? (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={colors.primary} />
+          <Text style={styles.loadingText}>Loading products...</Text>
+        </View>
+      ) : error ? (
+        <View style={styles.errorContainer}>
+          <Ionicons name="alert-circle-outline" size={64} color={colors.error} />
+          <Text style={styles.errorText}>Failed to load products</Text>
+          <TouchableOpacity style={styles.retryButton} onPress={() => refetch()}>
+            <Text style={styles.retryButtonText}>Retry</Text>
+          </TouchableOpacity>
+        </View>
+      ) : products.length === 0 ? (
+        <View style={styles.emptyContainer}>
+          <Ionicons name="cube-outline" size={64} color={colors.textLight} />
+          <Text style={styles.emptyText}>No products found</Text>
+          <Text style={styles.emptySubtext}>Try adjusting your search filters</Text>
+        </View>
+      ) : (
+        <FlatList
+          data={products}
+          renderItem={renderProduct}
+          keyExtractor={(item) => item._id}
+          numColumns={2}
+          contentContainerStyle={styles.productsList}
+          columnWrapperStyle={styles.productRow}
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl refreshing={isRefreshing || false} onRefresh={refetch} />
+          }
+          ListFooterComponent={
+            pagination.pages > 1 ? (
+              <View style={styles.pagination}>
+                <TouchableOpacity
+                  style={[styles.pageButton, page === 1 && styles.pageButtonDisabled]}
+                  onPress={() => setPage(page - 1)}
+                  disabled={page === 1}
+                >
+                  <Text
+                    style={[styles.pageButtonText, page === 1 && styles.pageButtonTextDisabled]}
+                  >
+                    Previous
+                  </Text>
+                </TouchableOpacity>
+                <Text style={styles.pageInfo}>
+                  Page {page} of {pagination.pages}
+                </Text>
+                <TouchableOpacity
+                  style={[
+                    styles.pageButton,
+                    page === pagination.pages && styles.pageButtonDisabled,
+                  ]}
+                  onPress={() => setPage(page + 1)}
+                  disabled={page === pagination.pages}
+                >
+                  <Text
+                    style={[
+                      styles.pageButtonText,
+                      page === pagination.pages && styles.pageButtonTextDisabled,
+                    ]}
+                  >
+                    Next
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            ) : null
+          }
+        />
+      )}
 
       {/* Filter Modal */}
       <Modal
@@ -164,20 +289,38 @@ export const ProductCatalogScreen = () => {
               </TouchableOpacity>
             </View>
             <ScrollView style={styles.modalBody}>
+              <TouchableOpacity
+                style={styles.categoryFilterItem}
+                onPress={() => handleCategoryChange('')}
+              >
+                <View style={styles.checkboxContainer}>
+                  <View
+                    style={[
+                      styles.checkbox,
+                      !selectedCategory && styles.checkboxChecked,
+                    ]}
+                  >
+                    {!selectedCategory && (
+                      <Ionicons name="checkmark" size={16} color={colors.textWhite} />
+                    )}
+                  </View>
+                  <Text style={styles.categoryFilterText}>All Categories</Text>
+                </View>
+              </TouchableOpacity>
               {categories.map((category) => (
                 <TouchableOpacity
                   key={category}
                   style={styles.categoryFilterItem}
-                  onPress={() => toggleCategory(category)}
+                  onPress={() => handleCategoryChange(category)}
                 >
                   <View style={styles.checkboxContainer}>
                     <View
                       style={[
                         styles.checkbox,
-                        selectedCategories.includes(category) && styles.checkboxChecked,
+                        selectedCategory === category && styles.checkboxChecked,
                       ]}
                     >
-                      {selectedCategories.includes(category) && (
+                      {selectedCategory === category && (
                         <Ionicons name="checkmark" size={16} color={colors.textWhite} />
                       )}
                     </View>
@@ -189,13 +332,21 @@ export const ProductCatalogScreen = () => {
             <View style={styles.modalFooter}>
               <TouchableOpacity
                 style={styles.resetButton}
-                onPress={() => setSelectedCategories([])}
+                onPress={() => {
+                  setSelectedCategory('');
+                  setSearchQuery('');
+                  setPage(1);
+                }}
               >
-                <Text style={styles.resetButtonText}>Reset</Text>
+                <Text style={styles.resetButtonText}>Clear Filters</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.applyButton}
-                onPress={() => setShowFilterModal(false)}
+                onPress={() => {
+                  setShowFilterModal(false);
+                  setPage(1);
+                  refetch();
+                }}
               >
                 <Text style={styles.applyButtonText}>Apply</Text>
               </TouchableOpacity>
@@ -204,48 +355,6 @@ export const ProductCatalogScreen = () => {
         </View>
       </Modal>
 
-      {/* Sort Modal */}
-      <Modal
-        visible={showSortModal}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setShowSortModal(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Sort By</Text>
-              <TouchableOpacity onPress={() => setShowSortModal(false)}>
-                <Ionicons name="close" size={24} color={colors.text} />
-              </TouchableOpacity>
-            </View>
-            <ScrollView style={styles.modalBody}>
-              {sortOptions.map((option) => (
-                <TouchableOpacity
-                  key={option}
-                  style={styles.sortOption}
-                  onPress={() => {
-                    setSortBy(option);
-                    setShowSortModal(false);
-                  }}
-                >
-                  <Text
-                    style={[
-                      styles.sortOptionText,
-                      sortBy === option && styles.sortOptionTextActive,
-                    ]}
-                  >
-                    {option}
-                  </Text>
-                  {sortBy === option && (
-                    <Ionicons name="checkmark" size={20} color={colors.primary} />
-                  )}
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-          </View>
-        </View>
-      </Modal>
     </SafeAreaView>
   );
 };
@@ -314,6 +423,87 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     flex: 1,
     textAlign: 'right',
+  },
+  loadingContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 60,
+  },
+  loadingText: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    marginTop: 12,
+  },
+  errorContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 60,
+  },
+  errorText: {
+    fontSize: 16,
+    color: colors.error,
+    marginTop: 16,
+    marginBottom: 24,
+  },
+  retryButton: {
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    backgroundColor: colors.primary,
+    borderRadius: 8,
+  },
+  retryButtonText: {
+    color: colors.textWhite,
+    fontWeight: '600',
+    fontSize: 14,
+  },
+  emptyContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 60,
+  },
+  emptyText: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: colors.text,
+    marginTop: 16,
+  },
+  emptySubtext: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    marginTop: 8,
+  },
+  pagination: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 16,
+    marginTop: 8,
+  },
+  pageButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+    backgroundColor: colors.primary,
+  },
+  pageButtonDisabled: {
+    backgroundColor: colors.backgroundLight,
+    opacity: 0.5,
+  },
+  pageButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.textWhite,
+  },
+  pageButtonTextDisabled: {
+    color: colors.textSecondary,
+  },
+  pageInfo: {
+    fontSize: 14,
+    color: colors.text,
+    fontWeight: '500',
   },
   productsList: {
     padding: 16,

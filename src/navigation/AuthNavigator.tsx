@@ -7,16 +7,26 @@ import { ForgotPasswordScreen } from '../screens/auth/ForgotPasswordScreen';
 import { DoctorRegisterScreen } from '../screens/auth/DoctorRegisterScreen';
 import { DoctorVerificationUploadScreen } from '../screens/auth/DoctorVerificationUploadScreen';
 import { PendingApprovalScreen } from '../screens/auth/PendingApprovalScreen';
-import { PharmacyRegisterScreen } from '../screens/auth/PharmacyRegisterScreen';
-import { PharmacyRegisterStep1Screen } from '../screens/auth/PharmacyRegisterStep1Screen';
-import { PharmacyRegisterStep2Screen } from '../screens/auth/PharmacyRegisterStep2Screen';
-import { PharmacyRegisterStep3Screen } from '../screens/auth/PharmacyRegisterStep3Screen';
+import { useAuth } from '../contexts/AuthContext';
+// Pharmacy registration removed - not in site
 
 const Stack = createNativeStackNavigator<AuthStackParamList>();
 
 export const AuthNavigator = () => {
+  const { user } = useAuth();
+
+  // Determine initial route based on user state
+  // If pending doctor, start at verification upload screen
+  const getInitialRouteName = (): keyof AuthStackParamList => {
+    if (user && user.role === 'doctor' && user.verificationStatus === 'pending') {
+      return 'DoctorVerificationUpload';
+    }
+    return 'Login';
+  };
+
   return (
     <Stack.Navigator
+      initialRouteName={getInitialRouteName()}
       screenOptions={{
         headerShown: false,
       }}
@@ -27,10 +37,6 @@ export const AuthNavigator = () => {
       <Stack.Screen name="DoctorRegister" component={DoctorRegisterScreen} />
       <Stack.Screen name="DoctorVerificationUpload" component={DoctorVerificationUploadScreen} />
       <Stack.Screen name="PendingApproval" component={PendingApprovalScreen} />
-      <Stack.Screen name="PharmacyRegister" component={PharmacyRegisterScreen} />
-      <Stack.Screen name="PharmacyRegisterStep1" component={PharmacyRegisterStep1Screen} />
-      <Stack.Screen name="PharmacyRegisterStep2" component={PharmacyRegisterStep2Screen} />
-      <Stack.Screen name="PharmacyRegisterStep3" component={PharmacyRegisterStep3Screen} />
     </Stack.Navigator>
   );
 };

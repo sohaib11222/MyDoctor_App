@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -12,19 +12,29 @@ import {
   KeyboardAvoidingView,
   Platform,
   Dimensions,
+  ActivityIndicator,
+  RefreshControl,
 } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { ChatStackParamList } from '../../navigation/types';
 import { colors } from '../../constants/colors';
 import { Ionicons } from '@expo/vector-icons';
+import { useAuth } from '../../contexts/AuthContext';
+import * as chatApi from '../../services/chat';
+import { API_BASE_URL } from '../../config/api';
+import Toast from 'react-native-toast-message';
 
 const { width } = Dimensions.get('window');
 
 type AdminChatScreenNavigationProp = StackNavigationProp<ChatStackParamList, 'AdminChat'>;
+type AdminChatRouteProp = RouteProp<ChatStackParamList, 'AdminChat'>;
 
 interface Admin {
   id: string;
+  conversationId: string;
+  adminId: string;
   name: string;
   avatar: any;
   lastMessage: string;
@@ -32,6 +42,76 @@ interface Admin {
   unread: number;
   online: boolean;
 }
+
+const defaultAvatar = require('../../../assets/avatar.png');
+
+/**
+ * Normalize image URL for mobile app
+ */
+const normalizeImageUrl = (imageUri: string | undefined | null): string | null => {
+  if (!imageUri || typeof imageUri !== 'string') {
+    return null;
+  }
+  
+  const trimmedUri = imageUri.trim();
+  if (!trimmedUri) {
+    return null;
+  }
+  
+  const baseUrl = API_BASE_URL.replace('/api', '');
+  let deviceHost: string;
+  try {
+    const urlObj = new URL(baseUrl);
+    deviceHost = urlObj.hostname;
+  } catch (e) {
+    const match = baseUrl.match(/https?:\/\/([^\/:]+)/);
+    deviceHost = match ? match[1] : '192.168.0.114';
+  }
+  
+  if (trimmedUri.startsWith('http://') || trimmedUri.startsWith('https://')) {
+    let normalizedUrl = trimmedUri;
+    if (normalizedUrl.includes('localhost')) {
+      normalizedUrl = normalizedUrl.replace('localhost', deviceHost);
+    }
+    if (normalizedUrl.includes('127.0.0.1')) {
+      normalizedUrl = normalizedUrl.replace('127.0.0.1', deviceHost);
+    }
+    return normalizedUrl;
+  }
+  
+  const imagePath = trimmedUri.startsWith('/') ? trimmedUri : `/${trimmedUri}`;
+  return `${baseUrl}${imagePath}`;
+};
+
+/**
+ * Format date to relative time string
+ */
+const formatRelativeTime = (dateString: string): string => {
+  if (!dateString) return '';
+  
+  const date = new Date(dateString);
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffMins = Math.floor(diffMs / 60000);
+  const diffHours = Math.floor(diffMs / 3600000);
+  const diffDays = Math.floor(diffMs / 86400000);
+  
+  if (diffMins < 1) return 'Just Now';
+  if (diffMins < 60) return `${diffMins}m ago`;
+  if (diffHours < 24) return `${diffHours}h ago`;
+  if (diffDays < 7) return `${diffDays}d ago`;
+  
+  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+};
+
+/**
+ * Format time for messages
+ */
+const formatTime = (dateString: string): string => {
+  if (!dateString) return '';
+  const date = new Date(dateString);
+  return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+};
 
 interface Message {
   id: string;
@@ -41,35 +121,7 @@ interface Message {
   date: string;
 }
 
-const mockAdmins: Admin[] = [
-  {
-    id: '1',
-    name: 'Admin Support',
-    avatar: require('../../../assets/avatar.png'),
-    lastMessage: 'Thank you for your inquiry. We will get back to you soon.',
-    lastMessageTime: '10:30 AM',
-    unread: 2,
-    online: true,
-  },
-  {
-    id: '2',
-    name: 'Verification Team',
-    avatar: require('../../../assets/avatar.png'),
-    lastMessage: 'Your documents have been reviewed.',
-    lastMessageTime: 'Yesterday',
-    unread: 0,
-    online: false,
-  },
-  {
-    id: '3',
-    name: 'Billing Support',
-    avatar: require('../../../assets/avatar.png'),
-    lastMessage: 'Payment processed successfully.',
-    lastMessageTime: '2 days ago',
-    unread: 1,
-    online: true,
-  },
-];
+// Mock admins removed - using real data from backend
 
 const sampleMessages: Message[] = [
   {
@@ -111,40 +163,224 @@ const sampleMessages: Message[] = [
 
 export const AdminChatScreen = () => {
   const navigation = useNavigation<AdminChatScreenNavigationProp>();
+  const route = useRoute<AdminChatRouteProp>();
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
+  const { conversationId: routeConversationId, adminId: routeAdminId } = route.params || {};
+  
   const [selectedAdmin, setSelectedAdmin] = useState<Admin | null>(null);
-  const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState('');
+  const [refreshing, setRefreshing] = useState(false);
   const flatListRef = useRef<FlatList>(null);
 
+  // Fetch all conversations to get admin-doctor conversations
+  const { data: conversationsResponse, isLoading: conversationsLoading } = useQuery({
+    queryKey: ['conversations', user?.id],
+    queryFn: () => chatApi.getConversations({ page: 1, limit: 100 }),
+    enabled: !!user && user?.role === 'doctor',
+    retry: 1,
+  });
+
+  // Extract admin-doctor conversations
+  const adminConversations = useMemo(() => {
+    if (!conversationsResponse?.data?.conversations) return [];
+    
+    return conversationsResponse.data.conversations
+      .filter((conv: chatApi.Conversation) => conv.conversationType === 'ADMIN_DOCTOR')
+      .map((conv: chatApi.Conversation): Admin => {
+        const adminId = typeof conv.adminId === 'object' ? conv.adminId?._id : conv.adminId;
+        const admin = typeof conv.adminId === 'object' ? conv.adminId : null;
+        const imageUri = admin?.profileImage || null;
+        const lastMessage = conv.lastMessage?.message || 'No messages yet';
+        const lastTime = formatRelativeTime(conv.lastMessageAt || conv.lastMessage?.createdAt || '');
+        
+        return {
+          id: conv._id,
+          conversationId: conv._id,
+          adminId: adminId || '',
+          name: admin?.fullName || 'Admin Support',
+          avatar: imageUri ? { uri: normalizeImageUrl(imageUri) || undefined } : defaultAvatar,
+          lastMessage,
+          lastMessageTime: lastTime,
+          unread: conv.unreadCount || 0,
+          online: false, // TODO: Implement online status
+        };
+      });
+  }, [conversationsResponse]);
+
+  // Auto-select admin if conversationId is provided
   useEffect(() => {
-    if (selectedAdmin) {
-      setMessages(sampleMessages);
+    if (routeConversationId && adminConversations.length > 0) {
+      const admin = adminConversations.find(a => a.conversationId === routeConversationId);
+      if (admin) {
+        setSelectedAdmin(admin);
+      }
+    } else if (adminConversations.length > 0 && !selectedAdmin) {
+      // Select first admin by default
+      setSelectedAdmin(adminConversations[0]);
+    }
+  }, [routeConversationId, adminConversations]);
+
+  // Fetch messages for selected conversation
+  const { data: messagesResponse, isLoading: messagesLoading, refetch: refetchMessages } = useQuery({
+    queryKey: ['adminConversationMessages', selectedAdmin?.conversationId],
+    queryFn: () => {
+      if (!selectedAdmin?.conversationId) throw new Error('Conversation ID not found');
+      return chatApi.getMessages(selectedAdmin.conversationId, { page: 1, limit: 100 });
+    },
+    enabled: !!selectedAdmin?.conversationId,
+    retry: 1,
+    refetchInterval: 5000, // Poll every 5 seconds
+  });
+
+  // Transform messages to UI format
+  const messages = useMemo(() => {
+    if (!messagesResponse?.data?.messages) return [];
+    
+    return messagesResponse.data.messages.map((msg: chatApi.ChatMessage): Message => {
+      const isDoctor = msg.senderId._id === user?.id;
+      return {
+        id: msg._id,
+        sender: isDoctor ? 'doctor' : 'admin',
+        message: msg.message || '',
+        time: formatTime(msg.createdAt),
+        date: new Date(msg.createdAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }),
+      };
+    });
+  }, [messagesResponse, user?.id]);
+
+  // Start conversation if needed (when doctor first opens admin chat)
+  const startConversationMutation = useMutation({
+    mutationFn: async () => {
+      if (!user) throw new Error('User not found');
+      
+      // Get admin ID from route or selected admin
+      const adminId = routeAdminId || selectedAdmin?.adminId;
+      if (!user.id) throw new Error('User ID not found');
+      
+      if (!adminId) {
+        // If no adminId, backend will use token to determine admin
+        const response = await chatApi.startConversationWithAdmin(user.id, undefined);
+        return response;
+      } else {
+        const response = await chatApi.startConversationWithAdmin(user.id, adminId);
+        return response;
+      }
+    },
+    onSuccess: async (response) => {
+      if (response?.data?._id) {
+        // Update selected admin with new conversation
+        const newConversation = response.data;
+        const adminId = typeof newConversation.adminId === 'object' 
+          ? newConversation.adminId?._id 
+          : newConversation.adminId;
+        
+        const admin = typeof newConversation.adminId === 'object' 
+          ? newConversation.adminId 
+          : null;
+        
+        if (adminId && admin) {
+          setSelectedAdmin({
+            id: newConversation._id,
+            conversationId: newConversation._id,
+            adminId: adminId,
+            name: admin.fullName || 'Admin Support',
+            avatar: admin.profileImage 
+              ? { uri: normalizeImageUrl(admin.profileImage) || undefined }
+              : defaultAvatar,
+            lastMessage: 'No messages yet',
+            lastMessageTime: 'Just Now',
+            unread: 0,
+            online: false,
+          });
+        }
+      }
+      await queryClient.invalidateQueries({ queryKey: ['conversations'] });
+    },
+  });
+
+  // Auto-start conversation if no admin conversations exist and we have route params
+  useEffect(() => {
+    if (user && user.role === 'doctor' && adminConversations.length === 0 && !conversationsLoading && !startConversationMutation.isPending) {
+      // Only auto-start if we have an adminId from route params
+      if (routeAdminId) {
+        startConversationMutation.mutate();
+      }
+    }
+  }, [user, adminConversations.length, conversationsLoading, routeAdminId]);
+
+  // Send message mutation
+  const sendMessageMutation = useMutation({
+    mutationFn: async (messageText: string) => {
+      if (!user || !selectedAdmin) throw new Error('User or admin not found');
+      
+      // Get admin ID - try from selectedAdmin first, then from conversation
+      const adminId = selectedAdmin.adminId || routeAdminId;
+      if (!adminId) throw new Error('Admin ID not found');
+      
+      return await chatApi.sendMessageToAdmin(
+        user.id || '',
+        adminId,
+        messageText
+      );
+    },
+    onSuccess: async () => {
+      setNewMessage('');
+      await queryClient.invalidateQueries({ queryKey: ['adminConversationMessages', selectedAdmin?.conversationId] });
+      await queryClient.invalidateQueries({ queryKey: ['conversations'] });
+      await queryClient.invalidateQueries({ queryKey: ['unreadCount'] });
       setTimeout(() => {
         flatListRef.current?.scrollToEnd({ animated: true });
       }, 100);
-    }
-  }, [selectedAdmin]);
+    },
+    onError: (error: any) => {
+      const errorMessage = error?.response?.data?.message || error?.message || 'Failed to send message';
+      Toast.show({
+        type: 'error',
+        text1: 'Error',
+        text2: errorMessage,
+      });
+    },
+  });
 
+  // Mark as read mutation
+  const markAsReadMutation = useMutation({
+    mutationFn: () => chatApi.markMessagesAsRead(selectedAdmin!.conversationId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['conversations'] });
+      queryClient.invalidateQueries({ queryKey: ['unreadCount'] });
+    },
+  });
+
+  // Mark as read when conversation is selected
+  useEffect(() => {
+    if (selectedAdmin?.conversationId) {
+      markAsReadMutation.mutate();
+    }
+  }, [selectedAdmin?.conversationId]);
+
+  // Auto-scroll to bottom when messages change
   useEffect(() => {
     if (messages.length > 0) {
       setTimeout(() => {
         flatListRef.current?.scrollToEnd({ animated: true });
       }, 100);
     }
-  }, [messages]);
+  }, [messages.length]);
 
   const handleSendMessage = () => {
-    if (newMessage.trim() && selectedAdmin) {
-      const message: Message = {
-        id: (messages.length + 1).toString(),
-        sender: 'doctor',
-        message: newMessage,
-        time: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
-        date: new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }),
-      };
-      setMessages([...messages, message]);
-      setNewMessage('');
+    if (newMessage.trim() && selectedAdmin && !sendMessageMutation.isPending) {
+      sendMessageMutation.mutate(newMessage.trim());
     }
+  };
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['conversations'] }),
+      refetchMessages(),
+    ]);
+    setRefreshing(false);
   };
 
   const renderAdminItem = ({ item }: { item: Admin }) => (
@@ -209,12 +445,23 @@ export const AdminChatScreen = () => {
           <View style={styles.sidebarHeader}>
             <Text style={styles.sidebarTitle}>Administrators</Text>
           </View>
-          <FlatList
-            data={mockAdmins}
-            renderItem={renderAdminItem}
-            keyExtractor={(item) => item.id}
-            showsVerticalScrollIndicator={false}
-          />
+          {conversationsLoading ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="small" color={colors.primary} />
+            </View>
+          ) : (
+            <FlatList
+              data={adminConversations}
+              renderItem={renderAdminItem}
+              keyExtractor={(item) => item.id}
+              showsVerticalScrollIndicator={false}
+              ListEmptyComponent={
+                <View style={styles.emptyContainer}>
+                  <Text style={styles.emptyText}>No admin conversations</Text>
+                </View>
+              }
+            />
+          )}
         </View>
 
         {/* Chat Area */}
@@ -238,15 +485,29 @@ export const AdminChatScreen = () => {
               </View>
 
               {/* Messages List */}
-              <FlatList
-                ref={flatListRef}
-                data={messages}
-                renderItem={renderMessage}
-                keyExtractor={(item) => item.id}
-                contentContainerStyle={styles.messagesList}
-                showsVerticalScrollIndicator={false}
-                keyboardShouldPersistTaps="handled"
-              />
+              {messagesLoading ? (
+                <View style={styles.loadingContainer}>
+                  <ActivityIndicator size="large" color={colors.primary} />
+                  <Text style={styles.loadingText}>Loading messages...</Text>
+                </View>
+              ) : (
+                <FlatList
+                  ref={flatListRef}
+                  data={messages}
+                  renderItem={renderMessage}
+                  keyExtractor={(item) => item.id}
+                  contentContainerStyle={styles.messagesList}
+                  showsVerticalScrollIndicator={false}
+                  keyboardShouldPersistTaps="handled"
+                  refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />}
+                  ListEmptyComponent={
+                    <View style={styles.emptyContainer}>
+                      <Text style={styles.emptyText}>No messages yet</Text>
+                      <Text style={styles.emptySubtext}>Start the conversation</Text>
+                    </View>
+                  }
+                />
+              )}
 
               {/* Message Input */}
               <KeyboardAvoidingView
@@ -263,16 +524,20 @@ export const AdminChatScreen = () => {
                     multiline
                   />
                   <TouchableOpacity
-                    style={[styles.sendButton, !newMessage.trim() && styles.sendButtonDisabled]}
+                    style={[styles.sendButton, (!newMessage.trim() || sendMessageMutation.isPending) && styles.sendButtonDisabled]}
                     onPress={handleSendMessage}
-                    disabled={!newMessage.trim()}
+                    disabled={!newMessage.trim() || sendMessageMutation.isPending}
                     activeOpacity={0.7}
                   >
-                    <Ionicons
-                      name="send"
-                      size={20}
-                      color={newMessage.trim() ? colors.textWhite : colors.textLight}
-                    />
+                    {sendMessageMutation.isPending ? (
+                      <ActivityIndicator size="small" color={colors.textWhite} />
+                    ) : (
+                      <Ionicons
+                        name="send"
+                        size={20}
+                        color={newMessage.trim() ? colors.textWhite : colors.textLight}
+                      />
+                    )}
                   </TouchableOpacity>
                 </View>
               </KeyboardAvoidingView>
@@ -539,6 +804,34 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   placeholderText: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    textAlign: 'center',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 40,
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 14,
+    color: colors.textSecondary,
+  },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 40,
+  },
+  emptyText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.text,
+    marginBottom: 8,
+  },
+  emptySubtext: {
     fontSize: 14,
     color: colors.textSecondary,
     textAlign: 'center',

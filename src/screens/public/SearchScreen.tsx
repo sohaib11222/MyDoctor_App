@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   View,
   Text,
@@ -11,56 +11,321 @@ import {
   Dimensions,
   Modal,
   SafeAreaView,
+  ActivityIndicator,
+  RefreshControl,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { HomeStackParamList } from '../../navigation/types';
 import { colors } from '../../constants/colors';
 import { Ionicons } from '@expo/vector-icons';
+import { useAuth } from '../../contexts/AuthContext';
+import * as doctorApi from '../../services/doctor';
+import * as specializationApi from '../../services/specialization';
+import * as favoriteApi from '../../services/favorite';
+import { API_BASE_URL } from '../../config/api';
+import Toast from 'react-native-toast-message';
 
 type SearchScreenNavigationProp = StackNavigationProp<HomeStackParamList, 'Search'>;
 
 const { width } = Dimensions.get('window');
 
-interface Doctor {
-  id: number;
-  name: string;
-  specialty: string;
-  rating: number;
-  location: string;
-  duration: string;
-  fee: number;
-  available: boolean;
-  image: string;
-}
+const defaultAvatar = require('../../../assets/avatar.png');
+
+/**
+ * Normalize image URL for mobile app
+ */
+const normalizeImageUrl = (imageUri: string | undefined | null): string | null => {
+  if (!imageUri || typeof imageUri !== 'string') {
+    return null;
+  }
+  
+  const trimmedUri = imageUri.trim();
+  if (!trimmedUri) {
+    return null;
+  }
+  
+  const baseUrl = API_BASE_URL.replace('/api', '');
+  let deviceHost: string;
+  try {
+    const urlObj = new URL(baseUrl);
+    deviceHost = urlObj.hostname;
+  } catch (e) {
+    const match = baseUrl.match(/https?:\/\/([^\/:]+)/);
+    deviceHost = match ? match[1] : '192.168.1.11';
+  }
+  
+  if (trimmedUri.startsWith('http://') || trimmedUri.startsWith('https://')) {
+    let normalizedUrl = trimmedUri;
+    if (normalizedUrl.includes('localhost')) {
+      normalizedUrl = normalizedUrl.replace('localhost', deviceHost);
+    }
+    if (normalizedUrl.includes('127.0.0.1')) {
+      normalizedUrl = normalizedUrl.replace('127.0.0.1', deviceHost);
+    }
+    return normalizedUrl;
+  }
+  
+  const imagePath = trimmedUri.startsWith('/') ? trimmedUri : `/${trimmedUri}`;
+  return `${baseUrl}${imagePath}`;
+};
 
 const SearchScreen = () => {
   const navigation = useNavigation<SearchScreenNavigationProp>();
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
+  const userId = user?._id || user?.id;
+  const isPatient = user?.role === 'patient';
+  
   const [searchQuery, setSearchQuery] = useState('');
   const [location, setLocation] = useState('');
-  const [date, setDate] = useState('');
-  const [showAvailability, setShowAvailability] = useState(true);
-  const [selectedSpecialties, setSelectedSpecialties] = useState<string[]>(['Urology']);
+  const [selectedSpecialization, setSelectedSpecialization] = useState('');
+  const [showAvailability, setShowAvailability] = useState(false);
+  const [page, setPage] = useState(1);
+  const [refreshing, setRefreshing] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
+  const limit = 12;
 
-  const doctors: Doctor[] = [
-    { id: 1, name: 'Dr. Michael Brown', specialty: 'Psychologist', rating: 5.0, location: 'Minneapolis, MN', duration: '30 Min', fee: 650, available: true, image: 'https://via.placeholder.com/150' },
-    { id: 2, name: 'Dr. Nicholas Tello', specialty: 'Pediatrician', rating: 4.6, location: 'Ogden, IA', duration: '60 Min', fee: 400, available: true, image: 'https://via.placeholder.com/150' },
-    { id: 3, name: 'Dr. Harold Bryant', specialty: 'Neurologist', rating: 4.8, location: 'Winona, MS', duration: '30 Min', fee: 500, available: true, image: 'https://via.placeholder.com/150' },
-    { id: 4, name: 'Dr. Sandra Jones', specialty: 'Cardiologist', rating: 4.8, location: 'Beckley, WV', duration: '30 Min', fee: 550, available: true, image: 'https://via.placeholder.com/150' },
-    { id: 5, name: 'Dr. Charles Scott', specialty: 'Neurologist', rating: 4.2, location: 'Hamshire, TX', duration: '30 Min', fee: 600, available: true, image: 'https://via.placeholder.com/150' },
-    { id: 6, name: 'Dr. Robert Thomas', specialty: 'Cardiologist', rating: 4.2, location: 'Oakland, CA', duration: '30 Min', fee: 450, available: true, image: 'https://via.placeholder.com/150' },
-  ];
+  // Build query params
+  const queryParams = useMemo(() => {
+    const params: doctorApi.ListDoctorsParams = {
+      page,
+      limit,
+    };
 
-  const specialties = ['Urology', 'Psychiatry', 'Cardiology', 'Pediatrics', 'Neurology'];
+    if (searchQuery.trim()) {
+      params.search = searchQuery.trim();
+    }
 
-  const toggleSpecialty = (specialty: string) => {
-    if (selectedSpecialties.includes(specialty)) {
-      setSelectedSpecialties(selectedSpecialties.filter(s => s !== specialty));
+    if (location.trim()) {
+      params.city = location.trim();
+    }
+
+    if (selectedSpecialization) {
+      params.specializationId = selectedSpecialization;
+    }
+
+    if (showAvailability) {
+      params.isAvailableOnline = true;
+    }
+
+    return params;
+  }, [searchQuery, location, selectedSpecialization, showAvailability, page, limit]);
+
+  // Fetch doctors
+  const { data: doctorsResponse, isLoading, error, refetch } = useQuery({
+    queryKey: ['doctors', queryParams],
+    queryFn: () => doctorApi.listDoctors(queryParams),
+    retry: 1,
+  });
+
+  // Fetch specializations
+  const { data: specializationsResponse } = useQuery({
+    queryKey: ['specializations'],
+    queryFn: () => specializationApi.getAllSpecializations(),
+    retry: 1,
+  });
+
+  // Fetch user's favorites
+  const { data: favoritesResponse } = useQuery({
+    queryKey: ['favorites', userId],
+    queryFn: () => favoriteApi.listFavorites(userId!, { limit: 1000 }),
+    enabled: isPatient && !!userId,
+    retry: 1,
+  });
+
+  // Extract data
+  const doctors = useMemo(() => {
+    if (!doctorsResponse?.data) return [];
+    return doctorsResponse.data.doctors || [];
+  }, [doctorsResponse]);
+
+  const specializations = useMemo(() => {
+    if (!specializationsResponse?.data) return [];
+    return Array.isArray(specializationsResponse.data) 
+      ? specializationsResponse.data 
+      : (specializationsResponse.data.data || []);
+  }, [specializationsResponse]);
+
+  const pagination = useMemo(() => {
+    if (!doctorsResponse?.data?.pagination) {
+      return { page: 1, limit: 12, total: 0, pages: 0 };
+    }
+    return doctorsResponse.data.pagination;
+  }, [doctorsResponse]);
+
+  // Extract favorite doctor IDs
+  const favoriteDoctorIds = useMemo(() => {
+    if (!favoritesResponse?.data?.favorites) return new Set<string>();
+    const favorites = favoritesResponse.data.favorites;
+    return new Set(
+      favorites.map((fav) => {
+        const doctorId = typeof fav.doctorId === 'object' 
+          ? fav.doctorId._id || fav.doctorId 
+          : fav.doctorId;
+        return String(doctorId);
+      })
+    );
+  }, [favoritesResponse]);
+
+  // Create favorite ID map for easy removal
+  const favoriteIdMap = useMemo(() => {
+    if (!favoritesResponse?.data?.favorites) return {};
+    const favorites = favoritesResponse.data.favorites;
+    const map: Record<string, string> = {};
+    favorites.forEach((fav) => {
+      const doctorId = typeof fav.doctorId === 'object' 
+        ? fav.doctorId._id || fav.doctorId 
+        : fav.doctorId;
+      map[String(doctorId)] = fav._id;
+    });
+    return map;
+  }, [favoritesResponse]);
+
+  // Add favorite mutation
+  const addFavoriteMutation = useMutation({
+    mutationFn: ({ doctorId }: { doctorId: string }) => 
+      favoriteApi.addFavorite(doctorId, userId),
+    onSuccess: () => {
+      Toast.show({
+        type: 'success',
+        text1: 'Success',
+        text2: 'Doctor added to favorites',
+      });
+      queryClient.invalidateQueries(['favorites', userId]);
+    },
+    onError: (error: any) => {
+      const errorMessage = error?.response?.data?.message || error?.message || 'Failed to add favorite';
+      Toast.show({
+        type: 'error',
+        text1: 'Error',
+        text2: errorMessage,
+      });
+    },
+  });
+
+  // Remove favorite mutation
+  const removeFavoriteMutation = useMutation({
+    mutationFn: (favoriteId: string) => favoriteApi.removeFavorite(favoriteId),
+    onSuccess: () => {
+      Toast.show({
+        type: 'success',
+        text1: 'Success',
+        text2: 'Doctor removed from favorites',
+      });
+      queryClient.invalidateQueries(['favorites', userId]);
+    },
+    onError: (error: any) => {
+      const errorMessage = error?.response?.data?.message || error?.message || 'Failed to remove favorite';
+      Toast.show({
+        type: 'error',
+        text1: 'Error',
+        text2: errorMessage,
+      });
+    },
+  });
+
+  // Handle favorite toggle
+  const handleFavoriteToggle = (doctorId: string) => {
+    if (!isPatient) {
+      Toast.show({
+        type: 'info',
+        text1: 'Login Required',
+        text2: 'Please login as a patient to add favorites',
+      });
+      return;
+    }
+
+    const doctorIdStr = String(doctorId);
+    const isFavorited = favoriteDoctorIds.has(doctorIdStr);
+
+    if (isFavorited) {
+      const favoriteId = favoriteIdMap[doctorIdStr];
+      if (favoriteId) {
+        removeFavoriteMutation.mutate(favoriteId);
+      }
     } else {
-      setSelectedSpecialties([...selectedSpecialties, specialty]);
+      addFavoriteMutation.mutate({ doctorId: doctorIdStr });
     }
   };
+
+  // Helper functions
+  const getSpecialtyName = (doctor: doctorApi.DoctorListItem): string => {
+    if (doctor.doctorProfile?.specialization) {
+      const spec = doctor.doctorProfile.specialization;
+      return typeof spec === 'object' ? spec.name : 'General';
+    }
+    if (doctor.doctorProfile?.specializations?.[0]) {
+      return doctor.doctorProfile.specializations[0].name || 'General';
+    }
+    if (doctor.specialization) {
+      const spec = doctor.specialization;
+      return typeof spec === 'object' ? spec.name : 'General';
+    }
+    return 'General';
+  };
+
+  const getRating = (doctor: doctorApi.DoctorListItem): number => {
+    return doctor.doctorProfile?.ratingAvg || 
+           doctor.doctorProfile?.rating?.average || 
+           doctor.rating?.average || 
+           0;
+  };
+
+  const getLocation = (doctor: doctorApi.DoctorListItem): string => {
+    if (doctor.doctorProfile?.clinics?.[0]) {
+      const clinic = doctor.doctorProfile.clinics[0];
+      const city = clinic.city || '';
+      const state = clinic.state || '';
+      return city && state ? `${city}, ${state}` : city || state || 'Location not available';
+    }
+    return 'Location not available';
+  };
+
+  const getConsultationFee = (doctor: doctorApi.DoctorListItem): number => {
+    return doctor.doctorProfile?.consultationFee || 
+           doctor.doctorProfile?.consultationFees?.clinic || 
+           doctor.doctorProfile?.consultationFees?.online || 
+           0;
+  };
+
+  const isDoctorAvailable = (doctor: doctorApi.DoctorListItem): boolean => {
+    if (!doctor.subscriptionExpiresAt) return false;
+    return new Date(doctor.subscriptionExpiresAt) > new Date();
+  };
+
+  const getDoctorImage = (doctor: doctorApi.DoctorListItem): string | null => {
+    return doctor.userId?.profileImage || 
+           doctor.profileImage || 
+           doctor.doctorProfile?.profileImage || 
+           null;
+  };
+
+  const getDoctorId = (doctor: doctorApi.DoctorListItem): string => {
+    return doctor.userId?._id || doctor._id;
+  };
+
+  const getDoctorName = (doctor: doctorApi.DoctorListItem): string => {
+    return doctor.userId?.fullName || doctor.fullName || 'Unknown Doctor';
+  };
+
+  const onRefresh = React.useCallback(async () => {
+    setRefreshing(true);
+    await refetch();
+    setRefreshing(false);
+  }, [refetch]);
+
+  const handleSearch = () => {
+    setPage(1); // Reset to first page on new search
+  };
+
+  const handleLoadMore = () => {
+    if (page < pagination.pages) {
+      setPage(page + 1);
+    }
+  };
+
 
   const renderStars = (rating: number) => {
     const stars = [];
@@ -75,46 +340,94 @@ const SearchScreen = () => {
     return <View style={{ flexDirection: 'row' }}>{stars}</View>;
   };
 
-  const renderDoctorCard = ({ item }: { item: Doctor }) => (
-    <TouchableOpacity
-      style={styles.doctorCard}
-      onPress={() => navigation.navigate('DoctorProfile', { doctorId: item.id.toString() })}
-      activeOpacity={0.7}
-    >
-      <Image source={{ uri: item.image }} style={styles.doctorImage} />
-      <View style={styles.doctorInfo}>
-        <Text style={styles.doctorName} numberOfLines={1}>{item.name}</Text>
-        <Text style={styles.doctorSpecialty} numberOfLines={1}>{item.specialty}</Text>
-        <View style={styles.ratingContainer}>
-          {renderStars(item.rating)}
-          <Text style={styles.ratingText}>{item.rating}</Text>
-          <Text style={styles.reviewCount}>(35)</Text>
-        </View>
-        <View style={styles.locationContainer}>
-          <Ionicons name="location-outline" size={14} color={colors.textSecondary} />
-          <Text style={styles.locationText} numberOfLines={1}>{item.location}</Text>
-        </View>
-        <View style={styles.feeContainer}>
-          <Text style={styles.feeLabel}>Consultation Fee</Text>
-          <Text style={styles.feeAmount}>${item.fee}</Text>
-        </View>
-        <TouchableOpacity
-          style={styles.bookBtn}
-          activeOpacity={0.8}
-          onPress={() => navigation.navigate('Booking', { doctorId: item.id.toString() })}
-        >
-          <Text style={styles.bookBtnText}>Book Appointment</Text>
-        </TouchableOpacity>
-      </View>
-    </TouchableOpacity>
-  );
+  const renderDoctorCard = ({ item }: { item: doctorApi.DoctorListItem }) => {
+    const doctorId = getDoctorId(item);
+    const doctorName = getDoctorName(item);
+    const specialtyName = getSpecialtyName(item);
+    const rating = getRating(item);
+    const locationStr = getLocation(item);
+    const fee = getConsultationFee(item);
+    const available = isDoctorAvailable(item);
+    const doctorImage = getDoctorImage(item);
+    const imageUri = doctorImage ? normalizeImageUrl(doctorImage) : null;
+    const isFavorited = favoriteDoctorIds.has(doctorId);
+    const ratingCount = item.doctorProfile?.rating?.count || 
+                       item.rating?.count || 
+                       0;
 
-  const ListFooter = () => (
-    <TouchableOpacity style={styles.loadMoreBtn} activeOpacity={0.8}>
-      <Ionicons name="cube-outline" size={20} color={colors.textWhite} />
-      <Text style={styles.loadMoreText}>Load More</Text>
-    </TouchableOpacity>
-  );
+    return (
+      <TouchableOpacity
+        style={styles.doctorCard}
+        onPress={() => navigation.navigate('DoctorProfile', { doctorId })}
+        activeOpacity={0.7}
+      >
+        <View style={styles.doctorImageContainer}>
+          <Image
+            source={imageUri ? { uri: imageUri } : defaultAvatar}
+            style={styles.doctorImage}
+            defaultSource={defaultAvatar}
+          />
+          {isPatient && (
+            <TouchableOpacity
+              style={styles.favoriteButton}
+              onPress={(e) => {
+                e.stopPropagation();
+                handleFavoriteToggle(doctorId);
+              }}
+              activeOpacity={0.7}
+            >
+              <Ionicons
+                name={isFavorited ? 'heart' : 'heart-outline'}
+                size={20}
+                color={isFavorited ? '#f44336' : colors.textSecondary}
+              />
+            </TouchableOpacity>
+          )}
+          {available && (
+            <View style={styles.availableBadge}>
+              <Text style={styles.availableBadgeText}>Available</Text>
+            </View>
+          )}
+        </View>
+        <View style={styles.doctorInfo}>
+          <Text style={styles.doctorName} numberOfLines={1}>{doctorName}</Text>
+          <Text style={styles.doctorSpecialty} numberOfLines={1}>{specialtyName}</Text>
+          <View style={styles.ratingContainer}>
+            {renderStars(rating)}
+            <Text style={styles.ratingText}>{rating.toFixed(1)}</Text>
+            {ratingCount > 0 && (
+              <Text style={styles.reviewCount}>({ratingCount})</Text>
+            )}
+          </View>
+          <View style={styles.locationContainer}>
+            <Ionicons name="location-outline" size={14} color={colors.textSecondary} />
+            <Text style={styles.locationText} numberOfLines={1}>{locationStr}</Text>
+          </View>
+          <View style={styles.feeContainer}>
+            <Text style={styles.feeLabel}>Consultation Fee</Text>
+            <Text style={styles.feeAmount}>${fee || 'N/A'}</Text>
+          </View>
+          <TouchableOpacity
+            style={styles.bookBtn}
+            activeOpacity={0.8}
+            onPress={() => navigation.navigate('Booking', { doctorId })}
+          >
+            <Text style={styles.bookBtnText}>Book Appointment</Text>
+          </TouchableOpacity>
+        </View>
+      </TouchableOpacity>
+    );
+  };
+
+  const ListFooter = () => {
+    if (page >= pagination.pages) return null;
+    return (
+      <TouchableOpacity style={styles.loadMoreBtn} onPress={handleLoadMore} activeOpacity={0.8}>
+        <Ionicons name="cube-outline" size={20} color={colors.textWhite} />
+        <Text style={styles.loadMoreText}>Load More</Text>
+      </TouchableOpacity>
+    );
+  };
 
   return (
     <SafeAreaView style={styles.container}>
@@ -143,17 +456,17 @@ const SearchScreen = () => {
               />
             </View>
             <View style={[styles.searchInputContainer, styles.searchInputSmall]}>
-              <Ionicons name="calendar-outline" size={18} color={colors.primary} />
+              <Ionicons name="medical-outline" size={18} color={colors.primary} />
               <TextInput
                 style={styles.searchInput}
-                placeholder="Date"
+                placeholder="Specialty"
                 placeholderTextColor={colors.textLight}
-                value={date}
-                onChangeText={setDate}
+                value={selectedSpecialization}
+                editable={false}
               />
             </View>
           </View>
-          <TouchableOpacity style={styles.searchBtn} activeOpacity={0.8}>
+          <TouchableOpacity style={styles.searchBtn} onPress={handleSearch} activeOpacity={0.8}>
             <Ionicons name="search" size={20} color={colors.textWhite} />
             <Text style={styles.searchBtnText}>Search</Text>
           </TouchableOpacity>
@@ -163,7 +476,7 @@ const SearchScreen = () => {
       {/* Results Header */}
       <View style={styles.resultsHeader}>
         <Text style={styles.resultsTitle}>
-          Showing <Text style={styles.resultsCount}>450</Text> Doctors
+          Showing <Text style={styles.resultsCount}>{pagination.total}</Text> Doctors
         </Text>
         <View style={styles.headerActions}>
           <TouchableOpacity
@@ -196,14 +509,41 @@ const SearchScreen = () => {
       </View>
 
       {/* Results List */}
-      <FlatList
-        data={doctors}
-        renderItem={renderDoctorCard}
-        keyExtractor={(item) => item.id.toString()}
-        contentContainerStyle={styles.listContent}
-        showsVerticalScrollIndicator={false}
-        ListFooterComponent={ListFooter}
-      />
+      {isLoading && doctors.length === 0 ? (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={colors.primary} />
+          <Text style={styles.loadingText}>Loading doctors...</Text>
+        </View>
+      ) : error ? (
+        <View style={styles.errorContainer}>
+          <Ionicons name="alert-circle-outline" size={64} color={colors.textSecondary} />
+          <Text style={styles.errorTitle}>Error Loading Doctors</Text>
+          <Text style={styles.errorText}>
+            {error instanceof Error ? error.message : 'Failed to load doctors'}
+          </Text>
+          <TouchableOpacity style={styles.retryButton} onPress={() => refetch()}>
+            <Text style={styles.retryButtonText}>Retry</Text>
+          </TouchableOpacity>
+        </View>
+      ) : doctors.length === 0 ? (
+        <View style={styles.emptyContainer}>
+          <Ionicons name="search-outline" size={64} color={colors.textSecondary} />
+          <Text style={styles.emptyTitle}>No doctors found</Text>
+          <Text style={styles.emptyText}>Try adjusting your search criteria</Text>
+        </View>
+      ) : (
+        <FlatList
+          data={doctors}
+          renderItem={renderDoctorCard}
+          keyExtractor={(item) => getDoctorId(item)}
+          contentContainerStyle={styles.listContent}
+          showsVerticalScrollIndicator={false}
+          ListFooterComponent={ListFooter}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+          }
+        />
+      )}
 
       {/* Filters Modal */}
       <Modal
@@ -238,29 +578,37 @@ const SearchScreen = () => {
                   </View>
                   <View style={styles.filterSection}>
                     <Text style={styles.filterSectionTitle}>Specialities</Text>
-                    {specialties.map((spec, idx) => (
-                      <TouchableOpacity
-                        key={idx}
-                        style={styles.specialtyItem}
-                        onPress={() => toggleSpecialty(spec)}
-                        activeOpacity={0.7}
-                      >
-                        <View style={styles.checkboxContainer}>
-                          <View style={[
-                            styles.checkbox,
-                            selectedSpecialties.includes(spec) && styles.checkboxChecked
-                          ]}>
-                            {selectedSpecialties.includes(spec) && (
-                              <Ionicons name="checkmark" size={12} color={colors.textWhite} />
-                            )}
-                          </View>
-                          <Text style={styles.specialtyText}>{spec}</Text>
-                        </View>
-                        <View style={styles.badge}>
-                          <Text style={styles.badgeText}>21</Text>
-                        </View>
-                      </TouchableOpacity>
-                    ))}
+                    {specializations.length === 0 ? (
+                      <Text style={styles.emptyFilterText}>Loading specializations...</Text>
+                    ) : (
+                      specializations.map((spec: any) => {
+                        const specId = spec._id || spec;
+                        const specName = spec.name || spec;
+                        const isSelected = selectedSpecialization === specId;
+                        return (
+                          <TouchableOpacity
+                            key={specId}
+                            style={styles.specialtyItem}
+                            onPress={() => {
+                              setSelectedSpecialization(isSelected ? '' : specId);
+                            }}
+                            activeOpacity={0.7}
+                          >
+                            <View style={styles.checkboxContainer}>
+                              <View style={[
+                                styles.checkbox,
+                                isSelected && styles.checkboxChecked
+                              ]}>
+                                {isSelected && (
+                                  <Ionicons name="checkmark" size={12} color={colors.textWhite} />
+                                )}
+                              </View>
+                              <Text style={styles.specialtyText}>{specName}</Text>
+                            </View>
+                          </TouchableOpacity>
+                        );
+                      })
+                    )}
                   </View>
                 </>
               }
@@ -269,14 +617,20 @@ const SearchScreen = () => {
             <View style={styles.modalFooter}>
               <TouchableOpacity
                 style={styles.clearBtn}
-                onPress={() => setSelectedSpecialties([])}
+                onPress={() => {
+                  setSelectedSpecialization('');
+                  setShowAvailability(false);
+                }}
                 activeOpacity={0.7}
               >
                 <Text style={styles.clearBtnText}>Clear All</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.applyBtn}
-                onPress={() => setShowFilters(false)}
+                onPress={() => {
+                  setShowFilters(false);
+                  setPage(1); // Reset to first page when applying filters
+                }}
                 activeOpacity={0.8}
               >
                 <Text style={styles.applyBtnText}>Apply Filters</Text>
@@ -397,11 +751,43 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 3,
   },
+  doctorImageContainer: {
+    position: 'relative',
+    marginRight: 12,
+  },
   doctorImage: {
     width: 80,
     height: 80,
     borderRadius: 8,
-    marginRight: 12,
+  },
+  favoriteButton: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    backgroundColor: colors.background,
+    borderRadius: 16,
+    padding: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  availableBadge: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: colors.success,
+    borderRadius: 4,
+    paddingVertical: 2,
+    paddingHorizontal: 4,
+  },
+  availableBadgeText: {
+    color: colors.textWhite,
+    fontSize: 10,
+    fontWeight: '600',
+    textAlign: 'center',
   },
   doctorInfo: {
     flex: 1,
@@ -596,6 +982,72 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: colors.textWhite,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 40,
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 14,
+    color: colors.textSecondary,
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 40,
+    paddingHorizontal: 20,
+  },
+  errorTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: colors.text,
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  errorText: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    textAlign: 'center',
+    marginBottom: 16,
+  },
+  retryButton: {
+    backgroundColor: colors.primary,
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 8,
+  },
+  retryButtonText: {
+    color: colors.textWhite,
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 40,
+    paddingHorizontal: 20,
+  },
+  emptyTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: colors.text,
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  emptyText: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    textAlign: 'center',
+  },
+  emptyFilterText: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    fontStyle: 'italic',
   },
 });
 

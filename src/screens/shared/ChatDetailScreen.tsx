@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -11,14 +11,21 @@ import {
   KeyboardAvoidingView,
   Platform,
   Dimensions,
+  ActivityIndicator,
+  RefreshControl,
+  Keyboard,
 } from 'react-native';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { ChatStackParamList } from '../../navigation/types';
 import { useAuth } from '../../contexts/AuthContext';
 import { colors } from '../../constants/colors';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
+import * as chatApi from '../../services/chat';
+import { API_BASE_URL } from '../../config/api';
+import Toast from 'react-native-toast-message';
 
 type ChatDetailScreenNavigationProp = StackNavigationProp<ChatStackParamList, 'ChatDetail'>;
 type ChatDetailRouteProp = RouteProp<ChatStackParamList, 'ChatDetail'>;
@@ -42,97 +49,252 @@ interface Message {
   };
 }
 
+const defaultAvatar = require('../../../assets/avatar.png');
+
+/**
+ * Normalize image URL for mobile app
+ */
+const normalizeImageUrl = (imageUri: string | undefined | null): string | null => {
+  if (!imageUri || typeof imageUri !== 'string') {
+    return null;
+  }
+  
+  const trimmedUri = imageUri.trim();
+  if (!trimmedUri) {
+    return null;
+  }
+  
+  const baseUrl = API_BASE_URL.replace('/api', '');
+  let deviceHost: string;
+  try {
+    const urlObj = new URL(baseUrl);
+    deviceHost = urlObj.hostname;
+  } catch (e) {
+    const match = baseUrl.match(/https?:\/\/([^\/:]+)/);
+    deviceHost = match ? match[1] : '192.168.1.11';
+  }
+  
+  if (trimmedUri.startsWith('http://') || trimmedUri.startsWith('https://')) {
+    let normalizedUrl = trimmedUri;
+    if (normalizedUrl.includes('localhost')) {
+      normalizedUrl = normalizedUrl.replace('localhost', deviceHost);
+    }
+    if (normalizedUrl.includes('127.0.0.1')) {
+      normalizedUrl = normalizedUrl.replace('127.0.0.1', deviceHost);
+    }
+    return normalizedUrl;
+  }
+  
+  const imagePath = trimmedUri.startsWith('/') ? trimmedUri : `/${trimmedUri}`;
+  return `${baseUrl}${imagePath}`;
+};
+
+/**
+ * Format date to time string
+ */
+const formatTime = (dateString: string): string => {
+  if (!dateString) return '';
+  const date = new Date(dateString);
+  return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+};
+
+/**
+ * Format date for separator
+ */
+const formatDate = (dateString: string): string => {
+  if (!dateString) return '';
+  const date = new Date(dateString);
+  const today = new Date();
+  const yesterday = new Date(today);
+  yesterday.setDate(yesterday.getDate() - 1);
+  
+  if (date.toDateString() === today.toDateString()) {
+    return 'Today';
+  } else if (date.toDateString() === yesterday.toDateString()) {
+    return 'Yesterday';
+  } else {
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  }
+};
+
 const ChatDetailScreen = () => {
   const navigation = useNavigation<ChatDetailScreenNavigationProp>();
   const route = useRoute<ChatDetailRouteProp>();
   const { user } = useAuth();
   const isDoctor = user?.role === 'doctor';
-  const { recipientName, chatId } = route.params;
+  const queryClient = useQueryClient();
+  const { recipientName, chatId, conversationId, appointmentId, patientId, doctorId } = route.params;
   const [message, setMessage] = useState('');
+  const [refreshing, setRefreshing] = useState(false);
   const flatListRef = useRef<FlatList>(null);
 
-  // Mock messages data
-  const messages: Message[] = [
-    {
-      id: '1',
-      sender: 'Andrea Kearns',
-      senderAvatar: require('../../../assets/avatar.png'),
-      message: 'Hello Doctor, could you tell a diet plan that suits for me?',
-      time: '8:16 PM',
-      isSent: true,
-      isRead: true,
-      type: 'text',
+  // For patients: Get or create conversation first if conversationId is not set
+  const { data: conversationData, isLoading: conversationLoading } = useQuery({
+    queryKey: ['patientConversation', doctorId, appointmentId, user?.id],
+    queryFn: async () => {
+      if (!isDoctor && doctorId && appointmentId && user?.id) {
+        return await chatApi.startConversationWithDoctor(doctorId, appointmentId, user.id);
+      }
+      return null;
     },
-    {
-      id: '2',
-      sender: 'Edalin Hendry',
-      senderAvatar: require('../../../assets/avatar.png'),
-      message: '',
-      time: '9:45 AM',
-      isSent: false,
-      isRead: true,
-      type: 'audio',
-      audioDuration: '0:05',
+    enabled: !!(isDoctor === false && doctorId && appointmentId && user?.id && !conversationId),
+    retry: 1,
+  });
+
+  // Update conversationId if we got it from the API
+  const actualConversationId = conversationId || conversationData?.data?._id || chatId;
+
+  // Fetch messages for conversation
+  const { data: messagesResponse, isLoading: messagesLoading, error, refetch } = useQuery({
+    queryKey: ['conversationMessages', actualConversationId],
+    queryFn: () => chatApi.getMessages(actualConversationId, { page: 1, limit: 100 }),
+    enabled: !!actualConversationId,
+    retry: 1,
+    refetchInterval: 5000, // Poll every 5 seconds for new messages
+  });
+
+  const isLoading = messagesLoading || conversationLoading;
+
+  // Transform backend messages to UI format
+  const messages = useMemo(() => {
+    if (!messagesResponse?.data?.messages) return [];
+    
+    return messagesResponse.data.messages.map((msg: chatApi.ChatMessage): Message => {
+      const isSent = msg.senderId._id === user?.id;
+      const senderName = msg.senderId.fullName || 'Unknown';
+      const senderImage = msg.senderId.profileImage;
+      
+      return {
+        id: msg._id,
+        sender: senderName,
+        senderAvatar: senderImage 
+          ? { uri: normalizeImageUrl(senderImage) || undefined }
+          : defaultAvatar,
+        message: msg.message || '',
+        time: formatTime(msg.createdAt),
+        isSent,
+        isRead: msg.isRead,
+        type: msg.attachments && msg.attachments.length > 0 ? 'image' : 'text',
+        images: msg.attachments || undefined,
+      };
+    });
+  }, [messagesResponse, user?.id]);
+
+  // Send message mutation
+  const sendMessageMutation = useMutation({
+    mutationFn: async (messageText: string) => {
+      if (!user) throw new Error('User not found');
+      
+      if (isDoctor && patientId && appointmentId) {
+        // Doctor sending to patient
+        if (!user.id) throw new Error('User ID not found');
+        return await chatApi.sendMessageToPatient(
+          user.id,
+          patientId,
+          appointmentId,
+          messageText
+        );
+      } else if (!isDoctor && doctorId && appointmentId) {
+        // Patient sending to doctor
+        return await chatApi.sendMessageToDoctor(
+          doctorId,
+          appointmentId,
+          messageText,
+          undefined,
+          user.id
+        );
+      } else {
+        throw new Error('Invalid conversation parameters');
+      }
     },
-    {
-      id: '3',
-      sender: 'Andrea Kearns',
-      senderAvatar: require('../../../assets/avatar.png'),
-      message: 'https://www.youtube.com/watch?v=GCmL3mS0Psk',
-      time: '9:47 AM',
-      isSent: true,
-      isRead: true,
-      type: 'text',
+    onSuccess: async () => {
+      setMessage('');
+      await queryClient.invalidateQueries({ queryKey: ['conversationMessages', actualConversationId] });
+      await queryClient.invalidateQueries({ queryKey: ['conversations'] });
+      await queryClient.invalidateQueries({ queryKey: ['unreadCount'] });
+      await queryClient.invalidateQueries({ queryKey: ['patientAppointments'] });
+      setTimeout(() => {
+        flatListRef.current?.scrollToEnd({ animated: true });
+      }, 100);
     },
-    {
-      id: '4',
-      sender: 'Edalin Hendry',
-      senderAvatar: require('../../../assets/avatar.png'),
-      message: '',
-      time: '9:50 AM',
-      isSent: false,
-      isRead: true,
-      type: 'image',
-      // images: ['https://via.placeholder.com/200', 'https://via.placeholder.com/200', 'https://via.placeholder.com/200'],
+    onError: (error: any) => {
+      const errorMessage = error?.response?.data?.message || error?.message || 'Failed to send message';
+      Toast.show({
+        type: 'error',
+        text1: 'Error',
+        text2: errorMessage,
+      });
     },
-    {
-      id: '5',
-      sender: 'Andrea Kearns',
-      senderAvatar: require('../../../assets/avatar.png'),
-      message: '',
-      time: '8:16 PM',
-      isSent: true,
-      isRead: true,
-      type: 'location',
+  });
+
+  // Mark as read mutation
+  const markAsReadMutation = useMutation({
+    mutationFn: () => chatApi.markMessagesAsRead(actualConversationId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['conversations'] });
+      queryClient.invalidateQueries({ queryKey: ['unreadCount'] });
+      queryClient.invalidateQueries({ queryKey: ['patientAppointments'] });
     },
-    {
-      id: '6',
-      sender: 'Andrea Kearns',
-      senderAvatar: require('../../../assets/avatar.png'),
-      message: 'Thank you for your support',
-      time: '8:16 PM',
-      isSent: true,
-      isRead: true,
-      type: 'text',
-    },
-  ];
+  });
+
+  // Mark messages as read when screen is focused
+  useEffect(() => {
+    if (actualConversationId) {
+      markAsReadMutation.mutate();
+    }
+  }, [actualConversationId]);
+
+  // Auto-scroll to bottom when messages change
+  useEffect(() => {
+    if (messages.length > 0) {
+      setTimeout(() => {
+        flatListRef.current?.scrollToEnd({ animated: true });
+      }, 100);
+    }
+  }, [messages.length]);
+
+  // Scroll to bottom when keyboard appears
+  useEffect(() => {
+    const keyboardDidShowListener = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
+      () => {
+        setTimeout(() => {
+          flatListRef.current?.scrollToEnd({ animated: true });
+        }, 100);
+      }
+    );
+
+    return () => {
+      keyboardDidShowListener.remove();
+    };
+  }, []);
 
   const handleSend = () => {
-    if (message.trim()) {
-      // In a real app, this would send the message to the backend
-      setMessage('');
+    if (message.trim() && !sendMessageMutation.isPending) {
+      sendMessageMutation.mutate(message.trim());
     }
   };
 
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await refetch();
+    setRefreshing(false);
+  };
+
   const renderMessage = ({ item, index }: { item: Message; index: number }) => {
-    const showDateSeparator = index === 0 || (index > 0 && messages[index - 1].time.split(' ')[0] !== item.time.split(' ')[0]);
-    const isToday = item.time.includes('PM') || item.time.includes('AM');
+    // Get date from message (need to get from original message data)
+    const originalMessage = messagesResponse?.data?.messages?.[index];
+    const messageDate = originalMessage?.createdAt || '';
+    const prevMessageDate = messagesResponse?.data?.messages?.[index - 1]?.createdAt || '';
+    
+    const showDateSeparator = index === 0 || 
+      (index > 0 && formatDate(messageDate) !== formatDate(prevMessageDate));
 
     return (
       <View>
         {showDateSeparator && (
           <View style={styles.dateSeparator}>
-            <Text style={styles.dateText}>{isToday ? 'Today, March 25' : item.time}</Text>
+            <Text style={styles.dateText}>{formatDate(messageDate)}</Text>
           </View>
         )}
         <View style={[styles.messageContainer, item.isSent ? styles.sentMessage : styles.receivedMessage]}>
@@ -215,55 +377,102 @@ const ChatDetailScreen = () => {
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar style="light" />
+      {/* Header */}
+      {/* <View style={styles.header}>
+        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
+          <Ionicons name="arrow-back" size={24} color={colors.textWhite} />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle} numberOfLines={1}>
+          {recipientName || 'Chat'}
+        </Text>
+        <View style={styles.headerRight} />
+      </View> */}
+
       <KeyboardAvoidingView
         style={styles.keyboardView}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 20}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
       >
         <View style={styles.contentContainer}>
-          {/* Messages List */}
-          <FlatList
-            ref={flatListRef}
-            data={messages}
-            renderItem={renderMessage}
-            keyExtractor={(item) => item.id}
-            contentContainerStyle={styles.messagesList}
-            showsVerticalScrollIndicator={false}
-            onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
-            keyboardShouldPersistTaps="handled"
-            keyboardDismissMode="interactive"
-          />
+          {isLoading && (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="large" color={colors.primary} />
+              <Text style={styles.loadingText}>Loading messages...</Text>
+            </View>
+          )}
+          
+          {error && (
+            <View style={styles.errorContainer}>
+              <Ionicons name="alert-circle-outline" size={48} color={colors.error} />
+              <Text style={styles.errorText}>Failed to load messages</Text>
+              <TouchableOpacity style={styles.retryButton} onPress={() => refetch()}>
+                <Text style={styles.retryButtonText}>Retry</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+          
+          {!isLoading && !error && messages.length === 0 && (
+            <View style={styles.emptyContainer}>
+              <Ionicons name="chatbubbles-outline" size={64} color={colors.textLight} />
+              <Text style={styles.emptyText}>No messages yet</Text>
+              <Text style={styles.emptySubtext}>Start the conversation</Text>
+            </View>
+          )}
+          
+          {!isLoading && !error && messages.length > 0 && (
+            <FlatList
+              ref={flatListRef}
+              data={messages}
+              renderItem={renderMessage}
+              keyExtractor={(item) => item.id}
+              contentContainerStyle={styles.messagesList}
+              showsVerticalScrollIndicator={false}
+              onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
+              keyboardShouldPersistTaps="handled"
+              keyboardDismissMode="interactive"
+              refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />}
+            />
+          )}
         </View>
 
         {/* Input Area */}
-        <View style={styles.inputContainer}>
-          <TouchableOpacity style={styles.inputIcon} activeOpacity={0.7}>
-            <Ionicons name="ellipsis-vertical" size={20} color={colors.textSecondary} />
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.inputIcon} activeOpacity={0.7}>
-            <Ionicons name="happy-outline" size={20} color={colors.textSecondary} />
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.inputIcon} activeOpacity={0.7}>
-            <Ionicons name="mic-outline" size={20} color={colors.textSecondary} />
-          </TouchableOpacity>
-          <TextInput
-            style={styles.input}
-            placeholder="Type your message here..."
-            placeholderTextColor={colors.textLight}
-            value={message}
-            onChangeText={setMessage}
-            multiline
-            maxLength={500}
-          />
-          <TouchableOpacity
-            style={[styles.sendButton, !message.trim() && styles.sendButtonDisabled]}
-            onPress={handleSend}
-            disabled={!message.trim()}
-            activeOpacity={0.7}
-          >
-            <Ionicons name="send" size={20} color={colors.textWhite} />
-          </TouchableOpacity>
-        </View>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
+        >
+          <View style={styles.inputContainer}>
+            <TouchableOpacity style={styles.inputIcon} activeOpacity={0.7}>
+              <Ionicons name="ellipsis-vertical" size={20} color={colors.textSecondary} />
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.inputIcon} activeOpacity={0.7}>
+              <Ionicons name="happy-outline" size={20} color={colors.textSecondary} />
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.inputIcon} activeOpacity={0.7}>
+              <Ionicons name="mic-outline" size={20} color={colors.textSecondary} />
+            </TouchableOpacity>
+            <TextInput
+              style={styles.input}
+              placeholder="Type your message here..."
+              placeholderTextColor={colors.textLight}
+              value={message}
+              onChangeText={setMessage}
+              multiline
+              maxLength={500}
+            />
+            <TouchableOpacity
+              style={[styles.sendButton, (!message.trim() || sendMessageMutation.isPending) && styles.sendButtonDisabled]}
+              onPress={handleSend}
+              disabled={!message.trim() || sendMessageMutation.isPending}
+              activeOpacity={0.7}
+            >
+              {sendMessageMutation.isPending ? (
+                <ActivityIndicator size="small" color={colors.textWhite} />
+              ) : (
+                <Ionicons name="send" size={20} color={colors.textWhite} />
+              )}
+            </TouchableOpacity>
+          </View>
+        </KeyboardAvoidingView>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -466,6 +675,82 @@ const styles = StyleSheet.create({
   sendButtonDisabled: {
     backgroundColor: colors.border,
     opacity: 0.5,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: colors.primary,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    paddingTop: 40,
+  },
+  backButton: {
+    padding: 8,
+  },
+  headerTitle: {
+    flex: 1,
+    fontSize: 18,
+    fontWeight: '600',
+    color: colors.textWhite,
+    textAlign: 'center',
+    marginHorizontal: 16,
+  },
+  headerRight: {
+    width: 40,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 40,
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 14,
+    color: colors.textSecondary,
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 40,
+  },
+  errorText: {
+    marginTop: 12,
+    fontSize: 14,
+    color: colors.error,
+    textAlign: 'center',
+  },
+  retryButton: {
+    marginTop: 16,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    backgroundColor: colors.primary,
+    borderRadius: 8,
+  },
+  retryButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.textWhite,
+  },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 40,
+  },
+  emptyText: {
+    marginTop: 16,
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.text,
+  },
+  emptySubtext: {
+    marginTop: 8,
+    fontSize: 14,
+    color: colors.textSecondary,
+    textAlign: 'center',
   },
 });
 

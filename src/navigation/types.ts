@@ -10,10 +10,6 @@ export type AuthStackParamList = {
   DoctorRegister: undefined;
   DoctorVerificationUpload: undefined;
   PendingApproval: undefined;
-  PharmacyRegister: undefined;
-  PharmacyRegisterStep1: undefined;
-  PharmacyRegisterStep2: undefined;
-  PharmacyRegisterStep3: undefined;
 };
 
 export type TabParamList = {
@@ -49,23 +45,37 @@ export type AppointmentsStackParamList = {
   AvailableTimings: undefined;
   AppointmentRequests: undefined;
   DoctorAppointmentsGrid: undefined;
+  MyPatients: undefined;
 };
 
 export type ChatStackParamList = {
   ChatList: undefined;
-  ChatDetail: { chatId: string; recipientName: string };
+  ChatDetail: { 
+    chatId: string; 
+    recipientName: string;
+    conversationId?: string;
+    appointmentId?: string;
+    patientId?: string;
+    doctorId?: string;
+  };
   VideoCall: { callId: string };
-  AdminChat: undefined;
+  AdminChat: { 
+    conversationId?: string;
+    adminId?: string;
+  };
 };
 
 export type PharmacyStackParamList = {
   PharmacyHome: undefined;
-  ProductCatalog: undefined;
+  PharmacySearch: undefined;
+  PharmacyDetails: { pharmacyId: string };
+  ProductCatalog: { sellerId?: string; sellerType?: 'DOCTOR' | 'PHARMACY' | 'ADMIN' } | undefined;
   ProductDetails: { productId: string };
   Cart: undefined;
   Checkout: undefined;
   OrderHistory: undefined;
-  PaymentSuccess: undefined;
+  OrderDetails: { orderId: string };
+  PaymentSuccess: { orderId?: string };
 };
 
 export type PharmacyDashboardStackParamList = {
@@ -89,8 +99,12 @@ export type MoreStackParamList = {
   MoreScreen: undefined;
   Profile: undefined;
   Settings: undefined;
+  ProfileSettings?: undefined;
+  PatientProfileSettings?: undefined;
+  SocialLinks?: undefined;
   PharmacyProfile?: undefined;
   PharmacySettings?: undefined;
+  PharmacyManagement?: undefined;
   PatientDashboard?: undefined;
   DoctorDashboard?: undefined;
   PharmacyDashboard?: undefined;
@@ -104,7 +118,11 @@ export type MoreStackParamList = {
   Documents?: undefined;
   Subscription?: undefined;
   Announcements?: undefined;
-  ChangePassword?: undefined;
+  ChangePassword: undefined;
   TwoFactorAuth?: undefined;
+  PharmacyOrders?: undefined;
+  OrderHistory?: undefined;
+  OrderDetails?: { orderId: string };
+  AdminOrders?: undefined;
 };
 

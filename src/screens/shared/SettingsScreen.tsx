@@ -44,7 +44,7 @@ export const SettingsScreen = () => {
   };
 
   const handleChangePassword = () => {
-    // Navigate to change password
+    navigation.navigate('ChangePassword');
   };
 
   const handleTwoFactorAuth = () => {

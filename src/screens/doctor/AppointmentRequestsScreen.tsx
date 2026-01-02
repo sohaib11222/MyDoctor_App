@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   View,
   Text,
@@ -8,19 +8,25 @@ import {
   Image,
   SafeAreaView,
   Alert,
+  ActivityIndicator,
+  RefreshControl,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { AppointmentsStackParamList } from '../../navigation/types';
 import { colors } from '../../constants/colors';
 import { Ionicons } from '@expo/vector-icons';
+import * as appointmentApi from '../../services/appointment';
+import Toast from 'react-native-toast-message';
 
 type AppointmentRequestsScreenNavigationProp = StackNavigationProp<AppointmentsStackParamList, 'AppointmentRequests'>;
 
-interface AppointmentRequest {
-  id: string;
+interface UIAppointmentRequest {
+  appointmentId: string; // Backend _id
+  id: string; // Appointment number
   patientName: string;
-  patientImg: any;
+  patientImageUri?: string;
   date: string;
   visitType: string;
   appointmentType: string;
@@ -28,64 +34,142 @@ interface AppointmentRequest {
   isNew?: boolean;
 }
 
-const mockRequests: AppointmentRequest[] = [
-  {
-    id: '#Apt0001',
-    patientName: 'Adrian',
-    patientImg: require('../../../assets/avatar.png'),
-    date: '11 Nov 2024 10.45 AM',
-    visitType: 'General Visit',
-    appointmentType: 'Video Call',
-    isNew: true,
-  },
-  {
-    id: '#Apt0002',
-    patientName: 'Kelly',
-    patientImg: require('../../../assets/avatar.png'),
-    date: '10 Nov 2024 02.00 PM',
-    visitType: 'General Visit',
-    appointmentType: 'Direct Visit',
-    clinicLocation: "Sofia's Clinic",
-  },
-  {
-    id: '#Apt0003',
-    patientName: 'Samuel',
-    patientImg: require('../../../assets/avatar.png'),
-    date: '08 Nov 2024 08.30 AM',
-    visitType: 'Consultation for Cardio',
-    appointmentType: 'Audio Call',
-  },
-];
-
 export const AppointmentRequestsScreen = () => {
   const navigation = useNavigation<AppointmentRequestsScreenNavigationProp>();
+  const queryClient = useQueryClient();
   const [selectedPeriod, setSelectedPeriod] = useState('Last 7 Days');
+  const [refreshing, setRefreshing] = useState(false);
 
-  const handleAccept = (requestId: string) => {
+  // Fetch pending appointments (requests)
+  const { data: appointmentsData, isLoading, error, refetch } = useQuery({
+    queryKey: ['appointmentRequests'],
+    queryFn: async () => {
+      const response = await appointmentApi.listAppointments({
+        status: 'PENDING',
+        page: 1,
+        limit: 100,
+      });
+      return response.data?.appointments || [];
+    },
+    retry: 1,
+  });
+
+  // Accept appointment mutation
+  const acceptMutation = useMutation({
+    mutationFn: (appointmentId: string) => appointmentApi.acceptAppointment(appointmentId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['appointmentRequests'] });
+      queryClient.invalidateQueries({ queryKey: ['appointments'] });
+      Toast.show({
+        type: 'success',
+        text1: 'Appointment Accepted',
+        text2: 'The appointment has been accepted successfully',
+      });
+    },
+    onError: (error: any) => {
+      const errorMessage = error?.response?.data?.message || error?.message || 'Failed to accept appointment';
+      Toast.show({
+        type: 'error',
+        text1: 'Accept Failed',
+        text2: errorMessage,
+      });
+    },
+  });
+
+  // Reject appointment mutation
+  const rejectMutation = useMutation({
+    mutationFn: ({ appointmentId, reason }: { appointmentId: string; reason?: string }) =>
+      appointmentApi.rejectAppointment(appointmentId, reason),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['appointmentRequests'] });
+      queryClient.invalidateQueries({ queryKey: ['appointments'] });
+      Toast.show({
+        type: 'success',
+        text1: 'Appointment Rejected',
+        text2: 'The appointment has been rejected',
+      });
+    },
+    onError: (error: any) => {
+      const errorMessage = error?.response?.data?.message || error?.message || 'Failed to reject appointment';
+      Toast.show({
+        type: 'error',
+        text1: 'Reject Failed',
+        text2: errorMessage,
+      });
+    },
+  });
+
+  // Convert backend appointments to UI format
+  const uiRequests = useMemo(() => {
+    if (!appointmentsData) return [];
+    
+    return appointmentsData.map(apt => {
+      const appointmentDate = new Date(apt.appointmentDate);
+      const formattedDate = appointmentDate.toLocaleDateString('en-US', {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+      });
+      const formattedTime = apt.appointmentTime;
+      const dateTimeString = `${formattedDate} ${formattedTime}`;
+      
+      // Determine if appointment is new (created recently)
+      const isNew = new Date(apt.createdAt).getTime() > Date.now() - 24 * 60 * 60 * 1000; // Within last 24 hours
+      
+      // Get appointment type display
+      let appointmentType = 'Video Call';
+      if (apt.bookingType === 'VISIT') {
+        appointmentType = 'Direct Visit';
+      }
+      
+      return {
+        appointmentId: apt._id,
+        id: apt.appointmentNumber || apt._id,
+        patientName: apt.patientId?.fullName || 'Unknown Patient',
+        patientImageUri: apt.patientId?.profileImage,
+        date: dateTimeString,
+        visitType: apt.patientNotes || 'General Visit',
+        appointmentType,
+        clinicLocation: apt.clinicName,
+        isNew,
+      } as UIAppointmentRequest;
+    });
+  }, [appointmentsData]);
+
+  const handleAccept = (appointmentId: string) => {
     Alert.alert('Accept Appointment', 'Are you sure you want to accept this appointment?', [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Accept',
         onPress: () => {
-          Alert.alert('Success', 'Appointment accepted successfully');
-          // Handle accept logic
+          acceptMutation.mutate(appointmentId);
         },
       },
     ]);
   };
 
-  const handleReject = (requestId: string) => {
-    Alert.alert('Reject Appointment', 'Are you sure you want to reject this appointment?', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Reject',
-        style: 'destructive',
-        onPress: () => {
-          Alert.alert('Success', 'Appointment rejected');
-          // Handle reject logic
+  const handleReject = (appointmentId: string) => {
+    Alert.prompt(
+      'Reject Appointment',
+      'Are you sure you want to reject this appointment? (Optional: Enter a reason)',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Reject',
+          style: 'destructive',
+          onPress: (reason) => {
+            rejectMutation.mutate({ appointmentId, reason: reason || undefined });
+          },
         },
-      },
-    ]);
+      ],
+      'plain-text'
+    );
+  };
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await refetch();
+    setRefreshing(false);
   };
 
   const getAppointmentTypeIcon = (type: string) => {
@@ -113,80 +197,129 @@ export const AppointmentRequestsScreen = () => {
       </View>
 
       {/* Requests List */}
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        {mockRequests.map((request) => {
-          const icon = getAppointmentTypeIcon(request.appointmentType);
-          return (
-            <View key={request.id} style={styles.requestCard}>
-              <View style={styles.requestHeader}>
-                <View style={styles.patientInfo}>
-                  <TouchableOpacity
-                    onPress={() => (navigation as any).navigate('Home', { screen: 'PatientProfile', params: { patientId: '1' } })}
-                  >
-                    <Image source={request.patientImg} style={styles.patientImage} />
-                  </TouchableOpacity>
-                  <View style={styles.patientDetails}>
-                    <View style={styles.patientNameRow}>
-                      <Text style={styles.patientId}>{request.id}</Text>
-                      {request.isNew && (
-                        <View style={styles.newBadge}>
-                          <Text style={styles.newBadgeText}>New</Text>
-                        </View>
-                      )}
-                    </View>
+      {isLoading ? (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={colors.primary} />
+          <Text style={styles.loadingText}>Loading requests...</Text>
+        </View>
+      ) : error ? (
+        <View style={styles.emptyContainer}>
+          <Ionicons name="alert-circle-outline" size={64} color={colors.error} />
+          <Text style={styles.emptyText}>Failed to load requests</Text>
+          <TouchableOpacity style={styles.retryButton} onPress={() => refetch()}>
+            <Text style={styles.retryButtonText}>Retry</Text>
+          </TouchableOpacity>
+        </View>
+      ) : uiRequests.length === 0 ? (
+        <View style={styles.emptyContainer}>
+          <Ionicons name="checkmark-circle-outline" size={64} color={colors.textLight} />
+          <Text style={styles.emptyText}>No pending requests</Text>
+        </View>
+      ) : (
+        <ScrollView
+          style={styles.content}
+          showsVerticalScrollIndicator={false}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />}
+        >
+          {uiRequests.map((request) => {
+            const icon = getAppointmentTypeIcon(request.appointmentType);
+            const defaultAvatar = require('../../../assets/avatar.png');
+            const imageSource = request.patientImageUri
+              ? { uri: request.patientImageUri }
+              : defaultAvatar;
+            
+            return (
+              <View key={request.appointmentId} style={styles.requestCard}>
+                <View style={styles.requestHeader}>
+                  <View style={styles.patientInfo}>
                     <TouchableOpacity
-                      onPress={() => (navigation as any).navigate('Home', { screen: 'PatientProfile', params: { patientId: '1' } })}
+                      onPress={() => (navigation as any).navigate('Home', {
+                        screen: 'PatientProfile',
+                        params: { patientId: request.appointmentId },
+                      })}
                     >
-                      <Text style={styles.patientName}>{request.patientName}</Text>
+                      <Image source={imageSource} style={styles.patientImage} />
                     </TouchableOpacity>
+                    <View style={styles.patientDetails}>
+                      <View style={styles.patientNameRow}>
+                        <Text style={styles.patientId}>{request.id}</Text>
+                        {request.isNew && (
+                          <View style={styles.newBadge}>
+                            <Text style={styles.newBadgeText}>New</Text>
+                          </View>
+                        )}
+                      </View>
+                      <TouchableOpacity
+                        onPress={() => (navigation as any).navigate('Home', {
+                          screen: 'PatientProfile',
+                          params: { patientId: request.appointmentId },
+                        })}
+                      >
+                        <Text style={styles.patientName}>{request.patientName}</Text>
+                      </TouchableOpacity>
+                    </View>
                   </View>
                 </View>
-              </View>
 
-              <View style={styles.requestInfo}>
-                <View style={styles.infoRow}>
-                  <Ionicons name="time-outline" size={16} color={colors.textSecondary} />
-                  <Text style={styles.infoText}>{request.date}</Text>
+                <View style={styles.requestInfo}>
+                  <View style={styles.infoRow}>
+                    <Ionicons name="time-outline" size={16} color={colors.textSecondary} />
+                    <Text style={styles.infoText}>{request.date}</Text>
+                  </View>
+                  <Text style={styles.visitType}>{request.visitType}</Text>
                 </View>
-                <Text style={styles.visitType}>{request.visitType}</Text>
-              </View>
 
-              <View style={styles.appointmentTypeSection}>
-                <Text style={styles.typeLabel}>Type of Appointment</Text>
-                <View style={styles.typeContainer}>
-                  <Ionicons name={icon.name as any} size={16} color={icon.color} />
-                  <Text style={styles.typeText}>{request.appointmentType}</Text>
-                  {request.clinicLocation && (
-                    <>
-                      <Ionicons name="information-circle-outline" size={14} color={colors.textSecondary} style={{ marginLeft: 4 }} />
-                      <Text style={styles.clinicText}>{request.clinicLocation}</Text>
-                    </>
-                  )}
+                <View style={styles.appointmentTypeSection}>
+                  <Text style={styles.typeLabel}>Type of Appointment</Text>
+                  <View style={styles.typeContainer}>
+                    <Ionicons name={icon.name as any} size={16} color={icon.color} />
+                    <Text style={styles.typeText}>{request.appointmentType}</Text>
+                    {request.clinicLocation && (
+                      <>
+                        <Ionicons name="information-circle-outline" size={14} color={colors.textSecondary} style={{ marginLeft: 4 }} />
+                        <Text style={styles.clinicText}>{request.clinicLocation}</Text>
+                      </>
+                    )}
+                  </View>
+                </View>
+
+                <View style={styles.actionButtons}>
+                  <TouchableOpacity
+                    style={[styles.acceptButton, acceptMutation.isPending && styles.buttonDisabled]}
+                    onPress={() => handleAccept(request.appointmentId)}
+                    activeOpacity={0.8}
+                    disabled={acceptMutation.isPending || rejectMutation.isPending}
+                  >
+                    {acceptMutation.isPending ? (
+                      <ActivityIndicator size="small" color={colors.textWhite} />
+                    ) : (
+                      <>
+                        <Ionicons name="checkmark" size={18} color={colors.textWhite} />
+                        <Text style={styles.acceptButtonText}>Accept</Text>
+                      </>
+                    )}
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.rejectButton, rejectMutation.isPending && styles.buttonDisabled]}
+                    onPress={() => handleReject(request.appointmentId)}
+                    activeOpacity={0.8}
+                    disabled={acceptMutation.isPending || rejectMutation.isPending}
+                  >
+                    {rejectMutation.isPending ? (
+                      <ActivityIndicator size="small" color={colors.error} />
+                    ) : (
+                      <>
+                        <Ionicons name="close" size={18} color={colors.error} />
+                        <Text style={styles.rejectButtonText}>Reject</Text>
+                      </>
+                    )}
+                  </TouchableOpacity>
                 </View>
               </View>
-
-              <View style={styles.actionButtons}>
-                <TouchableOpacity
-                  style={styles.acceptButton}
-                  onPress={() => handleAccept(request.id)}
-                  activeOpacity={0.8}
-                >
-                  <Ionicons name="checkmark" size={18} color={colors.textWhite} />
-                  <Text style={styles.acceptButtonText}>Accept</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.rejectButton}
-                  onPress={() => handleReject(request.id)}
-                  activeOpacity={0.8}
-                >
-                  <Ionicons name="close" size={18} color={colors.error} />
-                  <Text style={styles.rejectButtonText}>Reject</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          );
-        })}
-      </ScrollView>
+            );
+          })}
+        </ScrollView>
+      )}
     </SafeAreaView>
   );
 };
@@ -360,6 +493,45 @@ const styles = StyleSheet.create({
     color: colors.error,
     fontSize: 14,
     fontWeight: '600',
+  },
+  loadingContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 60,
+  },
+  loadingText: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    marginTop: 12,
+  },
+  emptyContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 60,
+    paddingHorizontal: 32,
+  },
+  emptyText: {
+    fontSize: 16,
+    color: colors.textSecondary,
+    marginTop: 16,
+    textAlign: 'center',
+  },
+  retryButton: {
+    marginTop: 16,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    backgroundColor: colors.primary,
+    borderRadius: 8,
+  },
+  retryButtonText: {
+    color: colors.textWhite,
+    fontWeight: '600',
+    fontSize: 14,
+  },
+  buttonDisabled: {
+    opacity: 0.6,
   },
 });
 

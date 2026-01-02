@@ -8,9 +8,12 @@ import {
   SafeAreaView,
   Image,
   Alert,
+  Switch,
+  ActivityIndicator,
 } from 'react-native';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import * as ImagePicker from 'expo-image-picker';
 import { ProductsStackParamList } from '../../navigation/types';
 import { Input } from '../../components/common/Input';
@@ -18,6 +21,10 @@ import { Button } from '../../components/common/Button';
 import { colors } from '../../constants/colors';
 import { Ionicons } from '@expo/vector-icons';
 import { Menu } from 'react-native-paper';
+import * as productApi from '../../services/product';
+import * as uploadApi from '../../services/upload';
+import Toast from 'react-native-toast-message';
+import { API_BASE_URL } from '../../config/api';
 
 type EditProductScreenNavigationProp = NativeStackNavigationProp<ProductsStackParamList, 'EditProduct'>;
 type EditProductRouteProp = RouteProp<ProductsStackParamList, 'EditProduct'>;
@@ -39,28 +46,83 @@ export const EditProductScreen = () => {
   const navigation = useNavigation<EditProductScreenNavigationProp>();
   const route = useRoute<EditProductRouteProp>();
   const { productId } = route.params;
+  const queryClient = useQueryClient();
 
   const [productName, setProductName] = useState('');
   const [category, setCategory] = useState('');
+  const [subCategory, setSubCategory] = useState('');
   const [price, setPrice] = useState('');
-  const [quantity, setQuantity] = useState('');
-  const [discount, setDiscount] = useState('');
+  const [stock, setStock] = useState('');
+  const [discountPrice, setDiscountPrice] = useState('');
   const [description, setDescription] = useState('');
+  const [sku, setSku] = useState('');
+  const [tags, setTags] = useState('');
+  const [isActive, setIsActive] = useState(true);
   const [productImages, setProductImages] = useState<string[]>([]);
+  const [imageFiles, setImageFiles] = useState<ImagePicker.ImagePickerAsset[]>([]);
   const [categoryMenuVisible, setCategoryMenuVisible] = useState(false);
-  const [loading, setLoading] = useState(false);
 
+  // Fetch product data
+  const { data: productResponse, isLoading: productLoading } = useQuery({
+    queryKey: ['product', productId],
+    queryFn: () => productApi.getProductById(productId),
+    enabled: !!productId,
+  });
+
+  // Update product mutation
+  const updateProductMutation = useMutation({
+    mutationFn: (data: productApi.UpdateProductData) => productApi.updateProduct(productId, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['product', productId] });
+      queryClient.invalidateQueries({ queryKey: ['doctor-products'] });
+      Toast.show({
+        type: 'success',
+        text1: 'Success',
+        text2: 'Product updated successfully!',
+      });
+      navigation.goBack();
+    },
+    onError: (error: any) => {
+      const errorMessage = error?.response?.data?.message || error?.message || 'Failed to update product';
+      Toast.show({
+        type: 'error',
+        text1: 'Error',
+        text2: errorMessage,
+      });
+    },
+  });
+
+  // Initialize form data when product is loaded
   useEffect(() => {
-    // TODO: Fetch product data based on productId
-    // For now, populate with mock data
-    setProductName('Benzaxapine Croplex');
-    setCategory('Family Care');
-    setPrice('$19.00');
-    setQuantity('50');
-    setDiscount('10');
-    setDescription('Safi syrup is best for purifying the blood. As it contains herbal extracts it can cure indigestion, constipation, nose bleeds and acne boils.');
-    setProductImages([require('../../../assets/avatar.png').toString()]);
-  }, [productId]);
+    if (productResponse?.data) {
+      const product = productResponse.data as productApi.Product;
+      setProductName(product.name || '');
+      setPrice(product.price !== undefined && product.price !== null ? String(product.price) : '');
+      setStock(product.stock !== undefined && product.stock !== null ? String(product.stock) : '');
+      setDescription(product.description || '');
+      setSku(product.sku || '');
+      setDiscountPrice(
+        product.discountPrice !== undefined && product.discountPrice !== null ? String(product.discountPrice) : ''
+      );
+      setCategory(product.category || '');
+      setSubCategory(product.subCategory || '');
+      setTags(Array.isArray(product.tags) ? product.tags.join(', ') : product.tags || '');
+      setIsActive(product.isActive !== undefined ? product.isActive : true);
+      setProductImages(Array.isArray(product.images) ? product.images : []);
+    }
+  }, [productResponse]);
+
+  // Normalize image URL for mobile
+  const normalizeImageUrl = (imageUri: string | undefined): string => {
+    if (!imageUri) return '';
+    if (imageUri.startsWith('http://') || imageUri.startsWith('https://')) {
+      const deviceHost =
+        API_BASE_URL?.replace('/api', '').replace('http://', '').replace('https://', '') || 'localhost:5000';
+      return imageUri.replace(/localhost|127\.0\.0\.1/, deviceHost.split(':')[0]);
+    }
+    const baseURL = API_BASE_URL?.replace('/api', '') || 'http://localhost:5000';
+    return `${baseURL}${imageUri}`;
+  };
 
   const pickImage = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -72,18 +134,20 @@ export const EditProductScreen = () => {
     try {
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: true,
-        aspect: [1, 1],
+        allowsEditing: false,
         quality: 0.8,
         allowsMultipleSelection: true,
       });
 
       if (!result.canceled && result.assets) {
-        const newImages = result.assets.map((asset) => asset.uri);
-        setProductImages([...productImages, ...newImages]);
+        setImageFiles([...imageFiles, ...result.assets]);
       }
     } catch (error) {
-      Alert.alert('Error', 'Failed to pick image');
+      Toast.show({
+        type: 'error',
+        text1: 'Error',
+        text2: 'Failed to pick image',
+      });
     }
   };
 
@@ -91,40 +155,160 @@ export const EditProductScreen = () => {
     setProductImages(productImages.filter((_, i) => i !== index));
   };
 
-  const handleSubmit = () => {
+  const removeNewImage = (index: number) => {
+    setImageFiles(imageFiles.filter((_, i) => i !== index));
+  };
+
+  const handleSubmit = async () => {
+    // Validate required fields
     if (!productName.trim()) {
-      Alert.alert('Required', 'Product name is required.');
-      return;
-    }
-    if (!category) {
-      Alert.alert('Required', 'Category is required.');
-      return;
-    }
-    if (!price.trim()) {
-      Alert.alert('Required', 'Price is required.');
-      return;
-    }
-    if (!quantity.trim()) {
-      Alert.alert('Required', 'Quantity is required.');
-      return;
-    }
-    if (!description.trim()) {
-      Alert.alert('Required', 'Description is required.');
+      Toast.show({
+        type: 'error',
+        text1: 'Required',
+        text2: 'Product name is required',
+      });
       return;
     }
 
-    setLoading(true);
-    // TODO: Submit to backend
-    setTimeout(() => {
-      setLoading(false);
-      Alert.alert('Success', 'Product updated successfully!', [
-        {
-          text: 'OK',
-          onPress: () => navigation.goBack(),
-        },
-      ]);
-    }, 2000);
+    // Validate price
+    const priceValue = price ? parseFloat(price) : null;
+    if (priceValue === null || isNaN(priceValue) || priceValue < 0) {
+      Toast.show({
+        type: 'error',
+        text1: 'Invalid Price',
+        text2: 'Please enter a valid price (must be a number >= 0)',
+      });
+      return;
+    }
+
+    // Validate stock
+    let stockValue = 0;
+    if (stock !== undefined && stock !== null && stock !== '') {
+      const stockStr = typeof stock === 'string' ? stock.trim() : String(stock);
+      if (stockStr !== '') {
+        stockValue = parseInt(stockStr);
+        if (isNaN(stockValue) || stockValue < 0) {
+          Toast.show({
+            type: 'error',
+            text1: 'Invalid Stock',
+            text2: 'Stock must be a non-negative integer',
+          });
+          return;
+        }
+      }
+    }
+
+    // Validate discount price if provided
+    let discountPriceValue = null;
+    if (discountPrice !== undefined && discountPrice !== null && discountPrice !== '') {
+      const discountStr = typeof discountPrice === 'string' ? discountPrice.trim() : String(discountPrice);
+      if (discountStr !== '') {
+        discountPriceValue = parseFloat(discountStr);
+        if (isNaN(discountPriceValue) || discountPriceValue < 0) {
+          Toast.show({
+            type: 'error',
+            text1: 'Invalid Discount',
+            text2: 'Discount price must be a non-negative number',
+          });
+          return;
+        }
+        if (discountPriceValue >= priceValue) {
+          Toast.show({
+            type: 'error',
+            text1: 'Invalid Discount',
+            text2: 'Discount price must be less than regular price',
+          });
+          return;
+        }
+      }
+    }
+
+    try {
+      let imageUrls = [...productImages];
+
+      // Upload new images if files selected
+      if (imageFiles.length > 0) {
+        const formData = new FormData();
+        imageFiles.forEach((asset) => {
+          formData.append('files', {
+            uri: asset.uri,
+            type: asset.type || 'image/jpeg',
+            name: asset.fileName || `product-${Date.now()}.jpg`,
+          } as any);
+        });
+
+        const uploadedUrls = await uploadApi.uploadProductImages(formData);
+        imageUrls = [...imageUrls, ...uploadedUrls];
+      }
+
+      // Convert relative image URLs to full URLs if needed
+      const serverBaseUrl = API_BASE_URL?.replace('/api', '') || 'http://localhost:5000';
+      const fullImageUrls = imageUrls
+        .map((url) => {
+          if (!url || typeof url !== 'string') return null;
+          if (url.startsWith('http://') || url.startsWith('https://')) {
+            return url;
+          }
+          const cleanUrl = url.startsWith('/') ? url : '/' + url;
+          return `${serverBaseUrl}${cleanUrl}`;
+        })
+        .filter((url) => url !== null && url !== '') as string[];
+
+      // Parse tags
+      const tagsArray = tags && tags.trim() ? tags.split(',').map((tag) => tag.trim()).filter((tag) => tag) : [];
+
+      // Build product data - only include fields that have values
+      const productData: productApi.UpdateProductData = {
+        name: productName.trim(),
+        price: Number(priceValue),
+        stock: Number(stockValue),
+        isActive: Boolean(isActive),
+      };
+
+      // Add optional fields only if they have values
+      if (description && description.trim()) {
+        productData.description = description.trim();
+      }
+      if (sku && sku.trim()) {
+        productData.sku = sku.trim();
+      }
+      if (discountPriceValue !== null && !isNaN(discountPriceValue)) {
+        productData.discountPrice = Number(discountPriceValue);
+      }
+      if (category && category.trim()) {
+        productData.category = category.trim();
+      }
+      if (subCategory && subCategory.trim()) {
+        productData.subCategory = subCategory.trim();
+      }
+      if (tagsArray.length > 0) {
+        productData.tags = tagsArray;
+      }
+      // Only include images if we have new ones or existing ones
+      if (fullImageUrls.length > 0 || imageFiles.length > 0) {
+        productData.images = fullImageUrls;
+      }
+
+      updateProductMutation.mutate(productData);
+    } catch (error: any) {
+      Toast.show({
+        type: 'error',
+        text1: 'Error',
+        text2: error?.message || 'Failed to upload images',
+      });
+    }
   };
+
+  if (productLoading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={colors.primary} />
+          <Text style={styles.loadingText}>Loading product...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container}>
@@ -138,9 +322,41 @@ export const EditProductScreen = () => {
             onChangeText={setProductName}
           />
 
+          {/* SKU */}
+          <Input label="SKU" placeholder="Product SKU (optional)" value={sku} onChangeText={setSku} />
+
+          {/* Price and Stock */}
+          <View style={styles.row}>
+            <Input
+              label="Price *"
+              placeholder="0.00"
+              value={price}
+              onChangeText={setPrice}
+              keyboardType="decimal-pad"
+              style={styles.halfInput}
+            />
+            <Input
+              label="Stock"
+              placeholder="0"
+              value={stock}
+              onChangeText={setStock}
+              keyboardType="numeric"
+              style={styles.halfInput}
+            />
+          </View>
+
+          {/* Discount Price */}
+          <Input
+            label="Discount Price"
+            placeholder="0.00 (optional)"
+            value={discountPrice}
+            onChangeText={setDiscountPrice}
+            keyboardType="decimal-pad"
+          />
+
           {/* Category */}
           <View style={styles.pickerContainer}>
-            <Text style={styles.label}>Category *</Text>
+            <Text style={styles.label}>Category</Text>
             <Menu
               visible={categoryMenuVisible}
               onDismiss={() => setCategoryMenuVisible(false)}
@@ -151,7 +367,7 @@ export const EditProductScreen = () => {
                   activeOpacity={0.7}
                 >
                   <Text style={[styles.pickerText, !category && styles.pickerPlaceholder]}>
-                    {category || 'Select Category'}
+                    {category || 'Select Category (optional)'}
                   </Text>
                   <Ionicons name="chevron-down" size={20} color={colors.textSecondary} />
                 </TouchableOpacity>
@@ -170,41 +386,20 @@ export const EditProductScreen = () => {
             </Menu>
           </View>
 
-          {/* Price and Quantity */}
-          <View style={styles.row}>
-            <Input
-              label="Price *"
-              placeholder="$0.00"
-              value={price}
-              onChangeText={setPrice}
-              keyboardType="decimal-pad"
-              style={styles.halfInput}
-            />
-            <Input
-              label="Quantity *"
-              placeholder="0"
-              value={quantity}
-              onChangeText={setQuantity}
-              keyboardType="numeric"
-              style={styles.halfInput}
-            />
-          </View>
-
-          {/* Discount */}
+          {/* Sub Category */}
           <Input
-            label="Discount *"
-            placeholder="Enter discount percentage"
-            value={discount}
-            onChangeText={setDiscount}
-            keyboardType="decimal-pad"
+            label="Sub Category"
+            placeholder="Product sub category (optional)"
+            value={subCategory}
+            onChangeText={setSubCategory}
           />
 
           {/* Description */}
           <View style={styles.textAreaContainer}>
-            <Text style={styles.label}>Description *</Text>
+            <Text style={styles.label}>Description</Text>
             <View style={styles.textAreaWrapper}>
               <Input
-                placeholder="Enter product description"
+                placeholder="Enter product description (optional)"
                 value={description}
                 onChangeText={setDescription}
                 multiline
@@ -214,26 +409,53 @@ export const EditProductScreen = () => {
             </View>
           </View>
 
+          {/* Tags */}
+          <Input
+            label="Tags (comma-separated)"
+            placeholder="tag1, tag2, tag3 (optional)"
+            value={tags}
+            onChangeText={setTags}
+          />
+
           {/* Product Images */}
           <View style={styles.imagesSection}>
-            <Text style={styles.label}>Upload Product Images *</Text>
+            <Text style={styles.label}>Product Images</Text>
             <TouchableOpacity style={styles.uploadButton} onPress={pickImage} activeOpacity={0.7}>
               <Ionicons name="cloud-upload-outline" size={32} color={colors.primary} />
               <Text style={styles.uploadButtonText}>Upload Images</Text>
               <Text style={styles.uploadHint}>You can select multiple images</Text>
             </TouchableOpacity>
 
+            {/* Existing Images */}
             {productImages.length > 0 && (
               <View style={styles.imagesGrid}>
-                {productImages.map((uri, index) => (
-                  <View key={index} style={styles.imageContainer}>
-                    <Image
-                      source={typeof uri === 'string' ? { uri } : require('../../../assets/avatar.png')}
-                      style={styles.uploadedImage}
-                    />
+                {productImages.map((img, index) => {
+                  const normalizedUrl = normalizeImageUrl(img);
+                  return (
+                    <View key={`existing-${index}`} style={styles.imageContainer}>
+                      <Image source={{ uri: normalizedUrl }} style={styles.uploadedImage} />
+                      <TouchableOpacity
+                        style={styles.removeImageButton}
+                        onPress={() => removeImage(index)}
+                        activeOpacity={0.7}
+                      >
+                        <Ionicons name="close-circle" size={24} color={colors.error} />
+                      </TouchableOpacity>
+                    </View>
+                  );
+                })}
+              </View>
+            )}
+
+            {/* New Images */}
+            {imageFiles.length > 0 && (
+              <View style={styles.imagesGrid}>
+                {imageFiles.map((asset, index) => (
+                  <View key={`new-${index}`} style={styles.imageContainer}>
+                    <Image source={{ uri: asset.uri }} style={styles.uploadedImage} />
                     <TouchableOpacity
                       style={styles.removeImageButton}
-                      onPress={() => removeImage(index)}
+                      onPress={() => removeNewImage(index)}
                       activeOpacity={0.7}
                     >
                       <Ionicons name="close-circle" size={24} color={colors.error} />
@@ -243,12 +465,26 @@ export const EditProductScreen = () => {
               </View>
             )}
           </View>
+
+          {/* Active Status */}
+          <View style={styles.switchContainer}>
+            <Text style={styles.label}>Active</Text>
+            <Switch
+              value={isActive}
+              onValueChange={setIsActive}
+              trackColor={{ false: colors.border, true: colors.primary }}
+            />
+          </View>
         </View>
       </ScrollView>
 
       {/* Submit Button */}
       <View style={styles.footer}>
-        <Button title="Save Changes" onPress={handleSubmit} loading={loading} />
+        <Button
+          title={updateProductMutation.isPending ? 'Updating...' : 'Save Changes'}
+          onPress={handleSubmit}
+          loading={updateProductMutation.isPending}
+        />
       </View>
     </SafeAreaView>
   );
@@ -258,6 +494,17 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.backgroundLight,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 40,
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 14,
+    color: colors.textSecondary,
   },
   form: {
     padding: 16,
@@ -360,6 +607,16 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
     borderRadius: 12,
   },
+  switchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: colors.background,
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
   footer: {
     padding: 16,
     backgroundColor: colors.background,
@@ -367,4 +624,3 @@ const styles = StyleSheet.create({
     borderTopColor: colors.border,
   },
 });
-

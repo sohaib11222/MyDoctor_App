@@ -6,17 +6,32 @@ import {
   SafeAreaView,
   TouchableOpacity,
 } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useRoute } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { RouteProp } from '@react-navigation/native';
+import { useQuery } from '@tanstack/react-query';
 import { PharmacyStackParamList } from '../../navigation/types';
 import { colors } from '../../constants/colors';
 import { Ionicons } from '@expo/vector-icons';
 import { Button } from '../../components/common/Button';
+import * as orderApi from '../../services/order';
 
 type PaymentSuccessScreenNavigationProp = NativeStackNavigationProp<PharmacyStackParamList>;
+type PaymentSuccessScreenRouteProp = RouteProp<PharmacyStackParamList, 'PaymentSuccess'>;
 
 export const PaymentSuccessScreen = () => {
   const navigation = useNavigation<PaymentSuccessScreenNavigationProp>();
+  const route = useRoute<PaymentSuccessScreenRouteProp>();
+  const { orderId } = route.params || {};
+
+  // Fetch order details if orderId is provided
+  const { data: orderResponse } = useQuery({
+    queryKey: ['order', orderId],
+    queryFn: () => orderApi.getOrderById(orderId!),
+    enabled: !!orderId,
+  });
+
+  const orderNumber = orderResponse?.data?.orderNumber || 'N/A';
 
   return (
     <SafeAreaView style={styles.container}>
@@ -26,7 +41,7 @@ export const PaymentSuccessScreen = () => {
             <Ionicons name="checkmark-circle" size={80} color={colors.success} />
           </View>
           <Text style={styles.successTitle}>Payment Successfully!</Text>
-          <Text style={styles.productId}>Product ID: 245468</Text>
+          <Text style={styles.productId}>Order Number: {orderNumber}</Text>
         </View>
 
         <View style={styles.actionsContainer}>

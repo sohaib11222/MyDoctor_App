@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -8,27 +8,44 @@ import {
   TextInput,
   SafeAreaView,
   StatusBar,
+  ActivityIndicator,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { useMutation } from '@tanstack/react-query';
 import { PharmacyStackParamList } from '../../navigation/types';
 import { colors } from '../../constants/colors';
 import { Ionicons } from '@expo/vector-icons';
 import { Button } from '../../components/common/Button';
 import { Input } from '../../components/common/Input';
+import { useCart } from '../../contexts/CartContext';
+import { useAuth } from '../../contexts/AuthContext';
+import * as paymentApi from '../../services/payment';
+import * as orderApi from '../../services/order';
+import Toast from 'react-native-toast-message';
 
 type CheckoutScreenNavigationProp = NativeStackNavigationProp<PharmacyStackParamList>;
 
 export const CheckoutScreen = () => {
   const navigation = useNavigation<CheckoutScreenNavigationProp>();
+  const { cartItems, getCartTotal, clearCart } = useCart();
+  const { user } = useAuth();
   const [formData, setFormData] = useState({
-    firstName: '',
-    lastName: '',
-    email: '',
-    phone: '',
+    firstName: user?.fullName?.split(' ')[0] || '',
+    lastName: user?.fullName?.split(' ').slice(1).join(' ') || '',
+    email: user?.email || '',
+    phone: user?.phone || '',
     shipToDifferentAddress: false,
+    shippingAddress: {
+      line1: '',
+      line2: '',
+      city: '',
+      state: '',
+      country: '',
+      zip: '',
+    },
     orderNotes: '',
-    paymentMethod: 'credit',
+    paymentMethod: 'CARD' as 'CARD' | 'PAYPAL' | 'DUMMY',
     cardName: '',
     cardNumber: '',
     expiryMonth: '',
@@ -37,21 +54,160 @@ export const CheckoutScreen = () => {
   });
   const [termsAccepted, setTermsAccepted] = useState(false);
 
-  const orderItems = [
-    { name: 'Safi Natural Blood Purifier Syrup 200 ml Manufactured By Hamdard (Wakf) Laboratories', total: '$200' },
-    { name: 'Safi Natural Blood Purifier Syrup 200 ml', total: '$200' },
-  ];
+  const subtotal = getCartTotal();
+  const shipping = subtotal >= 50 ? 0 : 25;
+  const tax = 0;
+  const total = subtotal + shipping + tax;
 
-  const subtotal = 5877.0;
-  const shipping = 25.0;
-  const tax = 0.0;
-  const total = 160.0;
+  useEffect(() => {
+    if (cartItems.length === 0) {
+      Toast.show({
+        type: 'warning',
+        text1: 'Empty Cart',
+        text2: 'Your cart is empty',
+      });
+      navigation.navigate('ProductCatalog');
+    }
+  }, [cartItems, navigation]);
+
+  // Create order and process payment mutation
+  const checkoutMutation = useMutation({
+    mutationFn: async () => {
+      // Prepare order items
+      const orderItems = cartItems.map((item) => ({
+        productId: item._id,
+        quantity: item.quantity,
+      }));
+
+      // Prepare order data
+      const orderData: orderApi.CreateOrderData = {
+        items: orderItems,
+      };
+
+      // Add shipping address only if provided and complete
+      if (formData.shipToDifferentAddress) {
+        if (
+          formData.shippingAddress.line1?.trim() &&
+          formData.shippingAddress.city?.trim() &&
+          formData.shippingAddress.state?.trim() &&
+          formData.shippingAddress.country?.trim() &&
+          formData.shippingAddress.zip?.trim()
+        ) {
+          orderData.shippingAddress = {
+            line1: formData.shippingAddress.line1.trim(),
+            line2: formData.shippingAddress.line2?.trim() || undefined,
+            city: formData.shippingAddress.city.trim(),
+            state: formData.shippingAddress.state.trim(),
+            country: formData.shippingAddress.country.trim(),
+            zip: formData.shippingAddress.zip.trim(),
+          };
+        } else {
+          throw new Error('Please fill in all required shipping address fields');
+        }
+      }
+
+      // Add payment method if provided
+      if (formData.paymentMethod) {
+        orderData.paymentMethod = formData.paymentMethod;
+      }
+
+      // Create order first (payment will be processed after pharmacy owner confirms and sets shipping)
+      const orderResponse = await orderApi.createOrder(orderData);
+
+      // Don't process payment immediately - wait for pharmacy owner to confirm order and set shipping fee
+      // Payment will be processed when patient pays from order details screen
+
+      return { order: orderResponse.data };
+    },
+    onSuccess: (data) => {
+      Toast.show({
+        type: 'success',
+        text1: 'Order Placed Successfully',
+        text2: `Order #${data.order.orderNumber} has been placed! The pharmacy will confirm and set shipping fee.`,
+      });
+      clearCart();
+      navigation.navigate('PaymentSuccess', { orderId: data.order._id });
+    },
+    onError: (error: any) => {
+      let errorMessage = 'Order failed';
+      
+      if (error.response?.data) {
+        // Handle validation errors
+        if (error.response.data.errors) {
+          const validationErrors = error.response.data.errors;
+          if (Array.isArray(validationErrors)) {
+            errorMessage = validationErrors.map((err: any) => err.message || err.msg).join(', ');
+          } else if (typeof validationErrors === 'object') {
+            errorMessage = Object.values(validationErrors).flat().join(', ');
+          }
+        } else if (error.response.data.message) {
+          errorMessage = error.response.data.message;
+        } else if (error.response.data.error) {
+          errorMessage = error.response.data.error;
+        }
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+
+      if (__DEV__) {
+        console.error('Checkout error:', {
+          error,
+          response: error.response?.data,
+          message: errorMessage,
+        });
+      }
+
+      Toast.show({
+        type: 'error',
+        text1: 'Order Failed',
+        text2: errorMessage,
+      });
+    },
+  });
 
   const handleSubmit = () => {
-    if (termsAccepted) {
-      navigation.navigate('PaymentSuccess');
+    if (!termsAccepted) {
+      Toast.show({
+        type: 'error',
+        text1: 'Terms Required',
+        text2: 'Please accept the Terms & Conditions to continue',
+      });
+      return;
     }
+
+    if (!user) {
+      Toast.show({
+        type: 'error',
+        text1: 'Login Required',
+        text2: 'Please login to complete checkout',
+      });
+      return;
+    }
+
+    if (formData.paymentMethod === 'CARD') {
+      if (
+        !formData.cardName ||
+        !formData.cardNumber ||
+        !formData.expiryMonth ||
+        !formData.expiryYear ||
+        !formData.cvv
+      ) {
+        Toast.show({
+          type: 'error',
+          text1: 'Card Details Required',
+          text2: 'Please fill in all card details',
+        });
+        return;
+      }
+    }
+
+    // Create order and process payment
+    checkoutMutation.mutate();
   };
+
+  if (cartItems.length === 0) {
+    return null; // Will redirect in useEffect
+  }
 
   return (
     <SafeAreaView style={styles.container}>
@@ -90,11 +246,13 @@ export const CheckoutScreen = () => {
               placeholder="Enter phone"
               keyboardType="phone-pad"
             />
-            <TouchableOpacity style={styles.existingCustomerLink}>
-              <Text style={styles.existingCustomerText}>
-                Existing Customer? <Text style={styles.linkText}>Click here to login</Text>
-              </Text>
-            </TouchableOpacity>
+            {!user && (
+              <TouchableOpacity style={styles.existingCustomerLink}>
+                <Text style={styles.existingCustomerText}>
+                  Existing Customer? <Text style={styles.linkText}>Click here to login</Text>
+                </Text>
+              </TouchableOpacity>
+            )}
           </View>
 
           {/* Shipping Details */}
@@ -116,13 +274,89 @@ export const CheckoutScreen = () => {
               </View>
               <Text style={styles.checkboxLabel}>Ship to a different address?</Text>
             </TouchableOpacity>
+            {formData.shipToDifferentAddress && (
+              <>
+                <Input
+                  label="Address Line 1"
+                  value={formData.shippingAddress.line1}
+                  onChangeText={(text) => setFormData({ 
+                    ...formData, 
+                    shippingAddress: { ...formData.shippingAddress, line1: text } 
+                  })}
+                  placeholder="Enter address line 1"
+                  required
+                />
+                <Input
+                  label="Address Line 2 (Optional)"
+                  value={formData.shippingAddress.line2}
+                  onChangeText={(text) => setFormData({ 
+                    ...formData, 
+                    shippingAddress: { ...formData.shippingAddress, line2: text } 
+                  })}
+                  placeholder="Enter address line 2"
+                />
+                <View style={styles.row}>
+                  <View style={styles.halfInput}>
+                    <Input
+                      label="City"
+                      value={formData.shippingAddress.city}
+                      onChangeText={(text) => setFormData({ 
+                        ...formData, 
+                        shippingAddress: { ...formData.shippingAddress, city: text } 
+                      })}
+                      placeholder="Enter city"
+                      required
+                    />
+                  </View>
+                  <View style={styles.halfInput}>
+                    <Input
+                      label="State"
+                      value={formData.shippingAddress.state}
+                      onChangeText={(text) => setFormData({ 
+                        ...formData, 
+                        shippingAddress: { ...formData.shippingAddress, state: text } 
+                      })}
+                      placeholder="Enter state"
+                      required
+                    />
+                  </View>
+                </View>
+                <View style={styles.row}>
+                  <View style={styles.halfInput}>
+                    <Input
+                      label="Country"
+                      value={formData.shippingAddress.country}
+                      onChangeText={(text) => setFormData({ 
+                        ...formData, 
+                        shippingAddress: { ...formData.shippingAddress, country: text } 
+                      })}
+                      placeholder="Enter country"
+                      required
+                    />
+                  </View>
+                  <View style={styles.halfInput}>
+                    <Input
+                      label="ZIP Code"
+                      value={formData.shippingAddress.zip}
+                      onChangeText={(text) => setFormData({ 
+                        ...formData, 
+                        shippingAddress: { ...formData.shippingAddress, zip: text } 
+                      })}
+                      placeholder="Enter ZIP"
+                      keyboardType="numeric"
+                      required
+                    />
+                  </View>
+                </View>
+              </>
+            )}
             <View style={styles.textAreaContainer}>
               <Text style={styles.label}>Order notes (Optional)</Text>
               <TextInput
                 style={styles.textArea}
                 value={formData.orderNotes}
                 onChangeText={(text) => setFormData({ ...formData, orderNotes: text })}
-                placeholder="Enter order notes..."
+                placeholder="Any special instructions for your order..."
                 placeholderTextColor={colors.textLight}
                 multiline
                 numberOfLines={5}
@@ -137,16 +371,16 @@ export const CheckoutScreen = () => {
             {/* Credit Card Option */}
             <TouchableOpacity
               style={styles.paymentOption}
-              onPress={() => setFormData({ ...formData, paymentMethod: 'credit' })}
+              onPress={() => setFormData({ ...formData, paymentMethod: 'CARD' })}
             >
               <View style={styles.radioContainer}>
                 <View
                   style={[
                     styles.radio,
-                    formData.paymentMethod === 'credit' && styles.radioChecked,
+                    formData.paymentMethod === 'CARD' && styles.radioChecked,
                   ]}
                 >
-                  {formData.paymentMethod === 'credit' && (
+                  {formData.paymentMethod === 'CARD' && (
                     <View style={styles.radioInner} />
                   )}
                 </View>
@@ -154,13 +388,14 @@ export const CheckoutScreen = () => {
               </View>
             </TouchableOpacity>
 
-            {formData.paymentMethod === 'credit' && (
+            {formData.paymentMethod === 'CARD' && (
               <View style={styles.paymentDetails}>
                 <Input
                   label="Name on Card"
                   value={formData.cardName}
                   onChangeText={(text) => setFormData({ ...formData, cardName: text })}
                   placeholder="Enter name"
+                  required={formData.paymentMethod === 'CARD'}
                 />
                 <Input
                   label="Card Number"
@@ -168,21 +403,32 @@ export const CheckoutScreen = () => {
                   onChangeText={(text) => setFormData({ ...formData, cardNumber: text })}
                   placeholder="1234 5678 9876 5432"
                   keyboardType="numeric"
+                  required={formData.paymentMethod === 'CARD'}
                 />
-                <Input
-                  label="Expiry Month"
-                  value={formData.expiryMonth}
-                  onChangeText={(text) => setFormData({ ...formData, expiryMonth: text })}
-                  placeholder="MM"
-                  keyboardType="numeric"
-                />
-                <Input
-                  label="Expiry Year"
-                  value={formData.expiryYear}
-                  onChangeText={(text) => setFormData({ ...formData, expiryYear: text })}
-                  placeholder="YY"
-                  keyboardType="numeric"
-                />
+                <View style={styles.row}>
+                  <View style={styles.halfInput}>
+                    <Input
+                      label="Expiry Month"
+                      value={formData.expiryMonth}
+                      onChangeText={(text) => setFormData({ ...formData, expiryMonth: text })}
+                      placeholder="MM"
+                      keyboardType="numeric"
+                      maxLength={2}
+                      required={formData.paymentMethod === 'CARD'}
+                    />
+                  </View>
+                  <View style={styles.halfInput}>
+                    <Input
+                      label="Expiry Year"
+                      value={formData.expiryYear}
+                      onChangeText={(text) => setFormData({ ...formData, expiryYear: text })}
+                      placeholder="YY"
+                      keyboardType="numeric"
+                      maxLength={2}
+                      required={formData.paymentMethod === 'CARD'}
+                    />
+                  </View>
+                </View>
                 <Input
                   label="CVV"
                   value={formData.cvv}
@@ -190,6 +436,8 @@ export const CheckoutScreen = () => {
                   placeholder="CVV"
                   keyboardType="numeric"
                   secureTextEntry
+                  maxLength={4}
+                  required={formData.paymentMethod === 'CARD'}
                 />
               </View>
             )}
@@ -197,20 +445,40 @@ export const CheckoutScreen = () => {
             {/* PayPal Option */}
             <TouchableOpacity
               style={styles.paymentOption}
-              onPress={() => setFormData({ ...formData, paymentMethod: 'paypal' })}
+              onPress={() => setFormData({ ...formData, paymentMethod: 'PAYPAL' })}
             >
               <View style={styles.radioContainer}>
                 <View
                   style={[
                     styles.radio,
-                    formData.paymentMethod === 'paypal' && styles.radioChecked,
+                    formData.paymentMethod === 'PAYPAL' && styles.radioChecked,
                   ]}
                 >
-                  {formData.paymentMethod === 'paypal' && (
+                  {formData.paymentMethod === 'PAYPAL' && (
                     <View style={styles.radioInner} />
                   )}
                 </View>
                 <Text style={styles.paymentOptionText}>Paypal</Text>
+              </View>
+            </TouchableOpacity>
+
+            {/* Dummy/Test Payment Option */}
+            <TouchableOpacity
+              style={styles.paymentOption}
+              onPress={() => setFormData({ ...formData, paymentMethod: 'DUMMY' })}
+            >
+              <View style={styles.radioContainer}>
+                <View
+                  style={[
+                    styles.radio,
+                    formData.paymentMethod === 'DUMMY' && styles.radioChecked,
+                  ]}
+                >
+                  {formData.paymentMethod === 'DUMMY' && (
+                    <View style={styles.radioInner} />
+                  )}
+                </View>
+                <Text style={styles.paymentOptionText}>Test Payment (Dummy)</Text>
               </View>
             </TouchableOpacity>
 
@@ -240,12 +508,14 @@ export const CheckoutScreen = () => {
         <View style={styles.orderSummary}>
           <Text style={styles.orderSummaryTitle}>Your Order</Text>
           <View style={styles.orderItemsList}>
-            {orderItems.map((item, index) => (
-              <View key={index} style={styles.orderItem}>
+            {cartItems.map((item) => (
+              <View key={item._id} style={styles.orderItem}>
                 <Text style={styles.orderItemName} numberOfLines={2}>
-                  {item.name}
+                  {item.name} <Text style={styles.orderItemQuantity}>x{item.quantity}</Text>
                 </Text>
-                <Text style={styles.orderItemTotal}>{item.total}</Text>
+                <Text style={styles.orderItemTotal}>
+                  ${(item.price * item.quantity).toFixed(2)}
+                </Text>
               </View>
             ))}
           </View>
@@ -256,21 +526,30 @@ export const CheckoutScreen = () => {
             </View>
             <View style={styles.totalRow}>
               <Text style={styles.totalLabel}>Shipping</Text>
-              <Text style={styles.totalValue}>${shipping.toFixed(2)}</Text>
+              <Text style={styles.totalValue}>
+                {shipping === 0 ? (
+                  <Text style={styles.freeShippingText}>Free</Text>
+                ) : (
+                  `$${shipping.toFixed(2)}`
+                )}
+              </Text>
             </View>
-            <View style={styles.totalRow}>
-              <Text style={styles.totalLabel}>Tax</Text>
-              <Text style={styles.totalValue}>${tax.toFixed(2)}</Text>
-            </View>
+            {tax > 0 && (
+              <View style={styles.totalRow}>
+                <Text style={styles.totalLabel}>Tax</Text>
+                <Text style={styles.totalValue}>${tax.toFixed(2)}</Text>
+              </View>
+            )}
             <View style={[styles.totalRow, styles.totalRowMain]}>
               <Text style={styles.totalLabelMain}>Total</Text>
               <Text style={styles.totalValueMain}>${total.toFixed(2)}</Text>
             </View>
           </View>
           <Button
-            title="Confirm and Pay"
+            title={checkoutMutation.isLoading ? 'Processing...' : 'Confirm and Pay'}
             onPress={handleSubmit}
-            disabled={!termsAccepted}
+            disabled={!termsAccepted || checkoutMutation.isLoading}
+            loading={checkoutMutation.isLoading}
             style={styles.submitButton}
           />
         </View>
@@ -503,6 +782,21 @@ const styles = StyleSheet.create({
   },
   submitButton: {
     marginTop: 20,
+  },
+  freeShippingText: {
+    color: colors.success,
+    fontWeight: '600',
+  },
+  orderItemQuantity: {
+    fontSize: 12,
+    color: colors.textSecondary,
+  },
+  row: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  halfInput: {
+    flex: 1,
   },
 });
 

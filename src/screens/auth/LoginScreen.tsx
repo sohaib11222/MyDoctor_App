@@ -18,6 +18,7 @@ import { AuthStackParamList } from '../../navigation/types';
 import { Input } from '../../components/common/Input';
 import { Button } from '../../components/common/Button';
 import { useAuth, UserRole } from '../../contexts/AuthContext';
+import { useEffect } from 'react';
 import { colors } from '../../constants/colors';
 import { Feather } from '@expo/vector-icons';
 
@@ -36,9 +37,21 @@ interface LoginFormData {
 
 export const LoginScreen = () => {
   const navigation = useNavigation<LoginScreenNavigationProp>();
-  const { login } = useAuth();
+  const { login, user } = useAuth();
   const [selectedRole, setSelectedRole] = useState<UserRole>('patient');
   const [loading, setLoading] = useState(false);
+
+  // Navigate pending doctors to verification upload after login
+  useEffect(() => {
+    if (user && user.role === 'doctor' && user.verificationStatus === 'pending') {
+      // Small delay to ensure navigation is ready
+      const timer = setTimeout(() => {
+        // Use replace to prevent going back to login
+        navigation.replace('DoctorVerificationUpload');
+      }, 300);
+      return () => clearTimeout(timer);
+    }
+  }, [user, navigation]);
 
   const {
     control,
@@ -56,7 +69,8 @@ export const LoginScreen = () => {
   const onSubmit = async (data: LoginFormData) => {
     setLoading(true);
     try {
-      await login(data.email, data.password, selectedRole);
+      // Backend determines role from user account, so we don't pass role
+      await login(data.email, data.password);
     } catch (error) {
       // Error is handled in AuthContext
     } finally {
@@ -67,7 +81,6 @@ export const LoginScreen = () => {
   const roles: { value: UserRole; label: string; icon: string }[] = [
     { value: 'patient', label: 'Patient', icon: 'user' },
     { value: 'doctor', label: 'Doctor', icon: 'briefcase' },
-    { value: 'pharmacy', label: 'Pharmacy', icon: 'shopping-cart' },
   ];
 
   return (

@@ -24,11 +24,10 @@ import { Feather } from '@expo/vector-icons';
 type RegisterScreenNavigationProp = NativeStackNavigationProp<AuthStackParamList>;
 
 const schema = yup.object({
-  name: yup
+  fullName: yup
     .string()
-    .min(5, 'Name must be at least 5 characters')
-    .max(30, 'Name must be less than 30 characters')
-    .required('Name is required'),
+    .min(2, 'Full name must be at least 2 characters')
+    .required('Full name is required'),
   email: yup.string().email('Invalid email').required('Email is required'),
   password: yup
     .string()
@@ -38,10 +37,17 @@ const schema = yup.object({
     .string()
     .oneOf([yup.ref('password')], 'Passwords must match')
     .required('Confirm password is required'),
+  phone: yup.string().optional(),
+  gender: yup.string().oneOf(['MALE', 'FEMALE', 'OTHER'], 'Invalid gender').optional(),
 });
 
-interface RegisterFormData extends RegisterData {
+interface RegisterFormData {
+  fullName: string;
+  email: string;
+  password: string;
   password_confirmation: string;
+  phone?: string;
+  gender?: 'MALE' | 'FEMALE' | 'OTHER';
 }
 
 export const RegisterScreen = () => {
@@ -50,10 +56,6 @@ export const RegisterScreen = () => {
   const [loading, setLoading] = useState(false);
   const [registerAsPatient, setRegisterAsPatient] = useState(true);
 
-  const handlePharmacyRegister = () => {
-    navigation.navigate('PharmacyRegister');
-  };
-
   const {
     control,
     handleSubmit,
@@ -61,10 +63,12 @@ export const RegisterScreen = () => {
   } = useForm<RegisterFormData>({
     resolver: yupResolver(schema),
     defaultValues: {
-      name: '',
+      fullName: '',
       email: '',
       password: '',
       password_confirmation: '',
+      phone: '',
+      gender: undefined,
     },
   });
 
@@ -74,9 +78,11 @@ export const RegisterScreen = () => {
       const role: UserRole = registerAsPatient ? 'patient' : 'doctor';
       await registerUser(
         {
-          name: data.name,
+          fullName: data.fullName,
           email: data.email,
           password: data.password,
+          phone: data.phone,
+          gender: data.gender,
         },
         role
       );
@@ -115,15 +121,15 @@ export const RegisterScreen = () => {
 
           <Controller
             control={control}
-            name="name"
+            name="fullName"
             render={({ field: { onChange, onBlur, value } }) => (
               <Input
-                label="Name"
-                placeholder="Enter your name"
+                label="Full Name"
+                placeholder="Enter your full name"
                 value={value}
                 onChangeText={onChange}
                 onBlur={onBlur}
-                error={errors.name?.message}
+                error={errors.fullName?.message}
                 style={styles.input}
               />
             )}
@@ -182,7 +188,7 @@ export const RegisterScreen = () => {
           />
 
           <Button
-            title={loading ? 'Registering...' : 'Register as Patient'}
+            title={loading ? 'Registering...' : registerAsPatient ? 'Register as Patient' : 'Register as Doctor'}
             onPress={handleSubmit(onSubmit)}
             loading={loading}
             style={styles.registerButton}
@@ -195,22 +201,15 @@ export const RegisterScreen = () => {
             <View style={styles.dividerLine} />
           </View>
 
-          {/* Register as Doctor Button */}
+          {/* Toggle between Patient and Doctor */}
           <TouchableOpacity
             style={[styles.doctorButton, styles.doctorButtonOutline]}
-            onPress={() => navigation.navigate('DoctorRegister')}
+            onPress={() => setRegisterAsPatient(!registerAsPatient)}
           >
-            <Feather name="briefcase" size={20} color={colors.primary} />
-            <Text style={styles.doctorButtonText}>Register as a Doctor</Text>
-          </TouchableOpacity>
-
-          {/* Register as Pharmacy Button */}
-          <TouchableOpacity
-            style={[styles.doctorButton, styles.doctorButtonOutline]}
-            onPress={handlePharmacyRegister}
-          >
-            <Feather name="shopping-cart" size={20} color={colors.primary} />
-            <Text style={styles.doctorButtonText}>Register as Pharmacy</Text>
+            <Feather name={registerAsPatient ? "briefcase" : "user"} size={20} color={colors.primary} />
+            <Text style={styles.doctorButtonText}>
+              {registerAsPatient ? 'Register as Doctor' : 'Register as Patient'}
+            </Text>
           </TouchableOpacity>
 
           <View style={styles.loginContainer}>

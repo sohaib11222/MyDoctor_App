@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo } from 'react';
 import {
   View,
   Text,
@@ -8,164 +8,161 @@ import {
   SafeAreaView,
   Image,
   FlatList,
+  ActivityIndicator,
+  RefreshControl,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { useQuery } from '@tanstack/react-query';
 import { MoreStackParamList, AppointmentsStackParamList, HomeStackParamList } from '../../navigation/types';
 import { colors } from '../../constants/colors';
 import { Ionicons } from '@expo/vector-icons';
+import * as doctorApi from '../../services/doctor';
+import { API_BASE_URL } from '../../config/api';
 
 type DoctorDashboardScreenNavigationProp = NativeStackNavigationProp<MoreStackParamList>;
 
-interface StatCard {
-  id: string;
-  title: string;
-  value: string;
-  change: string;
-  changeType: 'positive' | 'negative';
-  icon: string;
-}
+const defaultAvatar = require('../../../assets/avatar.png');
 
-interface Appointment {
-  id: string;
-  appointmentId: string;
-  patientName: string;
-  patientAvatar: any;
-  date: string;
-  type: string;
-}
+/**
+ * Normalize image URL for mobile app
+ */
+const normalizeImageUrl = (imageUri: string | undefined | null): string | null => {
+  if (!imageUri || typeof imageUri !== 'string') {
+    return null;
+  }
+  
+  const trimmedUri = imageUri.trim();
+  if (!trimmedUri) {
+    return null;
+  }
+  
+  const baseUrl = API_BASE_URL.replace('/api', '');
+  let deviceHost: string;
+  try {
+    const urlObj = new URL(baseUrl);
+    deviceHost = urlObj.hostname;
+  } catch (e) {
+    const match = baseUrl.match(/https?:\/\/([^\/:]+)/);
+    deviceHost = match ? match[1] : '192.168.1.11';
+  }
+  
+  if (trimmedUri.startsWith('http://') || trimmedUri.startsWith('https://')) {
+    let normalizedUrl = trimmedUri;
+    if (normalizedUrl.includes('localhost')) {
+      normalizedUrl = normalizedUrl.replace('localhost', deviceHost);
+    }
+    if (normalizedUrl.includes('127.0.0.1')) {
+      normalizedUrl = normalizedUrl.replace('127.0.0.1', deviceHost);
+    }
+    return normalizedUrl;
+  }
+  
+  const imagePath = trimmedUri.startsWith('/') ? trimmedUri : `/${trimmedUri}`;
+  return `${baseUrl}${imagePath}`;
+};
 
-interface Invoice {
-  id: string;
-  patientName: string;
-  patientAvatar: any;
-  appointmentId: string;
-  amount: string;
-  paidOn: string;
-}
+/**
+ * Format date and time
+ */
+const formatDateTime = (date: string, time?: string): string => {
+  if (!date) return 'N/A';
+  const d = new Date(date);
+  const dateStr = d.toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' });
+  return time ? `${dateStr} ${time}` : dateStr;
+};
 
-interface Notification {
-  id: string;
-  icon: string;
-  iconColor: string;
-  message: string;
-  time: string;
-}
-
-const stats: StatCard[] = [
-  {
-    id: '1',
-    title: 'Total Patient',
-    value: '978',
-    change: '15% From Last Week',
-    changeType: 'positive',
-    icon: 'people',
-  },
-  {
-    id: '2',
-    title: 'Patients Today',
-    value: '80',
-    change: '15% From Yesterday',
-    changeType: 'negative',
-    icon: 'person-add',
-  },
-  {
-    id: '3',
-    title: 'Appointments Today',
-    value: '50',
-    change: '20% From Yesterday',
-    changeType: 'positive',
-    icon: 'calendar',
-  },
-];
-
-const appointments: Appointment[] = [
-  {
-    id: '1',
-    appointmentId: '#Apt0001',
-    patientName: 'Adrian Marshall',
-    patientAvatar: require('../../../assets/avatar.png'),
-    date: '11 Nov 2024 10.45 AM',
-    type: 'General',
-  },
-  {
-    id: '2',
-    appointmentId: '#Apt0002',
-    patientName: 'Kelly Stevens',
-    patientAvatar: require('../../../assets/avatar.png'),
-    date: '10 Nov 2024 11.00 AM',
-    type: 'Clinic Consulting',
-  },
-  {
-    id: '3',
-    appointmentId: '#Apt0003',
-    patientName: 'Samuel Anderson',
-    patientAvatar: require('../../../assets/avatar.png'),
-    date: '03 Nov 2024 02.00 PM',
-    type: 'General',
-  },
-];
-
-const invoices: Invoice[] = [
-  {
-    id: '1',
-    patientName: 'Adrian',
-    patientAvatar: require('../../../assets/avatar.png'),
-    appointmentId: '#Apt0001',
-    amount: '$450',
-    paidOn: '11 Nov 2024',
-  },
-  {
-    id: '2',
-    patientName: 'Kelly',
-    patientAvatar: require('../../../assets/avatar.png'),
-    appointmentId: '#Apt0002',
-    amount: '$500',
-    paidOn: '10 Nov 2024',
-  },
-  {
-    id: '3',
-    patientName: 'Samuel',
-    patientAvatar: require('../../../assets/avatar.png'),
-    appointmentId: '#Apt0003',
-    amount: '$320',
-    paidOn: '03 Nov 2024',
-  },
-];
-
-const notifications: Notification[] = [
-  {
-    id: '1',
-    icon: 'notifications',
-    iconColor: colors.primary,
-    message: 'Booking Confirmed on 21 Mar 2024 10:30 AM',
-    time: 'Just Now',
-  },
-  {
-    id: '2',
-    icon: 'star',
-    iconColor: colors.warning,
-    message: 'You have a New Review for your Appointment',
-    time: '5 Days ago',
-  },
-  {
-    id: '3',
-    icon: 'calendar',
-    iconColor: colors.error,
-    message: 'You have Appointment with Ahmed by 01:20 PM',
-    time: '12:55 PM',
-  },
-];
+/**
+ * Format currency
+ */
+const formatCurrency = (amount: number): string => {
+  if (amount === null || amount === undefined) return '$0';
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+  }).format(amount);
+};
 
 export const DoctorDashboardScreen = () => {
   const navigation = useNavigation<DoctorDashboardScreenNavigationProp>();
+  const [refreshing, setRefreshing] = React.useState(false);
 
-  const renderStatCard = ({ item }: { item: StatCard }) => (
+  // Fetch dashboard data
+  const { data: dashboardResponse, isLoading, error, refetch } = useQuery({
+    queryKey: ['doctorDashboard'],
+    queryFn: () => doctorApi.getDoctorDashboard(),
+    refetchInterval: 30000, // Refetch every 30 seconds
+    retry: 1,
+  });
+
+  const dashboard = useMemo(() => {
+    if (!dashboardResponse) return null;
+    const responseData = dashboardResponse.data || dashboardResponse;
+    if (responseData && (responseData.totalPatients !== undefined || responseData.todayAppointments !== undefined)) {
+      return responseData;
+    }
+    if (responseData && responseData.data && typeof responseData.data === 'object') {
+      return responseData.data;
+    }
+    return responseData;
+  }, [dashboardResponse]);
+
+  const stats = useMemo(() => {
+    if (!dashboard) {
+      return [
+        { id: '1', title: 'Total Patients', value: '0', change: '0 This Week', changeType: 'positive' as const, icon: 'people' },
+        { id: '2', title: "Today's Appointments", value: '0', change: 'No appointments', changeType: 'positive' as const, icon: 'calendar' },
+        { id: '3', title: 'Revenue', value: '$0', change: 'From Appointments', changeType: 'positive' as const, icon: 'cash' },
+      ];
+    }
+    return [
+      {
+        id: '1',
+        title: 'Total Patients',
+        value: String(dashboard.totalPatients || 0),
+        change: `${dashboard.weeklyAppointments?.count || 0} This Week`,
+        changeType: 'positive' as const,
+        icon: 'people',
+      },
+      {
+        id: '2',
+        title: "Today's Appointments",
+        value: String(dashboard.todayAppointments?.count || 0),
+        change: (dashboard.todayAppointments?.count || 0) > 0 ? 'Active' : 'No appointments',
+        changeType: 'positive' as const,
+        icon: 'calendar',
+      },
+      {
+        id: '3',
+        title: 'Revenue',
+        value: formatCurrency(dashboard.earningsFromAppointments || 0),
+        change: 'From Appointments',
+        changeType: 'positive' as const,
+        icon: 'cash',
+      },
+    ];
+  }, [dashboard]);
+
+  const todayAppointments = useMemo(() => {
+    return dashboard?.todayAppointments?.appointments || [];
+  }, [dashboard]);
+
+  const upcomingAppointments = useMemo(() => {
+    return dashboard?.upcomingAppointments?.appointments || [];
+  }, [dashboard]);
+
+  const onRefresh = React.useCallback(async () => {
+    setRefreshing(true);
+    await refetch();
+    setRefreshing(false);
+  }, [refetch]);
+
+  const renderStatCard = ({ item }: { item: typeof stats[0] }) => (
     <View style={styles.statCard}>
       <View style={styles.statContent}>
         <Text style={styles.statTitle}>{item.title}</Text>
         <Text style={styles.statValue}>{item.value}</Text>
-        <Text style={[styles.statChange, item.changeType === 'positive' ? styles.positiveChange : styles.negativeChange]}>
+        <Text style={[styles.statChange, styles.positiveChange]}>
           {item.change}
         </Text>
       </View>
@@ -175,81 +172,124 @@ export const DoctorDashboardScreen = () => {
     </View>
   );
 
-  const renderAppointment = ({ item }: { item: Appointment }) => (
-    <TouchableOpacity
-      style={styles.appointmentItem}
-      onPress={() => {
-        (navigation as any).navigate('Appointments', {
-          screen: 'AppointmentDetails',
-          params: { appointmentId: item.id },
-        });
-      }}
-      activeOpacity={0.7}
-    >
-      <View style={styles.patientInfo}>
-        <Image source={item.patientAvatar} style={styles.patientAvatar} />
-        <View style={styles.patientDetails}>
-          <Text style={styles.appointmentId}>{item.appointmentId}</Text>
-          <Text style={styles.patientName}>{item.patientName}</Text>
-        </View>
-      </View>
-      <View style={styles.appointmentMeta}>
-        <Text style={styles.appointmentDate}>{item.date}</Text>
-        <View style={styles.typeBadge}>
-          <Text style={styles.typeText}>{item.type}</Text>
-        </View>
-      </View>
-      <View style={styles.appointmentActions}>
-        <TouchableOpacity style={styles.actionButton} activeOpacity={0.7}>
-          <Ionicons name="checkmark" size={20} color={colors.success} />
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.actionButton} activeOpacity={0.7}>
-          <Ionicons name="close" size={20} color={colors.error} />
-        </TouchableOpacity>
-      </View>
-    </TouchableOpacity>
-  );
+  const renderAppointment = ({ item }: { item: doctorApi.Appointment }) => {
+    const patient = typeof item.patientId === 'object' ? item.patientId : null;
+    const patientId = patient?._id || (typeof item.patientId === 'string' ? item.patientId : '');
+    const patientName = patient?.fullName || 'Unknown Patient';
+    const patientImage = patient?.profileImage ? normalizeImageUrl(patient.profileImage) : null;
+    const appointmentNumber = item.appointmentNumber || `#${item._id.slice(-6)}`;
 
-  const renderInvoice = ({ item }: { item: Invoice }) => (
-    <TouchableOpacity style={styles.invoiceItem} activeOpacity={0.7}>
-      <View style={styles.patientInfo}>
-        <Image source={item.patientAvatar} style={styles.patientAvatar} />
-        <View style={styles.patientDetails}>
-          <Text style={styles.patientName}>{item.patientName}</Text>
-          <Text style={styles.appointmentId}>{item.appointmentId}</Text>
+    return (
+      <TouchableOpacity
+        style={styles.appointmentItem}
+        onPress={() => {
+          (navigation as any).navigate('Appointments', {
+            screen: 'AppointmentDetails',
+            params: { appointmentId: item._id },
+          });
+        }}
+        activeOpacity={0.7}
+      >
+        <View style={styles.patientInfo}>
+          <Image
+            source={patientImage ? { uri: patientImage } : defaultAvatar}
+            style={styles.patientAvatar}
+            defaultSource={defaultAvatar}
+          />
+          <View style={styles.patientDetails}>
+            <Text style={styles.appointmentId}>{appointmentNumber}</Text>
+            <Text style={styles.patientName}>{patientName}</Text>
+          </View>
         </View>
-      </View>
-      <View style={styles.invoiceMeta}>
-        <View style={styles.invoiceAmount}>
-          <Text style={styles.amountLabel}>Amount</Text>
-          <Text style={styles.amountValue}>{item.amount}</Text>
+        <View style={styles.appointmentMeta}>
+          <Text style={styles.appointmentDate}>{formatDateTime(item.appointmentDate, item.appointmentTime)}</Text>
+          <View style={styles.typeBadge}>
+            <Text style={styles.typeText}>{item.bookingType === 'ONLINE' ? 'Online' : 'Visit'}</Text>
+          </View>
         </View>
-        <View style={styles.invoiceDate}>
-          <Text style={styles.dateLabel}>Paid On</Text>
-          <Text style={styles.dateValue}>{item.paidOn}</Text>
+        <View style={styles.appointmentActions}>
+          <TouchableOpacity
+            style={styles.actionButton}
+            onPress={() => {
+              (navigation as any).navigate('Chat', {
+                screen: 'ChatDetail',
+                params: { 
+                  conversationId: item._id,
+                  patientId: patientId,
+                  appointmentId: item._id,
+                },
+              });
+            }}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="chatbubble-outline" size={20} color={colors.primary} />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.actionButton}
+            onPress={() => {
+              (navigation as any).navigate('Appointments', {
+                screen: 'AppointmentDetails',
+                params: { appointmentId: item._id },
+              });
+            }}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="eye-outline" size={20} color={colors.success} />
+          </TouchableOpacity>
         </View>
-      </View>
-      <TouchableOpacity style={styles.viewButton} activeOpacity={0.7}>
-        <Ionicons name="eye" size={20} color={colors.primary} />
       </TouchableOpacity>
-    </TouchableOpacity>
+    );
+  };
+
+  // Recent invoices - placeholder for now (would need separate API)
+  const recentInvoices: any[] = [];
+
+  const renderInvoice = () => (
+    <View style={styles.emptyState}>
+      <Text style={styles.emptyStateText}>No recent invoices</Text>
+      <TouchableOpacity
+        onPress={() => navigation.navigate('Invoices')}
+        style={styles.emptyStateButton}
+      >
+        <Text style={styles.emptyStateButtonText}>View All Invoices</Text>
+      </TouchableOpacity>
+    </View>
   );
 
-  const renderNotification = ({ item }: { item: Notification }) => (
-    <TouchableOpacity style={styles.notificationItem} activeOpacity={0.7}>
-      <View style={[styles.notificationIcon, { backgroundColor: `${item.iconColor}20` }]}>
-        <Ionicons name={item.icon as any} size={20} color={item.iconColor} />
-      </View>
-      <View style={styles.notificationContent}>
-        <Text style={styles.notificationMessage}>{item.message}</Text>
-        <Text style={styles.notificationTime}>{item.time}</Text>
-      </View>
-    </TouchableOpacity>
-  );
+  if (isLoading && !dashboard) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={colors.primary} />
+          <Text style={styles.loadingText}>Loading dashboard...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (error) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.errorContainer}>
+          <Ionicons name="alert-circle-outline" size={64} color={colors.textSecondary} />
+          <Text style={styles.errorTitle}>Error loading dashboard</Text>
+          <Text style={styles.errorText}>
+            {error instanceof Error ? error.message : 'Failed to load dashboard data'}
+          </Text>
+          <TouchableOpacity style={styles.retryButton} onPress={() => refetch()}>
+            <Text style={styles.retryButtonText}>Retry</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container}>
-      <ScrollView showsVerticalScrollIndicator={false}>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+      >
         {/* Stats Cards */}
         <View style={styles.statsContainer}>
           <FlatList
@@ -262,10 +302,10 @@ export const DoctorDashboardScreen = () => {
           />
         </View>
 
-        {/* Appointments Section */}
+        {/* Today's Appointments Section */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Appointments</Text>
+            <Text style={styles.sectionTitle}>Today's Appointments</Text>
             <TouchableOpacity
               onPress={() => {
                 (navigation as any).navigate('Appointments', { screen: 'Appointments' });
@@ -275,13 +315,42 @@ export const DoctorDashboardScreen = () => {
               <Text style={styles.viewAllText}>View All</Text>
             </TouchableOpacity>
           </View>
-          <FlatList
-            data={appointments}
-            renderItem={renderAppointment}
-            keyExtractor={(item) => item.id}
-            scrollEnabled={false}
-          />
+          {todayAppointments.length === 0 ? (
+            <View style={styles.emptyState}>
+              <Text style={styles.emptyStateText}>No appointments scheduled for today</Text>
+            </View>
+          ) : (
+            <FlatList
+              data={todayAppointments.slice(0, 5)}
+              renderItem={renderAppointment}
+              keyExtractor={(item) => item._id}
+              scrollEnabled={false}
+            />
+          )}
         </View>
+
+        {/* Upcoming Appointments Section */}
+        {upcomingAppointments.length > 0 && (
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>Upcoming Appointments</Text>
+              <TouchableOpacity
+                onPress={() => {
+                  (navigation as any).navigate('Appointments', { screen: 'Appointments' });
+                }}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.viewAllText}>View All</Text>
+              </TouchableOpacity>
+            </View>
+            <FlatList
+              data={upcomingAppointments.slice(0, 3)}
+              renderItem={renderAppointment}
+              keyExtractor={(item) => item._id}
+              scrollEnabled={false}
+            />
+          </View>
+        )}
 
         {/* Recent Invoices Section */}
         <View style={styles.section}>
@@ -294,31 +363,7 @@ export const DoctorDashboardScreen = () => {
               <Text style={styles.viewAllText}>View All</Text>
             </TouchableOpacity>
           </View>
-          <FlatList
-            data={invoices}
-            renderItem={renderInvoice}
-            keyExtractor={(item) => item.id}
-            scrollEnabled={false}
-          />
-        </View>
-
-        {/* Notifications Section */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Notifications</Text>
-            <TouchableOpacity
-              onPress={() => navigation.navigate('Notifications')}
-              activeOpacity={0.7}
-            >
-              <Text style={styles.viewAllText}>View All</Text>
-            </TouchableOpacity>
-          </View>
-          <FlatList
-            data={notifications}
-            renderItem={renderNotification}
-            keyExtractor={(item) => item.id}
-            scrollEnabled={false}
-          />
+          {renderInvoice()}
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -537,6 +582,67 @@ const styles = StyleSheet.create({
   notificationTime: {
     fontSize: 12,
     color: colors.textSecondary,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 14,
+    color: colors.textSecondary,
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  errorTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: colors.text,
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  errorText: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    textAlign: 'center',
+    marginBottom: 20,
+  },
+  retryButton: {
+    backgroundColor: colors.primary,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 8,
+  },
+  retryButtonText: {
+    color: colors.background,
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  emptyState: {
+    padding: 20,
+    alignItems: 'center',
+  },
+  emptyStateText: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    marginBottom: 12,
+  },
+  emptyStateButton: {
+    backgroundColor: colors.primary,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  emptyStateButtonText: {
+    color: colors.background,
+    fontSize: 12,
+    fontWeight: '600',
   },
 });
 

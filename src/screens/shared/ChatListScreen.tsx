@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   View,
   Text,
@@ -10,13 +10,20 @@ import {
   SafeAreaView,
   ScrollView,
   Dimensions,
+  ActivityIndicator,
+  RefreshControl,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ChatStackParamList } from '../../navigation/types';
 import { useAuth } from '../../contexts/AuthContext';
 import { colors } from '../../constants/colors';
 import { Ionicons, Feather } from '@expo/vector-icons';
+import * as chatApi from '../../services/chat';
+import * as appointmentApi from '../../services/appointment';
+import { API_BASE_URL } from '../../config/api';
+import Toast from 'react-native-toast-message';
 
 type ChatListScreenNavigationProp = StackNavigationProp<ChatStackParamList, 'ChatList'>;
 
@@ -24,6 +31,7 @@ const { width } = Dimensions.get('window');
 
 interface Chat {
   id: string;
+  conversationId: string;
   name: string;
   avatar: any; // Changed to any for require() images
   lastMessage: string;
@@ -33,173 +41,189 @@ interface Chat {
   unreadCount?: number;
   messageType?: 'text' | 'video' | 'audio' | 'file' | 'image' | 'location' | 'missed-call';
   isRead?: boolean;
+  conversationType?: 'DOCTOR_PATIENT' | 'ADMIN_DOCTOR';
+  appointmentId?: string;
+  patientId?: string;
+  doctorId?: string;
+  adminId?: string;
 }
 
-// Patient chats (for patients - showing doctors)
-const patientChats: Chat[] = [
-  {
-    id: '1',
-    name: 'Adrian Marshall',
-    avatar: require('../../../assets/avatar.png'),
-    lastMessage: 'Have you called them?',
-    lastTime: 'Just Now',
-    isOnline: true,
-    isPinned: true,
-    isRead: true,
-    messageType: 'text',
-  },
-  {
-    id: '2',
-    name: 'Dr Joseph Boyd',
-    avatar: require('../../../assets/avatar.png'),
-    lastMessage: 'Video',
-    lastTime: 'Yesterday',
-    isOnline: false,
-    isPinned: true,
-    isRead: false,
-    messageType: 'video',
-  },
-  {
-    id: '3',
-    name: 'Dr Edalin Hendry',
-    avatar: require('../../../assets/avatar.png'),
-    lastMessage: 'Prescription.doc',
-    lastTime: '10:20 PM',
-    isOnline: true,
-    isPinned: true,
-    isRead: true,
-    messageType: 'file',
-  },
-  {
-    id: '4',
-    name: 'Kelly Stevens',
-    avatar: require('../../../assets/avatar.png'),
-    lastMessage: 'Have you called them?',
-    lastTime: 'Just Now',
-    isOnline: true,
-    isPinned: false,
-    unreadCount: 2,
-    messageType: 'text',
-  },
-  {
-    id: '5',
-    name: 'Robert Miller',
-    avatar: require('../../../assets/avatar.png'),
-    lastMessage: 'Video',
-    lastTime: 'Yesterday',
-    isOnline: true,
-    isPinned: false,
-    isRead: true,
-    messageType: 'video',
-  },
-  {
-    id: '6',
-    name: 'Emily Musick',
-    avatar: require('../../../assets/avatar.png'),
-    lastMessage: 'Project Tools.doc',
-    lastTime: '10:20 PM',
-    isOnline: false,
-    isPinned: false,
-    messageType: 'file',
-  },
-  {
-    id: '7',
-    name: 'Samuel James',
-    avatar: require('../../../assets/avatar.png'),
-    lastMessage: 'Audio',
-    lastTime: '12:30 PM',
-    isOnline: true,
-    isPinned: false,
-    isRead: true,
-    messageType: 'audio',
-  },
-  {
-    id: '8',
-    name: 'Dr Shanta Neill',
-    avatar: require('../../../assets/avatar.png'),
-    lastMessage: 'Missed Call',
-    lastTime: 'Yesterday',
-    isOnline: false,
-    isPinned: false,
-    messageType: 'missed-call',
-  },
-];
+/**
+ * Normalize image URL for mobile app
+ */
+const normalizeImageUrl = (imageUri: string | undefined | null): string | null => {
+  if (!imageUri || typeof imageUri !== 'string') {
+    return null;
+  }
+  
+  const trimmedUri = imageUri.trim();
+  if (!trimmedUri) {
+    return null;
+  }
+  
+  const baseUrl = API_BASE_URL.replace('/api', '');
+  let deviceHost: string;
+  try {
+    const urlObj = new URL(baseUrl);
+    deviceHost = urlObj.hostname;
+  } catch (e) {
+    const match = baseUrl.match(/https?:\/\/([^\/:]+)/);
+    deviceHost = match ? match[1] : '192.168.0.114';
+  }
+  
+  if (trimmedUri.startsWith('http://') || trimmedUri.startsWith('https://')) {
+    let normalizedUrl = trimmedUri;
+    if (normalizedUrl.includes('localhost')) {
+      normalizedUrl = normalizedUrl.replace('localhost', deviceHost);
+    }
+    if (normalizedUrl.includes('127.0.0.1')) {
+      normalizedUrl = normalizedUrl.replace('127.0.0.1', deviceHost);
+    }
+    return normalizedUrl;
+  }
+  
+  const imagePath = trimmedUri.startsWith('/') ? trimmedUri : `/${trimmedUri}`;
+  return `${baseUrl}${imagePath}`;
+};
 
-// Doctor chats (for doctors - showing patients)
-const doctorChats: Chat[] = [
-  {
-    id: '1',
-    name: 'Adrian Marshall',
-    avatar: require('../../../assets/avatar.png'),
-    lastMessage: 'Thank you doctor for the consultation',
-    lastTime: 'Just Now',
-    isOnline: true,
-    isPinned: true,
-    isRead: true,
-    messageType: 'text',
-  },
-  {
-    id: '2',
-    name: 'Kelly Stevens',
-    avatar: require('../../../assets/avatar.png'),
-    lastMessage: 'Video',
-    lastTime: 'Yesterday',
-    isOnline: false,
-    isPinned: true,
-    isRead: false,
-    messageType: 'video',
-  },
-  {
-    id: '3',
-    name: 'Samuel Anderson',
-    avatar: require('../../../assets/avatar.png'),
-    lastMessage: 'Lab Report.pdf',
-    lastTime: '10:20 PM',
-    isOnline: true,
-    isPinned: true,
-    isRead: true,
-    messageType: 'file',
-  },
-  {
-    id: '4',
-    name: 'Catherine Griffin',
-    avatar: require('../../../assets/avatar.png'),
-    lastMessage: 'When can I schedule my next appointment?',
-    lastTime: 'Just Now',
-    isOnline: true,
-    isPinned: false,
-    unreadCount: 2,
-    messageType: 'text',
-  },
-  {
-    id: '5',
-    name: 'Robert Hutchinson',
-    avatar: require('../../../assets/avatar.png'),
-    lastMessage: 'Video',
-    lastTime: 'Yesterday',
-    isOnline: true,
-    isPinned: false,
-    isRead: true,
-    messageType: 'video',
-  },
-];
+const defaultAvatar = require('../../../assets/avatar.png');
 
-const onlineContacts = [
-  { id: '1', avatar: require('../../../assets/Group 42.png') },
-  { id: '2', avatar: require('../../../assets/Group 42.png') },
-  { id: '3', avatar: require('../../../assets/Group 42.png') },
-  { id: '4', avatar: require('../../../assets/Group 42.png') },
-  { id: '5', avatar: require('../../../assets/Group 42.png') },
-  { id: '6', avatar: require('../../../assets/Group 42.png') },
-];
+/**
+ * Format date to relative time string
+ */
+const formatRelativeTime = (dateString: string): string => {
+  if (!dateString) return '';
+  
+  const date = new Date(dateString);
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffMins = Math.floor(diffMs / 60000);
+  const diffHours = Math.floor(diffMs / 3600000);
+  const diffDays = Math.floor(diffMs / 86400000);
+  
+  if (diffMins < 1) return 'Just Now';
+  if (diffMins < 60) return `${diffMins}m ago`;
+  if (diffHours < 24) return `${diffHours}h ago`;
+  if (diffDays < 7) return `${diffDays}d ago`;
+  
+  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+};
 
 const ChatListScreen = () => {
   const navigation = useNavigation<ChatListScreenNavigationProp>();
   const { user } = useAuth();
   const isDoctor = user?.role === 'doctor';
+  const queryClient = useQueryClient();
   const [searchQuery, setSearchQuery] = useState('');
+  const [refreshing, setRefreshing] = useState(false);
 
-  const allChats = isDoctor ? doctorChats : patientChats;
+  // For doctors: Fetch conversations directly
+  // For patients: Fetch appointments and create conversations from them
+  const { data: conversationsResponse, isLoading: conversationsLoading, error: conversationsError, refetch: refetchConversations } = useQuery({
+    queryKey: ['conversations', user?.id],
+    queryFn: () => chatApi.getConversations({ page: 1, limit: 100 }),
+    enabled: !!user && isDoctor,
+    retry: 1,
+  });
+
+  // Fetch patient appointments for patient chat
+  const { data: appointmentsResponse, isLoading: appointmentsLoading, refetch: refetchAppointments } = useQuery({
+    queryKey: ['patientAppointments', user?.id],
+    queryFn: () => appointmentApi.listAppointments({ status: 'CONFIRMED', limit: 100 }),
+    enabled: !!user && !isDoctor && user?.role === 'patient',
+    retry: 1,
+  });
+
+  const isLoading = isDoctor ? conversationsLoading : appointmentsLoading;
+  const error = isDoctor ? conversationsError : null;
+
+  // Fetch unread count
+  const { data: unreadResponse } = useQuery({
+    queryKey: ['unreadCount', user?.id],
+    queryFn: () => chatApi.getUnreadCount(),
+    enabled: !!user && isDoctor,
+    refetchInterval: 30000, // Poll every 30 seconds
+  });
+
+  // Transform conversations to Chat format
+  const allChats = useMemo(() => {
+    if (isDoctor) {
+      // Doctor: Use conversations from API (both patient and admin conversations)
+      if (!conversationsResponse?.data?.conversations) return [];
+      
+      return conversationsResponse.data.conversations.map((conv: chatApi.Conversation): Chat => {
+      // Determine recipient name and image based on conversation type
+      let name = '';
+      let imageUri: string | null = null;
+      
+      if (conv.conversationType === 'DOCTOR_PATIENT') {
+        // Doctor viewing patient
+        name = conv.patientId?.fullName || 'Unknown Patient';
+        imageUri = conv.patientId?.profileImage || null;
+      } else if (conv.conversationType === 'ADMIN_DOCTOR') {
+        // Doctor viewing admin
+        name = conv.adminId?.fullName || 'Admin Support';
+        imageUri = conv.adminId?.profileImage || null;
+      }
+      
+      const lastMessage = conv.lastMessage?.message || 'No messages yet';
+      const lastTime = formatRelativeTime(conv.lastMessageAt || conv.lastMessage?.createdAt || '');
+      const unreadCount = conv.unreadCount || 0;
+      
+      return {
+        id: conv._id,
+        conversationId: conv._id,
+        name,
+        avatar: imageUri ? { uri: normalizeImageUrl(imageUri) || undefined } : defaultAvatar,
+        lastMessage,
+        lastTime,
+        isOnline: false, // TODO: Implement online status
+        isPinned: false, // TODO: Implement pinning
+        unreadCount: unreadCount > 0 ? unreadCount : undefined,
+        messageType: 'text',
+        isRead: unreadCount === 0,
+        conversationType: conv.conversationType,
+        appointmentId: typeof conv.appointmentId === 'object' ? conv.appointmentId?._id : conv.appointmentId,
+        patientId: typeof conv.patientId === 'object' ? conv.patientId?._id : conv.patientId,
+        doctorId: typeof conv.doctorId === 'object' ? conv.doctorId?._id : conv.doctorId,
+        adminId: typeof conv.adminId === 'object' ? conv.adminId?._id : conv.adminId,
+      };
+    });
+    } else {
+      // Patient: Create conversations from appointments
+      if (!appointmentsResponse?.data?.appointments) return [];
+      
+      return appointmentsResponse.data.appointments.map((apt: any): Chat => {
+        const doctorId = typeof apt.doctorId === 'object' ? apt.doctorId?._id : apt.doctorId;
+        const doctor = typeof apt.doctorId === 'object' ? apt.doctorId : null;
+        const appointmentId = apt._id;
+        
+        const name = doctor?.fullName || 'Unknown Doctor';
+        const imageUri = doctor?.profileImage || null;
+        const lastMessage = 'Click to start conversation';
+        const lastTime = formatRelativeTime(apt.appointmentDate || apt.createdAt || '');
+        
+        return {
+          id: `conv-${appointmentId}`,
+          conversationId: '', // Will be set when conversation is created
+          name,
+          avatar: imageUri ? { uri: normalizeImageUrl(imageUri) || undefined } : defaultAvatar,
+          lastMessage,
+          lastTime,
+          isOnline: false,
+          isPinned: false,
+          unreadCount: undefined,
+          messageType: 'text',
+          isRead: true,
+          conversationType: 'DOCTOR_PATIENT',
+          appointmentId,
+          patientId: user?.id,
+          doctorId,
+        };
+      });
+    }
+  }, [conversationsResponse, appointmentsResponse, isDoctor, user?.id]);
+
   const pinnedChats = allChats.filter((chat) => chat.isPinned);
   const recentChats = allChats.filter((chat) => !chat.isPinned);
 
@@ -209,6 +233,19 @@ const ChatListScreen = () => {
   const filteredRecentChats = recentChats.filter((chat) =>
     chat.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    if (isDoctor) {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['conversations'] }),
+        queryClient.invalidateQueries({ queryKey: ['unreadCount'] }),
+      ]);
+    } else {
+      await queryClient.invalidateQueries({ queryKey: ['patientAppointments'] });
+    }
+    setRefreshing(false);
+  };
 
   const getMessageIcon = (type?: string) => {
     switch (type) {
@@ -229,12 +266,33 @@ const ChatListScreen = () => {
     }
   };
 
-  const renderChatItem = ({ item }: { item: Chat }) => (
-    <TouchableOpacity
-      style={styles.chatItem}
-      onPress={() => navigation.navigate('ChatDetail', { recipientName: item.name, chatId: item.id })}
-      activeOpacity={0.7}
-    >
+  const renderChatItem = ({ item }: { item: Chat }) => {
+    const handlePress = () => {
+      if (item.conversationType === 'ADMIN_DOCTOR') {
+        // Navigate to admin chat
+        navigation.navigate('AdminChat', {
+          conversationId: item.conversationId,
+          adminId: item.adminId || '',
+        });
+      } else {
+        // Navigate to patient/doctor chat
+        navigation.navigate('ChatDetail', {
+          recipientName: item.name,
+          chatId: item.conversationId,
+          conversationId: item.conversationId,
+          appointmentId: item.appointmentId,
+          patientId: item.patientId,
+          doctorId: item.doctorId,
+        });
+      }
+    };
+
+    return (
+      <TouchableOpacity
+        style={styles.chatItem}
+        onPress={handlePress}
+        activeOpacity={0.7}
+      >
       <View style={styles.avatarContainer}>
         <Image source={item.avatar} style={styles.avatar} />
         {item.isOnline && <View style={styles.onlineIndicator} />}
@@ -276,7 +334,8 @@ const ChatListScreen = () => {
         </View>
       </View>
     </TouchableOpacity>
-  );
+    );
+  };
 
   return (
     <SafeAreaView style={styles.container}>
@@ -287,7 +346,7 @@ const ChatListScreen = () => {
           {isDoctor && (
             <TouchableOpacity
               style={styles.adminChatButton}
-              onPress={() => navigation.navigate('AdminChat')}
+              onPress={() => navigation.navigate('AdminChat', {})}
               activeOpacity={0.7}
             >
               <Ionicons name="headset-outline" size={20} color={colors.textWhite} />
@@ -308,30 +367,42 @@ const ChatListScreen = () => {
         </View>
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false}>
-        {/* Online Now Section */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Online Now</Text>
-            <TouchableOpacity activeOpacity={0.7}>
-              <Text style={styles.viewAllText}>View All</Text>
+      <ScrollView 
+        showsVerticalScrollIndicator={false}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />}
+      >
+        {isLoading && (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color={colors.primary} />
+            <Text style={styles.loadingText}>Loading conversations...</Text>
+          </View>
+        )}
+        
+        {error && (
+          <View style={styles.errorContainer}>
+            <Ionicons name="alert-circle-outline" size={48} color={colors.error} />
+            <Text style={styles.errorText}>Failed to load conversations</Text>
+            <TouchableOpacity style={styles.retryButton} onPress={() => {
+              if (isDoctor) {
+                refetchConversations();
+              } else {
+                refetchAppointments();
+              }
+            }}>
+              <Text style={styles.retryButtonText}>Retry</Text>
             </TouchableOpacity>
           </View>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.onlineContactsContainer}
-          >
-            {onlineContacts.map((contact) => (
-              <TouchableOpacity key={contact.id} style={styles.onlineContact} activeOpacity={0.7}>
-                <View style={styles.onlineAvatarContainer}>
-                  <Image source={contact.avatar} style={styles.onlineAvatar} />
-                  <View style={styles.onlineIndicatorSmall} />
-                </View>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-        </View>
+        )}
+        
+        {!isLoading && !error && allChats.length === 0 && (
+          <View style={styles.emptyContainer}>
+            <Ionicons name="chatbubbles-outline" size={64} color={colors.textLight} />
+            <Text style={styles.emptyText}>No conversations yet</Text>
+            <Text style={styles.emptySubtext}>
+              {isDoctor ? 'Start chatting with your patients' : 'Start chatting with your doctor'}
+            </Text>
+          </View>
+        )}
 
         {/* Pinned Chat Section */}
         {filteredPinnedChats.length > 0 && (
@@ -567,6 +638,56 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '600',
     color: colors.textWhite,
+  },
+  loadingContainer: {
+    padding: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 14,
+    color: colors.textSecondary,
+  },
+  errorContainer: {
+    padding: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  errorText: {
+    marginTop: 12,
+    fontSize: 14,
+    color: colors.error,
+    textAlign: 'center',
+  },
+  retryButton: {
+    marginTop: 16,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    backgroundColor: colors.primary,
+    borderRadius: 8,
+  },
+  retryButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.textWhite,
+  },
+  emptyContainer: {
+    padding: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emptyText: {
+    marginTop: 16,
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.text,
+  },
+  emptySubtext: {
+    marginTop: 8,
+    fontSize: 14,
+    color: colors.textSecondary,
+    textAlign: 'center',
   },
 });
 

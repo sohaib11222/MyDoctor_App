@@ -9,72 +9,76 @@ import {
   Dimensions,
   SafeAreaView,
   StatusBar,
+  ActivityIndicator,
+  FlatList,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { useQuery } from '@tanstack/react-query';
 import { PharmacyStackParamList } from '../../navigation/types';
 import { Button } from '../../components/common/Button';
 import { colors } from '../../constants/colors';
 import { Ionicons } from '@expo/vector-icons';
+import * as productApi from '../../services/product';
+import { useCart } from '../../contexts/CartContext';
+import { API_BASE_URL } from '../../config/api';
 
 type PharmacyHomeScreenNavigationProp = NativeStackNavigationProp<PharmacyStackParamList>;
 
 const { width } = Dimensions.get('window');
 
-const deals = [
-  { id: 1, name: 'Diabetes', image: require('../../../assets/avatar.png') },
-  { id: 2, name: 'Cardiac Care', image: require('../../../assets/avatar.png') },
-  { id: 3, name: 'Stomach Care', image: require('../../../assets/avatar.png') },
-  { id: 4, name: 'Ayurvedic', image: require('../../../assets/avatar.png') },
-  { id: 5, name: 'Homeopathy', image: require('../../../assets/avatar.png') },
-  { id: 6, name: 'Fitness', image: require('../../../assets/avatar.png') },
-  { id: 7, name: 'Mom & Baby', image: require('../../../assets/avatar.png') },
-  { id: 8, name: 'Devices', image: require('../../../assets/avatar.png') },
-];
-
-const categories = [
-  { id: 1, name: 'Ayush', products: '400 Products', image: require('../../../assets/avatar.png') },
-  { id: 2, name: 'Covid Essentials', products: '924 Products', image: require('../../../assets/avatar.png') },
-  { id: 3, name: 'Devices', products: '450 Products', image: require('../../../assets/avatar.png') },
-  { id: 4, name: 'Fitness', products: '350 Products', image: require('../../../assets/avatar.png') },
-  { id: 5, name: 'Mom & Baby', products: '280 Products', image: require('../../../assets/avatar.png') },
-  { id: 6, name: 'Personal Care', products: '520 Products', image: require('../../../assets/avatar.png') },
-];
-
-const products = [
-  { id: 1, name: 'Benzaxapine Croplex', price: '$19.00', originalPrice: '$45.00', image: require('../../../assets/avatar.png') },
-  { id: 2, name: 'Rapalac Neuronium', price: '$16.00', image: require('../../../assets/avatar.png') },
-  { id: 3, name: 'Ombinazol Bonibamol', price: '$22.00', image: require('../../../assets/avatar.png') },
-  { id: 4, name: 'Dantotate Dantodazole', price: '$10.00', originalPrice: '$12.00', image: require('../../../assets/avatar.png') },
-];
-
-const promotionalCards = [
-  {
-    id: 1,
-    title: '10% Cashback on Dietary',
-    titleHighlight: 'Suppliments',
-    code: 'CARE12',
-    image: require('../../../assets/avatar.png'),
-  },
-  {
-    id: 2,
-    title: 'Say yes',
-    titleHighlight: 'to New Throat Freshner',
-    subtitle: 'Refresh your day the fruity way',
-    image: require('../../../assets/avatar.png'),
-  },
-  {
-    id: 3,
-    title: 'Get a Product Worth',
-    titleHighlight: '1000',
-    subtitle: 'in a Pack',
-    code: 'CARE12',
-    image: require('../../../assets/avatar.png'),
-  },
-];
+const normalizeImageUrl = (imageUri: string | undefined | null): string | null => {
+  if (!imageUri || typeof imageUri !== 'string') {
+    return null;
+  }
+  const trimmedUri = imageUri.trim();
+  if (!trimmedUri) {
+    return null;
+  }
+  const baseUrl = API_BASE_URL.replace('/api', '');
+  let deviceHost: string;
+  try {
+    const urlObj = new URL(baseUrl);
+    deviceHost = urlObj.hostname;
+  } catch (e) {
+    const match = baseUrl.match(/https?:\/\/([^\/:]+)/);
+    deviceHost = match ? match[1] : '192.168.0.114';
+  }
+  if (trimmedUri.startsWith('http://') || trimmedUri.startsWith('https://')) {
+    let normalizedUrl = trimmedUri;
+    if (normalizedUrl.includes('localhost')) {
+      normalizedUrl = normalizedUrl.replace('localhost', deviceHost);
+    }
+    if (normalizedUrl.includes('127.0.0.1')) {
+      normalizedUrl = normalizedUrl.replace('127.0.0.1', deviceHost);
+    }
+    return normalizedUrl;
+  }
+  const imagePath = trimmedUri.startsWith('/') ? trimmedUri : `/${trimmedUri}`;
+  return `${baseUrl}${imagePath}`;
+};
 
 export const PharmacyHomeScreen = () => {
   const navigation = useNavigation<PharmacyHomeScreenNavigationProp>();
+  const { addToCart } = useCart();
+
+  // Fetch featured products
+  const { data: productsData, isLoading: productsLoading } = useQuery({
+    queryKey: ['featuredProducts'],
+    queryFn: () => productApi.listProducts({ limit: 8 }),
+  });
+
+  const products = productsData?.data?.products || [];
+
+  // Get unique categories from products
+  const categories = Array.from(new Set(products.map((p) => p.category).filter(Boolean))).slice(0, 6);
+
+  const handleAddToCart = (product: productApi.Product) => {
+    addToCart(product, 1);
+  };
+
+  const { getCartItemCount } = useCart();
+  const cartCount = getCartItemCount();
 
   return (
     <SafeAreaView style={styles.container}>
@@ -82,105 +86,75 @@ export const PharmacyHomeScreen = () => {
       <ScrollView showsVerticalScrollIndicator={false}>
         {/* Banner Section */}
         <View style={styles.bannerSection}>
+          <View style={styles.bannerHeader}>
+            <Text style={styles.bannerHeaderTitle}>Pharmacy</Text>
+            <TouchableOpacity
+              style={styles.cartIconContainer}
+              onPress={() => navigation.navigate('Cart')}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="cart-outline" size={24} color={colors.textWhite} />
+              {cartCount > 0 && (
+                <View style={styles.cartBadge}>
+                  <Text style={styles.cartBadgeText}>{cartCount > 99 ? '99+' : cartCount}</Text>
+                </View>
+              )}
+            </TouchableOpacity>
+          </View>
           <View style={styles.bannerContent}>
             <Text style={styles.bannerTitle}>From the Leading Online Pharmacy</Text>
             <Text style={styles.bannerSubtitle}>& Healthcare Platform Company</Text>
             <Text style={styles.bannerDescription}>
               Essentials Nutrition & Supplements from all over the suppliers around the World
             </Text>
-            <TouchableOpacity
-              style={styles.shopNowButton}
-              onPress={() => navigation.navigate('ProductCatalog')}
-            >
-              <Text style={styles.shopNowText}>Shop Now</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        {/* Welcome Section */}
-        {/* <View style={styles.welcomeSection}>
-          <View style={styles.welcomeCard}>
-            <View style={styles.welcomeContent}>
-              <View style={styles.welcomeIcon}>
-                <Ionicons name="gift" size={24} color={colors.primary} />
-              </View>
-              <View style={styles.welcomeText}>
-                <Text style={styles.welcomeTitle}>Welcome to Doccure</Text>
-                <Text style={styles.welcomeDescription}>
-                  Download the app get free medicine & 50% off on your first order
-                </Text>
-              </View>
-            </View>
-            <TouchableOpacity style={styles.downloadButton}>
-              <Text style={styles.downloadButtonText}>Download App</Text>
-            </TouchableOpacity>
-          </View>
-
-          {/* Promotional Cards */}
-          {promotionalCards.map((card) => (
-            <TouchableOpacity
-              key={card.id}
-              style={styles.promotionalCard}
-              onPress={() => navigation.navigate('ProductCatalog')}
-            >
-              <View style={styles.promotionalContent}>
-                <Text style={styles.promotionalTitle}>
-                  {card.title} <Text style={styles.promotionalHighlight}>{card.titleHighlight}</Text>
-                </Text>
-                {card.subtitle && <Text style={styles.promotionalSubtitle}>{card.subtitle}</Text>}
-                {card.code && <Text style={styles.promotionalCode}>Code: {card.code}</Text>}
-                <TouchableOpacity style={styles.promotionalButton}>
-                  <Text style={styles.promotionalButtonText}>Shop Now</Text>
-                </TouchableOpacity>
-              </View>
-              <Image source={card.image} style={styles.promotionalImage} />
-            </TouchableOpacity>
-          ))}
-        {/* </View> */}
-
-        {/* Deals Section */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Great deals on top picks</Text>
-            <TouchableOpacity onPress={() => navigation.navigate('ProductCatalog')}>
-              <Text style={styles.viewAllText}>View All</Text>
-            </TouchableOpacity>
-          </View>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.dealsContainer}
-          >
-            {deals.map((deal) => (
+            <View style={styles.bannerButtons}>
               <TouchableOpacity
-                key={deal.id}
-                style={styles.dealCard}
+                style={styles.shopNowButton}
                 onPress={() => navigation.navigate('ProductCatalog')}
               >
-                <Image source={deal.image} style={styles.dealImage} />
-                <Text style={styles.dealName}>{deal.name}</Text>
+                <Text style={styles.shopNowText}>Shop Now</Text>
               </TouchableOpacity>
-            ))}
-          </ScrollView>
+              <TouchableOpacity
+                style={styles.searchPharmaciesButton}
+                onPress={() => navigation.navigate('PharmacySearch')}
+              >
+                <Ionicons name="search" size={18} color={colors.textWhite} />
+                <Text style={styles.searchPharmaciesText}>Find Pharmacies</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
         </View>
+
 
         {/* Categories Section */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Shop Popular Categories</Text>
-          <View style={styles.categoriesGrid}>
-            {categories.map((category) => (
-              <TouchableOpacity
-                key={category.id}
-                style={styles.categoryCard}
-                onPress={() => navigation.navigate('ProductCatalog')}
-              >
-                <Image source={category.image} style={styles.categoryImage} />
-                <Text style={styles.categoryName}>{category.name}</Text>
-                <Text style={styles.categoryProducts}>{category.products}</Text>
-              </TouchableOpacity>
-            ))}
+        {categories.length > 0 && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Shop Popular Categories</Text>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.categoriesContainer}
+            >
+              {categories.map((category, index) => (
+                <TouchableOpacity
+                  key={index}
+                  style={styles.categoryCard}
+                  onPress={() =>
+                    navigation.navigate('ProductCatalog', {
+                      category,
+                    })
+                  }
+                >
+                  <View style={styles.categoryIcon}>
+                    <Ionicons name="cube-outline" size={32} color={colors.primary} />
+                  </View>
+                  <Text style={styles.categoryName}>{category}</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
           </View>
-        </View>
+        )}
+
 
         {/* Featured Products Section */}
         <View style={styles.section}>
@@ -190,41 +164,69 @@ export const PharmacyHomeScreen = () => {
               <Text style={styles.viewAllText}>View All</Text>
             </TouchableOpacity>
           </View>
-          <View style={styles.productsGrid}>
-            {products.map((product) => (
-              <TouchableOpacity
-                key={product.id}
-                style={styles.productCard}
-                onPress={() => navigation.navigate('ProductDetails', { productId: product.id.toString() })}
-              >
-                <View style={styles.productImageContainer}>
-                  <Image source={product.image} style={styles.productImage} />
-                  <TouchableOpacity style={styles.favoriteButton}>
-                    <Ionicons name="bookmark-outline" size={20} color={colors.textSecondary} />
-                  </TouchableOpacity>
-                </View>
-                <View style={styles.productContent}>
-                  <Text style={styles.productName} numberOfLines={2}>
-                    {product.name}
-                  </Text>
-                  <View style={styles.productPriceRow}>
-                    <View style={styles.priceContainer}>
-                      <Text style={styles.productPrice}>{product.price}</Text>
-                      {product.originalPrice && (
-                        <Text style={styles.originalPrice}>{product.originalPrice}</Text>
-                      )}
+          {productsLoading ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="small" color={colors.primary} />
+              <Text style={styles.loadingText}>Loading products...</Text>
+            </View>
+          ) : products.length === 0 ? (
+            <View style={styles.emptyContainer}>
+              <Ionicons name="cube-outline" size={48} color={colors.textLight} />
+              <Text style={styles.emptyText}>No products available</Text>
+            </View>
+          ) : (
+            <View style={styles.productsGrid}>
+              {products.map((product) => {
+                const productPrice = product.discountPrice || product.price;
+                const originalPrice = product.discountPrice ? product.price : null;
+                const productImage = product.images?.[0] || '';
+                const normalizedImageUrl = normalizeImageUrl(productImage);
+                const defaultAvatar = require('../../../assets/avatar.png');
+                const imageSource = normalizedImageUrl ? { uri: normalizedImageUrl } : defaultAvatar;
+
+                return (
+                  <TouchableOpacity
+                    key={product._id}
+                    style={styles.productCard}
+                    onPress={() => navigation.navigate('ProductDetails', { productId: product._id })}
+                  >
+                    <View style={styles.productImageContainer}>
+                      <Image
+                        source={imageSource}
+                        style={styles.productImage}
+                        defaultSource={defaultAvatar}
+                      />
+                      <TouchableOpacity style={styles.favoriteButton}>
+                        <Ionicons name="bookmark-outline" size={20} color={colors.textSecondary} />
+                      </TouchableOpacity>
                     </View>
-                    <TouchableOpacity
-                      style={styles.cartButton}
-                      onPress={() => navigation.navigate('Cart')}
-                    >
-                      <Ionicons name="cart-outline" size={20} color={colors.primary} />
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              </TouchableOpacity>
-            ))}
-          </View>
+                    <View style={styles.productContent}>
+                      <Text style={styles.productName} numberOfLines={2}>
+                        {product.name}
+                      </Text>
+                      <View style={styles.productPriceRow}>
+                        <View style={styles.priceContainer}>
+                          <Text style={styles.productPrice}>${productPrice.toFixed(2)}</Text>
+                          {originalPrice && (
+                            <Text style={styles.originalPrice}>${originalPrice.toFixed(2)}</Text>
+                          )}
+                        </View>
+                        <TouchableOpacity
+                          style={styles.cartButton}
+                          onPress={(e) => {
+                            e?.stopPropagation?.();
+                            handleAddToCart(product);
+                          }}
+                        >
+                          <Ionicons name="cart-outline" size={20} color={colors.primary} />
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          )}
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -243,6 +245,38 @@ const styles = StyleSheet.create({
     paddingBottom: 30,
     borderBottomRightRadius:30,
     borderBottomLeftRadius:30,
+  },
+  bannerHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  bannerHeaderTitle: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: colors.textWhite,
+  },
+  cartIconContainer: {
+    position: 'relative',
+    padding: 4,
+  },
+  cartBadge: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    backgroundColor: colors.error,
+    borderRadius: 10,
+    minWidth: 18,
+    height: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 4,
+  },
+  cartBadgeText: {
+    color: colors.textWhite,
+    fontSize: 10,
+    fontWeight: '600',
   },
   bannerContent: {
     alignItems: 'center',
@@ -269,6 +303,11 @@ const styles = StyleSheet.create({
     marginBottom: 20,
     paddingHorizontal: 20,
   },
+  bannerButtons: {
+    flexDirection: 'row',
+    gap: 12,
+    alignItems: 'center',
+  },
   shopNowButton: {
     backgroundColor: colors.textWhite,
     paddingHorizontal: 32,
@@ -279,6 +318,20 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: colors.primary,
+  },
+  searchPharmaciesButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 25,
+    gap: 6,
+  },
+  searchPharmaciesText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.textWhite,
   },
   welcomeSection: {
     padding: 16,
@@ -419,36 +472,51 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     fontWeight: '500',
   },
-  categoriesGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
+  categoriesContainer: {
+    paddingRight: 16,
   },
   categoryCard: {
-    width: (width - 48) / 2,
+    width: 100,
+    marginRight: 12,
     backgroundColor: colors.background,
     borderRadius: 12,
     padding: 12,
-    marginBottom: 12,
     alignItems: 'center',
   },
-  categoryImage: {
-    width: 80,
-    height: 80,
-    borderRadius: 8,
+  categoryIcon: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: colors.primaryLight,
+    alignItems: 'center',
+    justifyContent: 'center',
     marginBottom: 8,
   },
   categoryName: {
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: '600',
     color: colors.text,
-    marginBottom: 4,
     textAlign: 'center',
   },
-  categoryProducts: {
-    fontSize: 12,
+  loadingContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 40,
+  },
+  loadingText: {
+    fontSize: 14,
     color: colors.textSecondary,
-    textAlign: 'center',
+    marginTop: 8,
+  },
+  emptyContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 40,
+  },
+  emptyText: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    marginTop: 12,
   },
   productsGrid: {
     flexDirection: 'row',

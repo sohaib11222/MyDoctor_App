@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   View,
   Text,
@@ -8,97 +8,241 @@ import {
   Image,
   TextInput,
   SafeAreaView,
+  ActivityIndicator,
+  RefreshControl,
+  Alert,
+  FlatList,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { CompositeNavigationProp } from '@react-navigation/native';
 import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
-import { MoreStackParamList, TabParamList } from '../../navigation/types';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { MoreStackParamList, TabParamList, HomeStackParamList } from '../../navigation/types';
 import { colors } from '../../constants/colors';
 import { Ionicons } from '@expo/vector-icons';
+import { useAuth } from '../../contexts/AuthContext';
+import * as favoriteApi from '../../services/favorite';
+import * as doctorApi from '../../services/doctor';
+import { API_BASE_URL } from '../../config/api';
+import Toast from 'react-native-toast-message';
 
 type FavouritesScreenNavigationProp = CompositeNavigationProp<
   NativeStackNavigationProp<MoreStackParamList>,
   BottomTabNavigationProp<TabParamList>
 >;
 
-interface Favourite {
-  id: string;
-  name: string;
-  img: any;
-  speciality: string;
-  rating: number;
-  reviews: string;
-  nextAvail: string;
-  location: string;
-  lastBook: string;
-}
+const defaultAvatar = require('../../../assets/avatar.png');
 
-const favourites: Favourite[] = [
-  {
-    id: '1',
-    name: 'Dr.Edalin Hendry',
-    img: require('../../../assets/avatar.png'),
-    speciality: 'MD - Cardiology',
-    rating: 5.0,
-    reviews: '',
-    nextAvail: '23 Mar 2024',
-    location: 'Newyork, USA',
-    lastBook: '21 Jan 2023',
-  },
-  {
-    id: '2',
-    name: 'Dr.Shanta Nesmith',
-    img: require('../../../assets/avatar.png'),
-    speciality: 'DO - Oncology',
-    rating: 4.0,
-    reviews: '(35)',
-    nextAvail: '27 Mar 2024',
-    location: 'Los Angeles, USA',
-    lastBook: '18 Jan 2023',
-  },
-  {
-    id: '3',
-    name: 'Dr.John Ewel',
-    img: require('../../../assets/avatar.png'),
-    speciality: 'MD - Orthopedics',
-    rating: 5.0,
-    reviews: '',
-    nextAvail: '02 Apr 2024',
-    location: 'Dallas, USA',
-    lastBook: '28 Jan 2023',
-  },
-  {
-    id: '4',
-    name: 'Dr.Susan Fenimore',
-    img: require('../../../assets/avatar.png'),
-    speciality: 'DO - Dermatology',
-    rating: 4.0,
-    reviews: '',
-    nextAvail: '11 Apr 2024',
-    location: 'Chicago, USA',
-    lastBook: '08 Feb 2023',
-  },
-];
+/**
+ * Normalize image URL for mobile app
+ */
+const normalizeImageUrl = (imageUri: string | undefined | null): string | null => {
+  if (!imageUri || typeof imageUri !== 'string') {
+    return null;
+  }
+  
+  const trimmedUri = imageUri.trim();
+  if (!trimmedUri) {
+    return null;
+  }
+  
+  const baseUrl = API_BASE_URL.replace('/api', '');
+  let deviceHost: string;
+  try {
+    const urlObj = new URL(baseUrl);
+    deviceHost = urlObj.hostname;
+  } catch (e) {
+    const match = baseUrl.match(/https?:\/\/([^\/:]+)/);
+    deviceHost = match ? match[1] : '192.168.0.114';
+  }
+  
+  if (trimmedUri.startsWith('http://') || trimmedUri.startsWith('https://')) {
+    let normalizedUrl = trimmedUri;
+    if (normalizedUrl.includes('localhost')) {
+      normalizedUrl = normalizedUrl.replace('localhost', deviceHost);
+    }
+    if (normalizedUrl.includes('127.0.0.1')) {
+      normalizedUrl = normalizedUrl.replace('127.0.0.1', deviceHost);
+    }
+    return normalizedUrl;
+  }
+  
+  const imagePath = trimmedUri.startsWith('/') ? trimmedUri : `/${trimmedUri}`;
+  return `${baseUrl}${imagePath}`;
+};
 
 export const FavouritesScreen = () => {
   const navigation = useNavigation<FavouritesScreenNavigationProp>();
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
   const [searchQuery, setSearchQuery] = useState('');
+  const [page, setPage] = useState(1);
+  const limit = 12;
+  const [refreshing, setRefreshing] = useState(false);
 
-  const filteredFavourites = favourites.filter((fav) =>
-    fav.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    fav.speciality.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  // Fetch favorites
+  const {
+    data: favoritesData,
+    isLoading,
+    error,
+    refetch,
+  } = useQuery({
+    queryKey: ['favorites', user?._id || user?.id, page],
+    queryFn: () => favoriteApi.listFavorites(user?._id || user?.id || '', { page, limit }),
+    enabled: !!user,
+    retry: 1,
+  });
 
+  // Extract favorites
+  const favorites = useMemo(() => {
+    if (!favoritesData) return [];
+    const responseData = favoritesData.data || favoritesData;
+    return Array.isArray(responseData) ? responseData : (responseData.favorites || []);
+  }, [favoritesData]);
+
+  const pagination = useMemo(() => {
+    if (!favoritesData) return null;
+    const responseData = favoritesData.data || favoritesData;
+    return responseData.pagination || null;
+  }, [favoritesData]);
+
+  // Extract doctor IDs from favorites
+  const doctorIds = useMemo(() => {
+    return favorites
+      .map((fav) => {
+        const doctorId = typeof fav.doctorId === 'object' ? fav.doctorId._id || fav.doctorId : fav.doctorId;
+        return doctorId;
+      })
+      .filter(Boolean);
+  }, [favorites]);
+
+  // Fetch doctor profiles for favorites
+  const { data: doctorsData } = useQuery({
+    queryKey: ['favoriteDoctors', doctorIds],
+    queryFn: async () => {
+      const doctorPromises = doctorIds.map((id) => doctorApi.getDoctorProfileById(String(id)));
+      const results = await Promise.all(doctorPromises);
+      return results.map((result) => {
+        const data = result.data || result;
+        return Array.isArray(data) ? data[0] : data;
+      });
+    },
+    enabled: doctorIds.length > 0,
+  });
+
+  // Create a map of doctorId to doctor profile
+  const doctorProfilesMap = useMemo(() => {
+    if (!doctorsData || !Array.isArray(doctorsData)) return {};
+    const map: Record<string, any> = {};
+    doctorsData.forEach((doctor) => {
+      const doctorId = doctor.userId?._id || doctor._id;
+      if (doctorId) {
+        map[String(doctorId)] = doctor;
+      }
+    });
+    return map;
+  }, [doctorsData]);
+
+  // Combine favorites with doctor profiles
+  const favoritesWithDetails = useMemo(() => {
+    return favorites.map((favorite) => {
+      const doctorId =
+        typeof favorite.doctorId === 'object' ? favorite.doctorId._id || favorite.doctorId : favorite.doctorId;
+      const doctorProfile = doctorProfilesMap[String(doctorId)];
+      const doctor = favorite.doctorId || {};
+
+      return {
+        ...favorite,
+        doctorId: String(doctorId),
+        doctor: doctorProfile || {
+          userId: {
+            fullName: (doctor as any).fullName || 'Unknown Doctor',
+            profileImage: (doctor as any).profileImage || null,
+          },
+          specialization: doctorProfile?.specialization || { name: 'General' },
+          ratingAvg: doctorProfile?.ratingAvg || 0,
+          ratingCount: doctorProfile?.ratingCount || 0,
+          clinics: doctorProfile?.clinics || [],
+        },
+      };
+    });
+  }, [favorites, doctorProfilesMap]);
+
+  // Filter favorites by search query
+  const filteredFavorites = useMemo(() => {
+    if (!searchQuery.trim()) return favoritesWithDetails;
+
+    const query = searchQuery.toLowerCase();
+    return favoritesWithDetails.filter((fav) => {
+      const doctorName = fav.doctor?.userId?.fullName || fav.doctor?.fullName || '';
+      const specialization = fav.doctor?.specialization?.name || '';
+      return doctorName.toLowerCase().includes(query) || specialization.toLowerCase().includes(query);
+    });
+  }, [favoritesWithDetails, searchQuery]);
+
+  // Remove favorite mutation
+  const removeFavoriteMutation = useMutation({
+    mutationFn: (favoriteId: string) => favoriteApi.removeFavorite(favoriteId),
+    onSuccess: () => {
+      Toast.show({
+        type: 'success',
+        text1: 'Success',
+        text2: 'Doctor removed from favorites',
+      });
+      queryClient.invalidateQueries(['favorites', user?._id || user?.id]);
+      refetch();
+    },
+    onError: (error: any) => {
+      const errorMessage = error.response?.data?.message || error.message || 'Failed to remove favorite';
+      Toast.show({
+        type: 'error',
+        text1: 'Error',
+        text2: errorMessage,
+      });
+    },
+  });
+
+  // Handle remove favorite
+  const handleRemoveFavorite = (favoriteId: string) => {
+    Alert.alert('Remove Favorite', 'Are you sure you want to remove this doctor from favorites?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Remove',
+        style: 'destructive',
+        onPress: () => removeFavoriteMutation.mutate(favoriteId),
+      },
+    ]);
+  };
+
+  // Handle load more
+  const handleLoadMore = () => {
+    if (pagination && page < pagination.pages) {
+      setPage((prev) => prev + 1);
+    }
+  };
+
+  // Format date
+  const formatDate = (date: string | undefined) => {
+    if (!date) return 'N/A';
+    return new Date(date).toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+    });
+  };
+
+  // Render stars
   const renderStars = (rating: number) => {
     const stars = [];
+    const ratingValue = rating || 0;
     for (let i = 1; i <= 5; i++) {
       stars.push(
         <Ionicons
           key={i}
-          name={i <= rating ? 'star' : 'star-outline'}
+          name={i <= ratingValue ? 'star' : 'star-outline'}
           size={14}
-          color={i <= rating ? colors.warning : colors.textLight}
+          color={i <= ratingValue ? colors.warning : colors.textLight}
         />
       );
     }
@@ -112,6 +256,40 @@ export const FavouritesScreen = () => {
   const handleViewProfile = (doctorId: string) => {
     (navigation as any).navigate('Home', { screen: 'DoctorProfile', params: { doctorId } });
   };
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await refetch();
+    setRefreshing(false);
+  };
+
+  if (isLoading && page === 1) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={colors.primary} />
+          <Text style={styles.loadingText}>Loading favorites...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (error && page === 1) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.errorContainer}>
+          <Ionicons name="alert-circle-outline" size={64} color={colors.error} />
+          <Text style={styles.errorTitle}>Error loading favorites</Text>
+          <Text style={styles.errorText}>
+            {error instanceof Error ? error.message : 'Please try refreshing the page'}
+          </Text>
+          <TouchableOpacity style={styles.retryButton} onPress={() => refetch()}>
+            <Text style={styles.retryButtonText}>Retry</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container}>
@@ -128,52 +306,100 @@ export const FavouritesScreen = () => {
       </View>
 
       {/* Favourites List */}
-      <ScrollView showsVerticalScrollIndicator={false}>
-        {filteredFavourites.map((favourite) => (
-          <View key={favourite.id} style={styles.favouriteCard}>
-            <TouchableOpacity
-              style={styles.favouriteButton}
-              onPress={() => {}}
-            >
-              <Ionicons name="heart" size={20} color={colors.error} />
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.doctorInfo}
-              onPress={() => handleViewProfile(favourite.id)}
-            >
-              <Image source={favourite.img} style={styles.doctorImage} />
-              <View style={styles.doctorDetails}>
-                <View style={styles.doctorNameRow}>
-                  <Text style={styles.doctorName}>{favourite.name}</Text>
-                  <Ionicons name="checkmark-circle" size={16} color={colors.success} />
+      {filteredFavorites.length === 0 ? (
+        <View style={styles.emptyContainer}>
+          <Ionicons name="heart-outline" size={64} color={colors.textLight} />
+          <Text style={styles.emptyTitle}>No favorites yet</Text>
+          <Text style={styles.emptyText}>Start adding doctors to your favorites to see them here.</Text>
+          <TouchableOpacity
+            style={styles.browseButton}
+            onPress={() => (navigation as any).navigate('Home', { screen: 'Search' })}
+          >
+            <Text style={styles.browseButtonText}>Browse Doctors</Text>
+          </TouchableOpacity>
+        </View>
+      ) : (
+        <FlatList
+          data={filteredFavorites}
+          keyExtractor={(item) => item._id}
+          renderItem={({ item: fav }) => {
+            const doctorId = fav.doctorId;
+            const doctor = fav.doctor;
+            const doctorName = doctor?.userId?.fullName || doctor?.fullName || 'Unknown Doctor';
+            const doctorImage = doctor?.userId?.profileImage || doctor?.profileImage;
+            const normalizedImageUrl = normalizeImageUrl(doctorImage);
+            const imageSource = normalizedImageUrl ? { uri: normalizedImageUrl } : defaultAvatar;
+            const specialization = doctor?.specialization?.name || 'General';
+            const rating = doctor?.ratingAvg || 0;
+            const ratingCount = doctor?.ratingCount || 0;
+            const location = doctor?.clinics?.[0]
+              ? `${doctor.clinics[0].city || ''}${doctor.clinics[0].state ? `, ${doctor.clinics[0].state}` : ''}`.trim() ||
+                'Location not available'
+              : 'Location not available';
+            const lastBook = formatDate(fav.createdAt);
+
+            return (
+              <View style={styles.favouriteCard}>
+                <TouchableOpacity
+                  style={styles.favouriteButton}
+                  onPress={() => handleRemoveFavorite(fav._id)}
+                  disabled={removeFavoriteMutation.isLoading}
+                >
+                  <Ionicons name="heart" size={20} color={colors.error} />
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.doctorInfo} onPress={() => handleViewProfile(doctorId)}>
+                  <Image source={imageSource} style={styles.doctorImage} defaultSource={defaultAvatar} />
+                  <View style={styles.doctorDetails}>
+                    <View style={styles.doctorNameRow}>
+                      <Text style={styles.doctorName}>{doctorName}</Text>
+                      <Ionicons name="checkmark-circle" size={16} color={colors.success} />
+                    </View>
+                    <Text style={styles.speciality}>{specialization}</Text>
+                    <View style={styles.ratingRow}>
+                      <View style={styles.stars}>{renderStars(rating)}</View>
+                      <Text style={styles.ratingText}>
+                        {rating.toFixed(1)} ({ratingCount})
+                      </Text>
+                    </View>
+                    <View style={styles.infoRow}>
+                      <Ionicons name="location-outline" size={14} color={colors.textSecondary} />
+                      <Text style={styles.infoText}>{location}</Text>
+                    </View>
+                    <Text style={styles.lastBook}>Added on {lastBook}</Text>
+                  </View>
+                </TouchableOpacity>
+                <View style={styles.actionButtons}>
+                  <TouchableOpacity
+                    style={styles.viewProfileButton}
+                    onPress={() => handleViewProfile(doctorId)}
+                  >
+                    <Text style={styles.viewProfileButtonText}>View Profile</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.bookButton}
+                    onPress={() => handleBookAppointment(doctorId)}
+                  >
+                    <Text style={styles.bookButtonText}>Book Now</Text>
+                  </TouchableOpacity>
                 </View>
-                <Text style={styles.speciality}>{favourite.speciality}</Text>
-                <View style={styles.ratingRow}>
-                  <View style={styles.stars}>{renderStars(favourite.rating)}</View>
-                  <Text style={styles.ratingText}>
-                    {favourite.rating}{favourite.reviews}
-                  </Text>
-                </View>
-                <View style={styles.infoRow}>
-                  <Ionicons name="calendar-outline" size={14} color={colors.textSecondary} />
-                  <Text style={styles.infoText}>Next Availability: {favourite.nextAvail}</Text>
-                </View>
-                <View style={styles.infoRow}>
-                  <Ionicons name="location-outline" size={14} color={colors.textSecondary} />
-                  <Text style={styles.infoText}>{favourite.location}</Text>
-                </View>
-                <Text style={styles.lastBook}>Last Book on {favourite.lastBook}</Text>
               </View>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.bookButton}
-              onPress={() => handleBookAppointment(favourite.id)}
-            >
-              <Ionicons name="calendar-outline" size={18} color={colors.primary} />
-            </TouchableOpacity>
-          </View>
-        ))}
-      </ScrollView>
+            );
+          }}
+          contentContainerStyle={styles.listContent}
+          showsVerticalScrollIndicator={false}
+          onEndReached={handleLoadMore}
+          onEndReachedThreshold={0.5}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} colors={[colors.primary]} />}
+          ListFooterComponent={
+            pagination && page < pagination.pages ? (
+              <View style={styles.loadMoreContainer}>
+                <ActivityIndicator size="small" color={colors.primary} />
+                <Text style={styles.loadMoreText}>Loading more...</Text>
+              </View>
+            ) : null
+          }
+        />
+      )}
     </SafeAreaView>
   );
 };
@@ -182,6 +408,46 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.backgroundLight,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 50,
+  },
+  loadingText: {
+    marginTop: 10,
+    fontSize: 16,
+    color: colors.textSecondary,
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  errorTitle: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: colors.error,
+    marginTop: 10,
+  },
+  errorText: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    textAlign: 'center',
+    marginTop: 5,
+    marginBottom: 20,
+  },
+  retryButton: {
+    backgroundColor: colors.primary,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 8,
+  },
+  retryButtonText: {
+    color: colors.textWhite,
+    fontWeight: '600',
   },
   searchContainer: {
     flexDirection: 'row',
@@ -200,6 +466,9 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: colors.text,
     padding: 0,
+  },
+  listContent: {
+    paddingBottom: 16,
   },
   favouriteCard: {
     backgroundColor: colors.background,
@@ -220,6 +489,7 @@ const styles = StyleSheet.create({
   },
   doctorInfo: {
     flexDirection: 'row',
+    marginBottom: 12,
   },
   doctorImage: {
     width: 80,
@@ -274,16 +544,77 @@ const styles = StyleSheet.create({
     color: colors.textLight,
     marginTop: 8,
   },
-  bookButton: {
-    position: 'absolute',
-    bottom: 16,
-    right: 16,
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: colors.primaryLight,
+  actionButtons: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: colors.borderLight,
+  },
+  viewProfileButton: {
+    flex: 1,
+    backgroundColor: colors.backgroundLight,
+    paddingVertical: 10,
+    borderRadius: 8,
     alignItems: 'center',
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  viewProfileButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.text,
+  },
+  bookButton: {
+    flex: 1,
+    backgroundColor: colors.primary,
+    paddingVertical: 10,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  bookButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.textWhite,
+  },
+  emptyContainer: {
+    flex: 1,
     justifyContent: 'center',
+    alignItems: 'center',
+    padding: 40,
+  },
+  emptyTitle: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: colors.text,
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  emptyText: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    textAlign: 'center',
+    marginBottom: 24,
+  },
+  browseButton: {
+    backgroundColor: colors.primary,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 8,
+  },
+  browseButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.textWhite,
+  },
+  loadMoreContainer: {
+    paddingVertical: 20,
+    alignItems: 'center',
+  },
+  loadMoreText: {
+    marginTop: 8,
+    fontSize: 14,
+    color: colors.textSecondary,
   },
 });
-

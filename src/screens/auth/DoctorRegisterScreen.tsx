@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -24,10 +24,14 @@ import { Feather } from '@expo/vector-icons';
 type DoctorRegisterScreenNavigationProp = NativeStackNavigationProp<AuthStackParamList>;
 
 const schema = yup.object({
-  name: yup
+  fullName: yup
     .string()
-    .min(5, 'Name must be at least 5 characters')
-    .required('Name is required'),
+    .min(2, 'Full name must be at least 2 characters')
+    .required('Full name is required'),
+  email: yup
+    .string()
+    .email('Invalid email')
+    .required('Email is required'),
   phone: yup
     .string()
     .required('Phone is required'),
@@ -35,19 +39,37 @@ const schema = yup.object({
     .string()
     .min(6, 'Password must be at least 6 characters')
     .required('Password is required'),
+  gender: yup
+    .string()
+    .oneOf(['MALE', 'FEMALE', 'OTHER'], 'Invalid gender')
+    .optional(),
 });
 
 interface DoctorRegisterFormData {
-  name: string;
+  fullName: string;
+  email: string;
   phone: string;
   password: string;
+  gender?: 'MALE' | 'FEMALE' | 'OTHER';
 }
 
 export const DoctorRegisterScreen = () => {
   const navigation = useNavigation<DoctorRegisterScreenNavigationProp>();
-  const { register: registerUser } = useAuth();
+  const { register: registerUser, user } = useAuth();
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+
+  // Navigate to verification upload after successful registration
+  useEffect(() => {
+    if (user && user.role === 'doctor' && user.verificationStatus === 'pending') {
+      // Small delay to ensure navigation is ready
+      const timer = setTimeout(() => {
+        // Use replace to prevent going back to registration
+        navigation.replace('DoctorVerificationUpload');
+      }, 300);
+      return () => clearTimeout(timer);
+    }
+  }, [user, navigation]);
 
   const {
     control,
@@ -56,9 +78,11 @@ export const DoctorRegisterScreen = () => {
   } = useForm<DoctorRegisterFormData>({
     resolver: yupResolver(schema),
     defaultValues: {
-      name: '',
+      fullName: '',
+      email: '',
       phone: '',
       password: '',
+      gender: undefined,
     },
   });
 
@@ -67,19 +91,17 @@ export const DoctorRegisterScreen = () => {
     try {
       await registerUser(
         {
-          name: data.name,
-          email: data.name.toLowerCase().replace(/\s+/g, '') + '@doctor.com', // Generate email for doctor
+          fullName: data.fullName,
+          email: data.email,
           password: data.password,
           phone: data.phone,
+          gender: data.gender,
         },
         'doctor'
       );
-      // Navigate to doctor verification upload after successful registration
+      // Navigation will be handled by useEffect in AuthNavigator or LoginScreen
+      // The user state will trigger navigation to DoctorVerificationUpload
       setLoading(false);
-      // Use setTimeout to ensure navigation happens after state updates
-      setTimeout(() => {
-        navigation.navigate('DoctorVerificationUpload');
-      }, 100);
     } catch (error) {
       // Error is handled in AuthContext
       setLoading(false);
@@ -120,15 +142,15 @@ export const DoctorRegisterScreen = () => {
 
           <Controller
             control={control}
-            name="name"
+            name="fullName"
             render={({ field: { onChange, onBlur, value } }) => (
               <Input
-                label="Name"
-                placeholder="Enter your name"
+                label="Full Name"
+                placeholder="Enter your full name"
                 value={value}
                 onChangeText={onChange}
                 onBlur={onBlur}
-                error={errors.name?.message}
+                error={errors.fullName?.message}
                 style={styles.input}
               />
             )}

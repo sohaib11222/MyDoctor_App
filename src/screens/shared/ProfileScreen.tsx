@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   View,
   Text,
@@ -8,14 +8,19 @@ import {
   Image,
   TextInput,
   SafeAreaView,
+  ActivityIndicator,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { CompositeNavigationProp } from '@react-navigation/native';
 import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
+import { useQuery } from '@tanstack/react-query';
 import { MoreStackParamList, TabParamList } from '../../navigation/types';
 import { colors } from '../../constants/colors';
 import { Ionicons } from '@expo/vector-icons';
+import { useAuth } from '../../contexts/AuthContext';
+import * as profileApi from '../../services/profile';
+import { API_BASE_URL } from '../../config/api';
 
 type ProfileScreenNavigationProp = CompositeNavigationProp<
   NativeStackNavigationProp<MoreStackParamList>,
@@ -113,8 +118,78 @@ const billing: Billing[] = [
 
 export const ProfileScreen = () => {
   const navigation = useNavigation<ProfileScreenNavigationProp>();
+  const { user } = useAuth();
+  const isDoctor = user?.role === 'doctor';
   const [activeTab, setActiveTab] = useState<'appointments' | 'prescription' | 'medical' | 'billing'>('appointments');
   const [searchQuery, setSearchQuery] = useState('');
+
+  // Get user ID
+  const userId = user?._id || user?.id;
+
+  // Fetch user profile
+  const { data: userProfile, isLoading: userProfileLoading } = useQuery({
+    queryKey: ['userProfile', userId],
+    queryFn: () => profileApi.getUserProfile(userId!),
+    enabled: !!userId && !isDoctor,
+  });
+
+  // Fetch doctor profile
+  const { data: doctorProfile, isLoading: doctorProfileLoading } = useQuery({
+    queryKey: ['doctorProfile'],
+    queryFn: () => profileApi.getDoctorProfile(),
+    enabled: !!userId && isDoctor,
+  });
+
+  // Extract profile data
+  const profileData = useMemo(() => {
+    if (isDoctor && doctorProfile) {
+      const doctor = doctorProfile.data as profileApi.DoctorProfile;
+      const userData = (doctor as any).userId || user;
+      return {
+        name: userData?.fullName || user?.name || 'Doctor',
+        email: userData?.email || user?.email || '',
+        phone: userData?.phone || '',
+        profileImage: userData?.profileImage || user?.profileImage,
+        specialization: typeof doctor.specialization === 'object' 
+          ? doctor.specialization?.name 
+          : doctor.specialization || 'General',
+        title: doctor.title || '',
+        biography: doctor.biography || '',
+        rating: doctor.ratingAvg || 0,
+        ratingCount: doctor.ratingCount || 0,
+        experienceYears: doctor.experienceYears || 0,
+        isVerified: doctor.isVerified || false,
+      };
+    } else if (!isDoctor && userProfile) {
+      const userData = userProfile.data as profileApi.UserProfile;
+      return {
+        name: userData.fullName || user?.name || 'Patient',
+        email: userData.email || user?.email || '',
+        phone: userData.phone || '',
+        profileImage: userData.profileImage || user?.profileImage,
+        bloodGroup: userData.bloodGroup || '',
+        gender: userData.gender || '',
+        dob: userData.dob || '',
+      };
+    }
+    return {
+      name: user?.name || 'User',
+      email: user?.email || '',
+      phone: user?.phone || '',
+      profileImage: user?.profileImage,
+    };
+  }, [isDoctor, doctorProfile, userProfile, user]);
+
+  // Normalize image URL
+  const profileImageUri = useMemo(() => {
+    if (!profileData.profileImage) return null;
+    if (profileData.profileImage.startsWith('http://') || profileData.profileImage.startsWith('https://')) {
+      return profileData.profileImage;
+    }
+    const serverBaseUrl = API_BASE_URL?.replace('/api', '') || 'http://localhost:5000';
+    const cleanUrl = profileData.profileImage.startsWith('/') ? profileData.profileImage : '/' + profileData.profileImage;
+    return `${serverBaseUrl}${cleanUrl}`;
+  }, [profileData.profileImage]);
 
   const getStatusBadge = (status: string) => {
     const colorsMap: { [key: string]: string } = {
@@ -283,54 +358,149 @@ export const ProfileScreen = () => {
     }
   };
 
+  if (userProfileLoading || doctorProfileLoading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={colors.primary} />
+          <Text style={styles.loadingText}>Loading profile...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={styles.container}>
-      {/* Patient Info Header */}
+      {/* Profile Header */}
       <View style={styles.patientHeader}>
-        <Image source={require('../../../assets/avatar.png')} style={styles.patientImage} />
+        <Image
+          source={profileImageUri ? { uri: profileImageUri } : require('../../../assets/avatar.png')}
+          style={styles.patientImage}
+        />
         <View style={styles.patientInfo}>
-          <Text style={styles.patientId}>#P0016</Text>
-          <Text style={styles.patientName}>Adrian Marshall</Text>
-          <View style={styles.patientMeta}>
-            <Text style={styles.metaText}>Age : 42</Text>
-            <Text style={styles.metaSeparator}>•</Text>
-            <Text style={styles.metaText}>Male</Text>
-            <Text style={styles.metaSeparator}>•</Text>
-            <Text style={styles.metaText}>AB+ve</Text>
+          {isDoctor ? (
+            <>
+              {profileData.isVerified && (
+                <View style={styles.verifiedBadge}>
+                  <Ionicons name="checkmark-circle" size={16} color={colors.success} />
+                  <Text style={styles.verifiedText}>Verified</Text>
+                </View>
+              )}
+              <Text style={styles.patientName}>{profileData.name}</Text>
+              {profileData.title && <Text style={styles.patientSubtitle}>{profileData.title}</Text>}
+              <Text style={styles.patientSpecialization}>{profileData.specialization}</Text>
+              <View style={styles.patientMeta}>
+                {profileData.rating > 0 && (
+                  <>
+                    <View style={styles.ratingContainer}>
+                      <Ionicons name="star" size={14} color={colors.warning} />
+                      <Text style={styles.metaText}>{profileData.rating.toFixed(1)}</Text>
+                      <Text style={styles.metaText}>({profileData.ratingCount})</Text>
+                    </View>
+                    <Text style={styles.metaSeparator}>•</Text>
+                  </>
+                )}
+                {profileData.experienceYears > 0 && (
+                  <Text style={styles.metaText}>{profileData.experienceYears} Years Experience</Text>
+                )}
+              </View>
+            </>
+          ) : (
+            <>
+              <Text style={styles.patientId}>#{userId?.slice(-4) || '0000'}</Text>
+              <Text style={styles.patientName}>{profileData.name}</Text>
+              <View style={styles.patientMeta}>
+                {profileData.dob && <Text style={styles.metaText}>Age: {new Date().getFullYear() - new Date(profileData.dob).getFullYear()}</Text>}
+                {profileData.gender && (
+                  <>
+                    <Text style={styles.metaSeparator}>•</Text>
+                    <Text style={styles.metaText}>{profileData.gender}</Text>
+                  </>
+                )}
+                {profileData.bloodGroup && (
+                  <>
+                    <Text style={styles.metaSeparator}>•</Text>
+                    <Text style={styles.metaText}>{profileData.bloodGroup}</Text>
+                  </>
+                )}
+              </View>
+            </>
+          )}
+        </View>
+        {!isDoctor && (
+          <View style={styles.lastBooking}>
+            <Ionicons name="calendar-outline" size={16} color={colors.textSecondary} />
+            <Text style={styles.lastBookingLabel}>Last Booking</Text>
+            <Text style={styles.lastBookingDate}>24 Mar 2024</Text>
           </View>
-        </View>
-        <View style={styles.lastBooking}>
-          <Ionicons name="calendar-outline" size={16} color={colors.textSecondary} />
-          <Text style={styles.lastBookingLabel}>Last Booking</Text>
-          <Text style={styles.lastBookingDate}>24 Mar 2024</Text>
-        </View>
+        )}
       </View>
 
-      {/* Tabs */}
-      <View style={styles.tabsContainer}>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.tabsContent}
-        >
-          {['appointments', 'prescription', 'medical', 'billing'].map((tab) => (
-            <TouchableOpacity
-              key={tab}
-              style={[styles.tab, activeTab === tab && styles.activeTab]}
-              onPress={() => setActiveTab(tab as any)}
-            >
-              <Text style={[styles.tabText, activeTab === tab && styles.activeTabText]}>
-                {tab.charAt(0).toUpperCase() + tab.slice(1)}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
-      </View>
+      {/* Tabs - Only show for patients */}
+      {!isDoctor && (
+        <View style={styles.tabsContainer}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.tabsContent}
+          >
+            {['appointments', 'prescription', 'medical', 'billing'].map((tab) => (
+              <TouchableOpacity
+                key={tab}
+                style={[styles.tab, activeTab === tab && styles.activeTab]}
+                onPress={() => setActiveTab(tab as any)}
+              >
+                <Text style={[styles.tabText, activeTab === tab && styles.activeTabText]}>
+                  {tab.charAt(0).toUpperCase() + tab.slice(1)}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </View>
+      )}
 
       {/* Content */}
-      <ScrollView showsVerticalScrollIndicator={false} style={styles.content}>
-        {renderContent()}
-      </ScrollView>
+      {isDoctor ? (
+        <ScrollView showsVerticalScrollIndicator={false} style={styles.content}>
+          <View style={styles.doctorProfileSection}>
+            <View style={styles.infoCard}>
+              <Text style={styles.sectionTitle}>Contact Information</Text>
+              {profileData.email && (
+                <View style={styles.infoRow}>
+                  <Ionicons name="mail-outline" size={20} color={colors.textSecondary} />
+                  <Text style={styles.infoText}>{profileData.email}</Text>
+                </View>
+              )}
+              {profileData.phone && (
+                <View style={styles.infoRow}>
+                  <Ionicons name="call-outline" size={20} color={colors.textSecondary} />
+                  <Text style={styles.infoText}>{profileData.phone}</Text>
+                </View>
+              )}
+            </View>
+
+            {profileData.biography && (
+              <View style={styles.infoCard}>
+                <Text style={styles.sectionTitle}>Biography</Text>
+                <Text style={styles.biographyText}>{profileData.biography}</Text>
+              </View>
+            )}
+
+            <TouchableOpacity
+              style={styles.editButton}
+              onPress={() => navigation.navigate('ProfileSettings')}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="create-outline" size={20} color={colors.primary} />
+              <Text style={styles.editButtonText}>Edit Profile</Text>
+            </TouchableOpacity>
+          </View>
+        </ScrollView>
+      ) : (
+        <ScrollView showsVerticalScrollIndicator={false} style={styles.content}>
+          {renderContent()}
+        </ScrollView>
+      )}
     </SafeAreaView>
   );
 };
@@ -532,6 +702,94 @@ const styles = StyleSheet.create({
   amountValue: {
     fontSize: 18,
     fontWeight: '700',
+    color: colors.primary,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 12,
+  },
+  loadingText: {
+    fontSize: 14,
+    color: colors.textSecondary,
+  },
+  verifiedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginBottom: 4,
+  },
+  verifiedText: {
+    fontSize: 12,
+    color: colors.success,
+    fontWeight: '600',
+  },
+  patientSubtitle: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    marginBottom: 4,
+  },
+  patientSpecialization: {
+    fontSize: 14,
+    color: colors.primary,
+    fontWeight: '600',
+    marginBottom: 8,
+  },
+  ratingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  doctorProfileSection: {
+    padding: 16,
+  },
+  infoCard: {
+    backgroundColor: colors.background,
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.text,
+    marginBottom: 12,
+  },
+  infoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 12,
+  },
+  infoText: {
+    fontSize: 14,
+    color: colors.text,
+    flex: 1,
+  },
+  biographyText: {
+    fontSize: 14,
+    color: colors.text,
+    lineHeight: 22,
+  },
+  editButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.background,
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.primary,
+    gap: 8,
+    marginTop: 8,
+  },
+  editButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
     color: colors.primary,
   },
 });

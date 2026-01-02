@@ -13,141 +13,250 @@ import {
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import * as ImagePicker from 'expo-image-picker';
-import * as DocumentPicker from 'expo-document-picker';
 import { AuthStackParamList } from '../../navigation/types';
-import { Input } from '../../components/common/Input';
 import { Button } from '../../components/common/Button';
-import { useAuth, User } from '../../contexts/AuthContext';
 import { colors } from '../../constants/colors';
 import { Ionicons } from '@expo/vector-icons';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import Toast from 'react-native-toast-message';
+import * as uploadApi from '../../services/upload';
+import { API_BASE_URL } from '../../config/api';
 
 type DoctorVerificationUploadScreenNavigationProp = NativeStackNavigationProp<AuthStackParamList>;
 
-interface FileState {
+interface SelectedFile {
   uri: string;
   name: string;
   type: string;
+  size?: number;
 }
 
 export const DoctorVerificationUploadScreen = () => {
   const navigation = useNavigation<DoctorVerificationUploadScreenNavigationProp>();
-  const auth = useAuth();
   const [loading, setLoading] = useState(false);
-  const [medicalCouncilNumber, setMedicalCouncilNumber] = useState('');
-  const [specialization, setSpecialization] = useState('');
-  const [registrationCertificate, setRegistrationCertificate] = useState<FileState | null>(null);
-  const [goodStandingCertificate, setGoodStandingCertificate] = useState<FileState | null>(null);
-  const [cv, setCv] = useState<FileState | null>(null);
-  const [specialistRegistration, setSpecialistRegistration] = useState<FileState | null>(null);
-  const [digitalSignature, setDigitalSignature] = useState<FileState | null>(null);
+  const [selectedFiles, setSelectedFiles] = useState<SelectedFile[]>([]);
 
-  const specializations = [
-    'Surgery',
-    'Cardiology',
-    'Orthopedics',
-    'Pediatrics',
-    'Dermatology',
-    'Neurology',
-    'Oncology',
-    'Psychiatry',
-    'General Practice',
-  ];
-
-  const pickImage = async (setFile: (file: FileState) => void) => {
+  const requestPermission = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') {
       Alert.alert('Permission needed', 'Please grant camera roll permissions to upload files.');
-      return;
+      return false;
     }
+    return true;
+  };
 
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: false,
-      quality: 1,
-    });
+  const pickImages = async () => {
+    const hasPermission = await requestPermission();
+    if (!hasPermission) return;
 
-    if (!result.canceled && result.assets[0]) {
-      setFile({
-        uri: result.assets[0].uri,
-        name: result.assets[0].uri.split('/').pop() || 'image.jpg',
-        type: result.assets[0].type || 'image/jpeg',
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: false,
+        quality: 1,
+        allowsMultipleSelection: true, // Allow multiple file selection
       });
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        // Validate file count (max 5)
+        const totalFiles = selectedFiles.length + result.assets.length;
+        if (totalFiles > 5) {
+          Alert.alert('Error', 'Maximum 5 files allowed. Please remove some files first.');
+          return;
+        }
+
+        // Validate file types and sizes
+        const validFiles: SelectedFile[] = [];
+        const invalidFiles: string[] = [];
+
+        result.assets.forEach((asset) => {
+          // Debug: Log asset properties to understand the structure
+          if (__DEV__) {
+            console.log('📸 Selected Asset:', {
+              uri: asset.uri?.substring(0, 50) + '...',
+              type: asset.type,
+              mimeType: asset.mimeType,
+              fileSize: asset.fileSize,
+              width: asset.width,
+              height: asset.height,
+            });
+          }
+
+          // Get file name and extension
+          const fileName = asset.uri.split('/').pop() || 'image.jpg';
+          const fileExtension = fileName.split('.').pop()?.toLowerCase() || 'jpg';
+          
+          // Map extensions to MIME types for FormData
+          const extensionToMimeType: Record<string, string> = {
+            'jpg': 'image/jpeg',
+            'jpeg': 'image/jpeg',
+            'png': 'image/png',
+            'webp': 'image/webp',
+            'heic': 'image/jpeg', // Convert HEIC to JPEG for backend compatibility
+            'heif': 'image/jpeg', // Convert HEIF to JPEG for backend compatibility
+          };
+
+          // Determine MIME type for FormData
+          // Priority: asset.mimeType > asset.type > infer from extension > default to image/jpeg
+          let mimeType = 'image/jpeg'; // Default
+          
+          if (asset.mimeType && asset.mimeType.startsWith('image/')) {
+            mimeType = asset.mimeType;
+          } else if (asset.type && (asset.type.startsWith('image/') || asset.type === 'image')) {
+            // If asset.type is 'image' or 'image/...', use it or infer
+            mimeType = asset.type.startsWith('image/') ? asset.type : extensionToMimeType[fileExtension] || 'image/jpeg';
+          } else {
+            // Infer from file extension
+            mimeType = extensionToMimeType[fileExtension] || 'image/jpeg';
+          }
+          
+          // Since we're using MediaTypeOptions.Images, all selected files are images
+          // No need to validate file type - only validate size
+          
+          // Check file size (max 5MB) - asset.fileSize is in bytes
+          if (asset.fileSize && asset.fileSize > 5 * 1024 * 1024) {
+            invalidFiles.push(`${fileName}: File size must be less than 5MB (current: ${(asset.fileSize / 1024 / 1024).toFixed(2)}MB)`);
+            return;
+          }
+
+          validFiles.push({
+            uri: asset.uri,
+            name: fileName,
+            type: mimeType,
+            size: asset.fileSize,
+          });
+        });
+
+        if (invalidFiles.length > 0) {
+          invalidFiles.forEach((msg) => {
+            Toast.show({
+              type: 'error',
+              text1: 'Invalid File',
+              text2: msg,
+            });
+          });
+        }
+
+        if (validFiles.length > 0) {
+          setSelectedFiles([...selectedFiles, ...validFiles]);
+        }
+      }
+    } catch (error) {
+      Alert.alert('Error', 'Failed to pick images');
     }
   };
 
-  const pickDocument = async (setFile: (file: FileState) => void) => {
-    const result = await DocumentPicker.getDocumentAsync({
-      type: ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'],
-      copyToCacheDirectory: true,
-    });
-
-    if (!result.canceled && result.assets[0]) {
-      setFile({
-        uri: result.assets[0].uri,
-        name: result.assets[0].name,
-        type: result.assets[0].mimeType || 'application/pdf',
-      });
-    }
+  const removeFile = (index: number) => {
+    const newFiles = selectedFiles.filter((_, i) => i !== index);
+    setSelectedFiles(newFiles);
   };
 
   const handleSubmit = async () => {
-    if (!medicalCouncilNumber.trim()) {
-      Alert.alert('Error', 'Medical council registration number is required');
-      return;
-    }
-    if (!specialization) {
-      Alert.alert('Error', 'Area of specialization is required');
-      return;
-    }
-    if (!registrationCertificate) {
-      Alert.alert('Error', 'Registration certificate is required');
-      return;
-    }
-    if (!goodStandingCertificate) {
-      Alert.alert('Error', 'Certificate of good standing is required');
-      return;
-    }
-    if (!cv) {
-      Alert.alert('Error', 'Curriculum Vitae is required');
+    if (selectedFiles.length === 0) {
+      Alert.alert('Error', 'Please select at least one file to upload');
       return;
     }
 
     setLoading(true);
     try {
-      // TODO: Replace with actual API call
-      await new Promise((resolve) => setTimeout(resolve, 1500));
+      // Create FormData - backend expects field name 'files' as array
+      // React Native FormData format: { uri, name, type }
+      const formData = new FormData();
+
+      // Append all files with field name 'files' (backend middleware expects 'files')
+      selectedFiles.forEach((file, index) => {
+        // React Native FormData requires this specific format
+        // Ensure URI is properly formatted (file:// or content://)
+        const fileUri = file.uri.startsWith('file://') || file.uri.startsWith('content://') 
+          ? file.uri 
+          : `file://${file.uri}`;
+        
+        formData.append('files', {
+          uri: fileUri,
+          name: file.name || `image_${index}.jpg`,
+          type: file.type || 'image/jpeg',
+        } as any);
+        
+        if (__DEV__) {
+          console.log(`📎 Appending file ${index + 1}:`, {
+            uri: fileUri.substring(0, 50) + '...',
+            name: file.name,
+            type: file.type,
+          });
+        }
+      });
+
+      // Debug: Log FormData in development
+      if (__DEV__) {
+        console.log('📤 Uploading FormData with', selectedFiles.length, 'file(s)');
+        console.log('📤 Full API URL:', `${API_BASE_URL}/upload/doctor-docs`);
+        console.log('📤 Selected files:', selectedFiles.map(f => ({ 
+          name: f.name, 
+          type: f.type, 
+          size: f.size ? `${(f.size / 1024 / 1024).toFixed(2)}MB` : 'unknown' 
+        })));
+      }
+
+      // Upload using API
+      // Note: Response interceptor already extracts response.data, so response is the data object
+      const response = await uploadApi.uploadDoctorDocs(formData);
+
+      // Check response - backend returns { success: true, message: '...', data: { urls: [...] } }
+      // Since interceptor extracts response.data, response is already the data object
+      if (response?.success || response?.data?.urls || response?.urls) {
+        Toast.show({
+          type: 'success',
+          text1: 'Documents Uploaded',
+          text2: 'Verification documents uploaded successfully! Your documents are under review.',
+        });
+
+        // Navigate to pending approval
+        setTimeout(() => {
+          navigation.replace('PendingApproval');
+        }, 1000);
+      } else {
+        throw new Error(response?.message || 'Upload failed: Invalid response');
+      }
+    } catch (error: any) {
+      console.error('Document upload error:', error);
       
-      // Get pending registration data and log in the doctor with pending status
-      const pendingData = await AsyncStorage.getItem('pending_doctor_registration');
-      if (pendingData) {
-        const pendingUser: User = JSON.parse(pendingData);
-        const doctorUser: User = {
-          ...pendingUser,
-          isVerified: false,
-          verificationStatus: 'pending' as const,
-        };
-        
-        const mockToken = `mock_token_${Date.now()}`;
-        const userWithToken = { ...doctorUser, token: mockToken };
-        
-        await AsyncStorage.multiSet([
-          ['user', JSON.stringify(doctorUser)],
-          ['token', mockToken],
-        ]);
-        
-        // Set user in context to log them in (but with pending status)
-        // This will keep them in AuthNavigator but logged in so they can see PendingApproval
-        auth.updateUser(userWithToken);
-        
-        // Remove pending registration data
-        await AsyncStorage.removeItem('pending_doctor_registration');
+      // Extract error message from various possible locations
+      let errorMessage = 'Failed to upload documents. Please try again.';
+      
+      if (error?.response?.data?.message) {
+        errorMessage = error.response.data.message;
+      } else if (error?.response?.data?.errors && Array.isArray(error.response.data.errors)) {
+        errorMessage = error.response.data.errors.map((e: any) => e.message || e).join(', ');
+      } else if (error?.message) {
+        errorMessage = error.message;
+      } else if (error?.data?.message) {
+        errorMessage = error.data.message;
       }
       
-      Alert.alert('Success', 'Verification documents uploaded successfully!');
-      navigation.navigate('PendingApproval');
-    } catch (error) {
-      Alert.alert('Error', 'Failed to upload documents. Please try again.');
+      // Check for network errors - provide helpful message
+      if (error?.code === 'ERR_NETWORK' || error?.message?.includes('Network Error')) {
+        errorMessage = `Network Error - Cannot connect to backend.
+
+Current API URL: ${API_BASE_URL}
+
+Please check:
+1. Backend server is running (check terminal/console)
+2. Backend is accessible at: ${API_BASE_URL.replace('/api', '')}
+3. If using physical device, ensure IP address in config/api.ts matches your computer's IP
+4. If using emulator:
+   - Android: Use http://10.0.2.2:5000/api
+   - iOS: Use http://localhost:5000/api
+
+To find your computer's IP:
+- Windows: Run 'ipconfig' in CMD
+- Mac/Linux: Run 'ifconfig' or 'ip addr'`;
+      }
+      
+      Toast.show({
+        type: 'error',
+        text1: 'Upload Failed',
+        text2: errorMessage,
+        visibilityTime: 5000,
+      });
     } finally {
       setLoading(false);
     }
@@ -187,140 +296,105 @@ export const DoctorVerificationUploadScreen = () => {
         <View style={styles.formContainer}>
           <Text style={styles.title}>Doctor Verification</Text>
           <Text style={styles.subtitle}>
-            Please provide the details below and attach copies for your verification documents.
+            Please upload your verification documents. You can upload up to 5 files.
+            {'\n'}
+            <Text style={styles.subtitleSmall}>
+              Accepted formats: JPEG, PNG, WebP (Max 5MB per file)
+            </Text>
           </Text>
 
           {/* Required Documents List */}
           <View style={styles.verifyBox}>
             <Text style={styles.verifyBoxTitle}>Required Documents:</Text>
             <View style={styles.verifyList}>
-              <Text style={styles.verifyItem}>• Certificate of Registration with the Medical Council</Text>
-              <Text style={styles.verifyItem}>• Certificate of Good Standing (valid for 3 months)</Text>
+              <Text style={styles.verifyItem}>
+                • Certificate of Registration with the Medical Council
+              </Text>
+              <Text style={styles.verifyItem}>
+                • Certificate of Good Standing (valid for 3 months from date of issue)
+              </Text>
               <Text style={styles.verifyItem}>• Curriculum Vitae</Text>
-              <Text style={styles.verifyItem}>• Specialist Registration Certificate (if applicable)</Text>
-              <Text style={styles.verifyItem}>• Digital signature (if applicable)</Text>
+              <Text style={styles.verifyItem}>
+                • Specialist Registration Certificate (if applicable)
+              </Text>
+              <Text style={styles.verifyItem}>
+                • Digital signature: copy of the signature and registration number (if applicable)
+              </Text>
             </View>
           </View>
 
-          {/* Medical Council Registration Number */}
-          <Input
-            label="Medical council registration number *"
-            placeholder="Enter your medical council registration number"
-            value={medicalCouncilNumber}
-            onChangeText={setMedicalCouncilNumber}
-            style={styles.input}
-          />
+          {/* File Upload */}
+          <View style={styles.uploadSection}>
+            <Text style={styles.label}>
+              Upload Verification Documents <Text style={styles.required}>*</Text>
+            </Text>
+            <Text style={styles.labelHint}>
+              (Select multiple files - Max 5 files, 5MB each)
+            </Text>
 
-          {/* Specialization Picker */}
-          <View style={styles.pickerContainer}>
-            <Text style={styles.label}>Area of Specialisation *</Text>
             <TouchableOpacity
-              style={styles.picker}
-              onPress={() => {
-                // TODO: Implement picker modal
-                Alert.alert('Select Specialization', 'Picker will be implemented');
-              }}
+              style={styles.uploadButton}
+              onPress={pickImages}
+              disabled={selectedFiles.length >= 5}
             >
-              <Text style={specialization ? styles.pickerText : styles.pickerPlaceholder}>
-                {specialization || 'Select Area of Specialisation'}
+              <Ionicons name="cloud-upload-outline" size={32} color={colors.primary} />
+              <Text style={styles.uploadButtonText}>
+                {selectedFiles.length > 0
+                  ? `${selectedFiles.length} file(s) selected`
+                  : 'Click to select files (JPEG, PNG, WebP)'}
               </Text>
-              <Ionicons name="chevron-down" size={20} color={colors.textSecondary} />
+              {selectedFiles.length >= 5 && (
+                <Text style={styles.uploadLimitText}>Maximum 5 files reached</Text>
+              )}
             </TouchableOpacity>
           </View>
 
-          {/* Registration Certificate */}
-          <View style={styles.fileUploadContainer}>
-            <Text style={styles.label}>Certificate of Registration *</Text>
-            <TouchableOpacity
-              style={styles.fileUpload}
-              onPress={() => pickImage(setRegistrationCertificate)}
-            >
-              <Ionicons name="document-attach" size={24} color={colors.primary} />
-              <Text style={styles.fileUploadText}>
-                {registrationCertificate ? 'File Selected' : 'Upload Registration Certificate'}
-              </Text>
-            </TouchableOpacity>
-            {registrationCertificate && (
-              <Text style={styles.fileName}>{registrationCertificate.name}</Text>
-            )}
-          </View>
-
-          {/* Good Standing Certificate */}
-          <View style={styles.fileUploadContainer}>
-            <Text style={styles.label}>Certificate of Good Standing *</Text>
-            <TouchableOpacity
-              style={styles.fileUpload}
-              onPress={() => pickImage(setGoodStandingCertificate)}
-            >
-              <Ionicons name="document-attach" size={24} color={colors.primary} />
-              <Text style={styles.fileUploadText}>
-                {goodStandingCertificate ? 'File Selected' : 'Upload Good Standing Certificate'}
-              </Text>
-            </TouchableOpacity>
-            {goodStandingCertificate && (
-              <Text style={styles.fileName}>{goodStandingCertificate.name}</Text>
-            )}
-          </View>
-
-          {/* CV */}
-          <View style={styles.fileUploadContainer}>
-            <Text style={styles.label}>Curriculum Vitae (CV) *</Text>
-            <TouchableOpacity
-              style={styles.fileUpload}
-              onPress={() => pickDocument(setCv)}
-            >
-              <Ionicons name="document-text" size={24} color={colors.primary} />
-              <Text style={styles.fileUploadText}>
-                {cv ? 'File Selected' : 'Upload Curriculum Vitae'}
-              </Text>
-            </TouchableOpacity>
-            {cv && <Text style={styles.fileName}>{cv.name}</Text>}
-          </View>
-
-          {/* Specialist Registration (Optional) */}
-          <View style={styles.fileUploadContainer}>
-            <Text style={styles.label}>Specialist Registration Certificate (Optional)</Text>
-            <TouchableOpacity
-              style={styles.fileUpload}
-              onPress={() => pickImage(setSpecialistRegistration)}
-            >
-              <Ionicons name="document-attach" size={24} color={colors.primary} />
-              <Text style={styles.fileUploadText}>
-                {specialistRegistration ? 'File Selected' : 'Upload Specialist Registration'}
-              </Text>
-            </TouchableOpacity>
-            {specialistRegistration && (
-              <Text style={styles.fileName}>{specialistRegistration.name}</Text>
-            )}
-          </View>
-
-          {/* Digital Signature (Optional) */}
-          <View style={styles.fileUploadContainer}>
-            <Text style={styles.label}>Digital Signature (Optional)</Text>
-            <TouchableOpacity
-              style={styles.fileUpload}
-              onPress={() => pickImage(setDigitalSignature)}
-            >
-              <Ionicons name="document-attach" size={24} color={colors.primary} />
-              <Text style={styles.fileUploadText}>
-                {digitalSignature ? 'File Selected' : 'Upload Digital Signature'}
-              </Text>
-            </TouchableOpacity>
-            {digitalSignature && (
-              <Text style={styles.fileName}>{digitalSignature.name}</Text>
-            )}
-          </View>
+          {/* Selected Files Preview */}
+          {selectedFiles.length > 0 && (
+            <View style={styles.filesPreview}>
+              <Text style={styles.label}>Selected Files:</Text>
+              {selectedFiles.map((file, index) => (
+                <View key={index} style={styles.fileItem}>
+                  <Image source={{ uri: file.uri }} style={styles.filePreview} />
+                  <View style={styles.fileInfo}>
+                    <Text style={styles.fileName} numberOfLines={1}>
+                      {file.name}
+                    </Text>
+                    {file.size && (
+                      <Text style={styles.fileSize}>
+                        {(file.size / 1024 / 1024).toFixed(2)} MB
+                      </Text>
+                    )}
+                  </View>
+                  <TouchableOpacity
+                    style={styles.removeButton}
+                    onPress={() => removeFile(index)}
+                  >
+                    <Ionicons name="close-circle" size={24} color={colors.error} />
+                  </TouchableOpacity>
+                </View>
+              ))}
+            </View>
+          )}
 
           <Button
             title={loading ? 'Uploading...' : 'Submit for Verification'}
             onPress={handleSubmit}
             loading={loading}
+            disabled={selectedFiles.length === 0}
             style={styles.submitButton}
           />
 
           <TouchableOpacity
             style={styles.backButton}
-            onPress={() => navigation.goBack()}
+            onPress={() => {
+              // Try to go back, if no previous screen, navigate to Register
+              if (navigation.canGoBack()) {
+                navigation.goBack();
+              } else {
+                navigation.navigate('Register');
+              }
+            }}
           >
             <Ionicons name="chevron-back" size={16} color={colors.textSecondary} />
             <Text style={styles.backButtonText}>Back to Previous Step</Text>
@@ -388,6 +462,10 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     marginBottom: 24,
     textAlign: 'center',
+    lineHeight: 20,
+  },
+  subtitleSmall: {
+    fontSize: 12,
   },
   verifyBox: {
     backgroundColor: colors.backgroundLight,
@@ -411,62 +489,79 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     lineHeight: 20,
   },
-  input: {
-    marginBottom: 16,
-  },
-  pickerContainer: {
-    marginBottom: 16,
+  uploadSection: {
+    marginBottom: 24,
   },
   label: {
     fontSize: 14,
     fontWeight: '600',
     color: colors.text,
-    marginBottom: 8,
+    marginBottom: 4,
   },
-  picker: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: colors.background,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 8,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
+  labelHint: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    marginBottom: 12,
   },
-  pickerText: {
-    fontSize: 14,
-    color: colors.text,
+  required: {
+    color: colors.error,
   },
-  pickerPlaceholder: {
-    fontSize: 14,
-    color: colors.textLight,
-  },
-  fileUploadContainer: {
-    marginBottom: 16,
-  },
-  fileUpload: {
+  uploadButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: colors.backgroundLight,
-    borderWidth: 1,
+    borderWidth: 2,
     borderColor: colors.border,
     borderStyle: 'dashed',
     borderRadius: 8,
     padding: 20,
     gap: 12,
   },
-  fileUploadText: {
+  uploadButtonText: {
     fontSize: 14,
     color: colors.primary,
     fontWeight: '500',
   },
+  uploadLimitText: {
+    fontSize: 12,
+    color: colors.error,
+    marginTop: 4,
+  },
+  filesPreview: {
+    marginBottom: 24,
+  },
+  fileItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.backgroundLight,
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  filePreview: {
+    width: 50,
+    height: 50,
+    borderRadius: 4,
+    marginRight: 12,
+  },
+  fileInfo: {
+    flex: 1,
+  },
   fileName: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.text,
+    marginBottom: 4,
+  },
+  fileSize: {
     fontSize: 12,
     color: colors.textSecondary,
-    marginTop: 4,
-    marginLeft: 4,
+  },
+  removeButton: {
+    padding: 4,
   },
   submitButton: {
     marginTop: 8,
@@ -483,4 +578,3 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
   },
 });
-

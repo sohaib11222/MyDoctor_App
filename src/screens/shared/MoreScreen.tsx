@@ -14,12 +14,16 @@ export const MoreScreen = () => {
   const { user, logout } = useAuth();
 
   const getMenuItems = () => {
-    if (user?.role === 'pharmacy') {
+    if (user?.role === 'admin' || (user as any)?.role === 'ADMIN') {
       return [
-        { id: 1, title: 'Profile', icon: 'user', screen: 'PharmacyProfile' as keyof MoreStackParamList },
-        { id: 2, title: 'Settings', icon: 'settings', screen: 'PharmacySettings' as keyof MoreStackParamList },
+        { id: 1, title: 'All Orders', icon: 'shopping-bag', screen: 'AdminOrders' as keyof MoreStackParamList },
+        { id: 2, title: 'Profile', icon: 'user', screen: 'Profile' as keyof MoreStackParamList },
+        { id: 3, title: 'Change Password', icon: 'lock', screen: 'ChangePassword' as keyof MoreStackParamList },
+        { id: 4, title: 'Notifications', icon: 'bell', screen: 'Notifications' as keyof MoreStackParamList },
       ];
-    } else if (user?.role === 'doctor') {
+    }
+  
+    if (user?.role === 'doctor') {
       return [
         { id: 1, title: 'Dashboard', icon: 'grid', screen: 'DoctorDashboard' as keyof MoreStackParamList },
         { id: 2, title: 'My Patients', icon: 'users', screen: 'MyPatients' as keyof MoreStackParamList },
@@ -27,21 +31,29 @@ export const MoreScreen = () => {
         { id: 4, title: 'Invoices', icon: 'file-text', screen: 'Invoices' as keyof MoreStackParamList },
         { id: 5, title: 'Subscription', icon: 'credit-card', screen: 'Subscription' as keyof MoreStackParamList },
         { id: 6, title: 'Announcements', icon: 'bell', screen: 'Announcements' as keyof MoreStackParamList },
-        { id: 7, title: 'Profile', icon: 'user', screen: 'Profile' as keyof MoreStackParamList },
-        { id: 8, title: 'Settings', icon: 'settings', screen: 'Settings' as keyof MoreStackParamList },
-        { id: 9, title: 'Notifications', icon: 'bell', screen: 'Notifications' as keyof MoreStackParamList },
+        { id: 7, title: 'Pharmacy Management', icon: 'business', screen: 'PharmacyManagement' as keyof MoreStackParamList },
+        { id: 8, title: 'Orders', icon: 'shopping-bag', screen: 'PharmacyOrders' as keyof MoreStackParamList },
+        { id: 9, title: 'Profile', icon: 'user', screen: 'Profile' as keyof MoreStackParamList },
+        { id: 10, title: 'Profile Settings', icon: 'edit', screen: 'ProfileSettings' as keyof MoreStackParamList },
+        // { id: 11, title: 'Social Media Links', icon: 'share-2', screen: 'SocialLinks' as keyof MoreStackParamList },
+        // { id: 12, title: 'Settings', icon: 'settings', screen: 'Settings' as keyof MoreStackParamList },
+        { id: 13, title: 'Change Password', icon: 'lock-closed', screen: 'ChangePassword' as keyof MoreStackParamList },
+        { id: 14, title: 'Notifications', icon: 'bell', screen: 'Notifications' as keyof MoreStackParamList },
       ];
     } else {
       return [
         { id: 1, title: 'Dashboard', icon: 'grid', screen: 'PatientDashboard' as keyof MoreStackParamList },
         { id: 2, title: 'Profile', icon: 'user', screen: 'Profile' as keyof MoreStackParamList },
-        { id: 3, title: 'Settings', icon: 'settings', screen: 'Settings' as keyof MoreStackParamList },
-        { id: 4, title: 'Medical Records', icon: 'file-text', screen: 'MedicalRecords' as keyof MoreStackParamList },
-        { id: 5, title: 'Dependents', icon: 'users', screen: 'Dependents' as keyof MoreStackParamList },
-        { id: 6, title: 'Favourites', icon: 'heart', screen: 'Favourites' as keyof MoreStackParamList },
-        { id: 7, title: 'Notifications', icon: 'bell', screen: 'Notifications' as keyof MoreStackParamList },
-        { id: 8, title: 'Invoices', icon: 'file-text', screen: 'Invoices' as keyof MoreStackParamList },
-        { id: 9, title: 'Documents', icon: 'folder', screen: 'Documents' as keyof MoreStackParamList },
+        { id: 3, title: 'Profile Settings', icon: 'edit', screen: 'PatientProfileSettings' as keyof MoreStackParamList },
+        // { id: 4, title: 'Settings', icon: 'settings', screen: 'Settings' as keyof MoreStackParamList },
+        { id: 5, title: 'Change Password', icon: 'lock', screen: 'ChangePassword' as keyof MoreStackParamList },
+        { id: 6, title: 'Medical Records', icon: 'file-text', screen: 'MedicalRecords' as keyof MoreStackParamList },
+        // { id: 7, title: 'Dependents', icon: 'users', screen: 'Dependents' as keyof MoreStackParamList },
+        { id: 8, title: 'Favourites', icon: 'heart', screen: 'Favourites' as keyof MoreStackParamList },
+        { id: 9, title: 'Order History', icon: 'shopping-bag', screen: 'OrderHistory' as keyof MoreStackParamList },
+        { id: 10, title: 'Notifications', icon: 'bell', screen: 'Notifications' as keyof MoreStackParamList },
+        { id: 11, title: 'Invoices', icon: 'file-text', screen: 'Invoices' as keyof MoreStackParamList },
+        // { id: 11, title: 'Documents', icon: 'folder', screen: 'Documents' as keyof MoreStackParamList },
       ];
     }
   };

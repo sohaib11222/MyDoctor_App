@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo } from 'react';
 import {
   View,
   Text,
@@ -7,13 +7,79 @@ import {
   TouchableOpacity,
   Image,
   SafeAreaView,
+  ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { AppointmentsStackParamList } from '../../navigation/types';
 import { useAuth } from '../../contexts/AuthContext';
 import { colors } from '../../constants/colors';
 import { Ionicons } from '@expo/vector-icons';
+import * as appointmentApi from '../../services/appointment';
+import Toast from 'react-native-toast-message';
+import { API_BASE_URL } from '../../config/api';
+
+/**
+ * Normalize image URL for mobile app
+ * Replaces localhost with device-accessible IP address
+ */
+const normalizeImageUrl = (imageUri: string | undefined | null): string | null => {
+  if (!imageUri || typeof imageUri !== 'string') {
+    return null;
+  }
+  
+  const trimmedUri = imageUri.trim();
+  if (!trimmedUri) {
+    return null;
+  }
+  
+  // Get device-accessible host from API_BASE_URL
+  const baseUrl = API_BASE_URL.replace('/api', '');
+  let deviceHost: string;
+  try {
+    const urlObj = new URL(baseUrl);
+    deviceHost = urlObj.hostname;
+  } catch (e) {
+    // Fallback: extract host from string
+    const match = baseUrl.match(/https?:\/\/([^\/:]+)/);
+    deviceHost = match ? match[1] : '192.168.0.114'; // Default fallback
+  }
+  
+  // If it's already a full URL
+  if (trimmedUri.startsWith('http://') || trimmedUri.startsWith('https://')) {
+    // Replace localhost/127.0.0.1 with device host
+    let normalizedUrl = trimmedUri;
+    
+    // Replace localhost with device host (simpler string replacement)
+    if (normalizedUrl.includes('localhost')) {
+      normalizedUrl = normalizedUrl.replace('localhost', deviceHost);
+    }
+    
+    // Replace 127.0.0.1 with device host
+    if (normalizedUrl.includes('127.0.0.1')) {
+      normalizedUrl = normalizedUrl.replace('127.0.0.1', deviceHost);
+    }
+    
+    if (__DEV__) {
+      console.log('🖼️ Normalized URL:', normalizedUrl, '(from:', trimmedUri, ')');
+      console.log('🖼️ Device Host:', deviceHost);
+    }
+    
+    return normalizedUrl;
+  }
+  
+  // It's a relative path, construct full URL
+  const imagePath = trimmedUri.startsWith('/') ? trimmedUri : `/${trimmedUri}`;
+  const fullUrl = `${baseUrl}${imagePath}`;
+  
+  if (__DEV__) {
+    console.log('🖼️ Constructed full URL:', fullUrl, '(from relative:', trimmedUri, ')');
+  }
+  
+  return fullUrl;
+};
 
 type AppointmentDetailsScreenNavigationProp = StackNavigationProp<AppointmentsStackParamList, 'AppointmentDetails'>;
 type AppointmentDetailsRouteProp = RouteProp<AppointmentsStackParamList, 'AppointmentDetails'>;
@@ -24,36 +90,115 @@ const AppointmentDetailsScreen = () => {
   const { user } = useAuth();
   const isDoctor = user?.role === 'doctor';
   const { appointmentId } = route.params;
-  const [status] = useState<'upcoming' | 'completed' | 'cancelled'>('upcoming');
 
-  // Mock appointment data - different for doctor vs patient
-  const appointment = isDoctor ? {
-    id: appointmentId,
-    patient: 'Kelly Joseph',
-    patientImg: require('../../../assets/avatar.png'),
-    email: 'kelly@example.com',
-    phone: '+1 504 368 6874',
-    date: '22 Jul 2023 - 12:00 pm',
-    clinic: "Adrian's Dentistry",
-    location: 'Newyork, United States',
-    visitType: 'General',
-    appointmentType: 'Direct Visit',
-    fee: 200,
-    personWithPatient: 'Andrew (45)',
-  } : {
-    id: appointmentId,
-    doctor: 'Dr Edalin Hendry',
-    doctorImg: require('../../../assets/avatar.png'),
-    email: 'edalin@example.com',
-    phone: '+1 504 368 6874',
-    date: '22 Jul 2023 - 12:00 pm',
-    clinic: "Adrian's Dentistry",
-    location: 'Newyork, United States',
-    visitType: 'General',
-    appointmentType: 'Direct Visit',
-    fee: 200,
-    personWithPatient: 'Andrew',
+  const queryClient = useQueryClient();
+
+  // Fetch appointment details
+  const { data: appointmentResponse, isLoading, error, refetch } = useQuery({
+    queryKey: ['appointment', appointmentId],
+    queryFn: () => appointmentApi.getAppointmentById(appointmentId),
+    retry: 1,
+  });
+
+  const appointment = appointmentResponse?.data || appointmentResponse;
+
+  // Update status mutation (for marking as completed/no-show)
+  const updateStatusMutation = useMutation({
+    mutationFn: ({ status }: { status: 'COMPLETED' | 'NO_SHOW' }) =>
+      appointmentApi.updateAppointmentStatus(appointmentId, { status }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['appointment', appointmentId] });
+      queryClient.invalidateQueries({ queryKey: ['appointments'] });
+      queryClient.invalidateQueries({ queryKey: ['appointmentTabCounts'] });
+      Toast.show({
+        type: 'success',
+        text1: 'Status Updated',
+        text2: 'Appointment status updated successfully!',
+      });
+      refetch();
+    },
+    onError: (error: any) => {
+      const errorMessage = error?.response?.data?.message || error?.message || 'Failed to update appointment status';
+      Toast.show({
+        type: 'error',
+        text1: 'Update Failed',
+        text2: errorMessage,
+      });
+    },
+  });
+
+  // Handle status update
+  const handleStatusUpdate = (newStatus: 'COMPLETED' | 'NO_SHOW') => {
+    const statusText = newStatus === 'COMPLETED' ? 'completed' : 'marked as no-show';
+    Alert.alert(
+      'Update Status',
+      `Are you sure you want to mark this appointment as ${statusText}?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Confirm',
+          onPress: () => {
+            updateStatusMutation.mutate({ status: newStatus });
+          },
+        },
+      ]
+    );
   };
+
+  // Map backend status to UI status
+  const status = useMemo(() => {
+    if (!appointment) return 'upcoming';
+    const backendStatus = appointment.status;
+    if (backendStatus === 'COMPLETED' || backendStatus === 'NO_SHOW') return 'completed';
+    if (backendStatus === 'CANCELLED' || backendStatus === 'REJECTED') return 'cancelled';
+    return 'upcoming';
+  }, [appointment]);
+
+  // Format appointment data for display
+  const appointmentData = useMemo(() => {
+    if (!appointment) return null;
+
+    const appointmentDate = new Date(appointment.appointmentDate);
+    const formattedDate = appointmentDate.toLocaleDateString('en-US', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+    });
+    const formattedTime = appointment.appointmentTime;
+    const dateTimeString = `${formattedDate} - ${formattedTime}`;
+
+    if (isDoctor) {
+      return {
+        id: appointment.appointmentNumber || appointment._id,
+        name: appointment.patientId?.fullName || 'Unknown Patient',
+        imageUri: appointment.patientId?.profileImage,
+        email: appointment.patientId?.email || '',
+        phone: appointment.patientId?.phone || '',
+        date: dateTimeString,
+        clinic: appointment.clinicName || 'Not specified',
+        location: appointment.clinicName || 'Not specified',
+        visitType: appointment.patientNotes || 'General Visit',
+        appointmentType: appointment.bookingType === 'VISIT' ? 'Direct Visit' : 'Video Call',
+        fee: 0, // Fee not in appointment model
+        personWithPatient: undefined,
+      };
+    } else {
+      return {
+        id: appointment.appointmentNumber || appointment._id,
+        name: appointment.doctorId?.fullName || 'Unknown Doctor',
+        imageUri: appointment.doctorId?.profileImage,
+        email: appointment.doctorId?.email || '',
+        phone: appointment.doctorId?.phone || '',
+        date: dateTimeString,
+        clinic: appointment.clinicName || 'Not specified',
+        location: appointment.clinicName || 'Not specified',
+        visitType: appointment.patientNotes || 'General Visit',
+        appointmentType: appointment.bookingType === 'VISIT' ? 'Direct Visit' : 'Video Call',
+        fee: 0, // Fee not in appointment model
+        personWithPatient: undefined,
+      };
+    }
+  }, [appointment, isDoctor]);
 
   const recentAppointments = [
     { id: '#Apt0002', doctor: isDoctor ? 'Kelly Stevens' : 'Dr.Shanta Nesmith', doctorImg: require('../../../assets/avatar.png'), date: '11 Nov 2024 10.45 AM', types: ['General Visit', 'Chat'], email: 'shanta@example.com', phone: '+1 504 368 6874' },
@@ -61,19 +206,72 @@ const AppointmentDetailsScreen = () => {
   ];
 
   const getStatusBadge = () => {
-    switch (status) {
-      case 'upcoming':
-        return { bg: '#FEF3C7', text: '#92400E', label: 'Upcoming' };
-      case 'completed':
+    if (!appointment) {
+      return { bg: colors.backgroundLight, text: colors.text, label: 'Unknown' };
+    }
+    
+    const backendStatus = appointment.status;
+    switch (backendStatus) {
+      case 'PENDING':
+        return { bg: '#FEF3C7', text: '#92400E', label: 'Pending' };
+      case 'CONFIRMED':
+        return { bg: '#DBEAFE', text: '#1E40AF', label: 'Confirmed' };
+      case 'COMPLETED':
         return { bg: '#D1FAE5', text: '#065F46', label: 'Completed' };
-      case 'cancelled':
+      case 'CANCELLED':
         return { bg: '#FEE2E2', text: '#991B1B', label: 'Cancelled' };
+      case 'REJECTED':
+        return { bg: '#FEE2E2', text: '#991B1B', label: 'Rejected' };
+      case 'NO_SHOW':
+        return { bg: '#F3F4F6', text: '#374151', label: 'No Show' };
       default:
-        return { bg: colors.backgroundLight, text: colors.text, label: 'Unknown' };
+        return { bg: colors.backgroundLight, text: colors.text, label: backendStatus || 'Unknown' };
     }
   };
 
   const statusBadge = getStatusBadge();
+  const defaultAvatar = require('../../../assets/avatar.png');
+
+  // Normalize image URL for mobile
+  const normalizedImageUrl = normalizeImageUrl(appointmentData?.imageUri);
+  const imageSource = normalizedImageUrl 
+    ? { uri: normalizedImageUrl }
+    : defaultAvatar;
+  
+  // Debug logging
+  if (__DEV__) {
+    if (appointmentData?.imageUri) {
+      console.log('🖼️ Appointment Details - Original imageUri:', appointmentData.imageUri);
+      console.log('🖼️ Appointment Details - Normalized URL:', normalizedImageUrl);
+    } else {
+      console.log('🖼️ Appointment Details - No imageUri in appointmentData');
+    }
+  }
+
+  if (isLoading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={colors.primary} />
+          <Text style={styles.loadingText}>Loading appointment details...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (error || !appointmentData) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.emptyContainer}>
+          <Ionicons name="alert-circle-outline" size={64} color={colors.error} />
+          <Text style={styles.emptyText}>Failed to load appointment details</Text>
+          <TouchableOpacity style={styles.retryButton} onPress={() => navigation.goBack()}>
+            <Text style={styles.retryButtonText}>Go Back</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container}>
@@ -83,22 +281,32 @@ const AppointmentDetailsScreen = () => {
           <View style={styles.appointmentHeader}>
             <View style={styles.doctorInfo}>
               <Image 
-                source={isDoctor ? appointment.patientImg : appointment.doctorImg} 
-                style={styles.doctorImage} 
+                source={imageSource} 
+                style={styles.doctorImage}
+                onError={(error) => {
+                  if (__DEV__) {
+                    console.log('🖼️ Appointment Details - Image load error:', error.nativeEvent.error);
+                    console.log('🖼️ Appointment Details - Failed image source:', imageSource);
+                  }
+                }}
+                onLoad={() => {
+                  if (__DEV__) {
+                    console.log('🖼️ Appointment Details - Image loaded successfully');
+                  }
+                }}
+                resizeMode="cover"
               />
               <View style={styles.doctorDetails}>
-                <Text style={styles.appointmentId}>{appointment.id}</Text>
-                <Text style={styles.doctorName}>
-                  {isDoctor ? appointment.patient : appointment.doctor}
-                </Text>
+                <Text style={styles.appointmentId}>{appointmentData.id}</Text>
+                <Text style={styles.doctorName}>{appointmentData.name}</Text>
                 <View style={styles.contactInfo}>
                   <View style={styles.contactItem}>
                     <Ionicons name="mail-outline" size={14} color={colors.textSecondary} />
-                    <Text style={styles.contactText}>{appointment.email}</Text>
+                    <Text style={styles.contactText}>{appointmentData.email}</Text>
                   </View>
                   <View style={styles.contactItem}>
                     <Ionicons name="call-outline" size={14} color={colors.textSecondary} />
-                    <Text style={styles.contactText}>{appointment.phone}</Text>
+                    <Text style={styles.contactText}>{appointmentData.phone}</Text>
                   </View>
                 </View>
               </View>
@@ -110,8 +318,12 @@ const AppointmentDetailsScreen = () => {
                 </Text>
               </View>
               <View style={styles.feeContainer}>
-                <Text style={styles.feeLabel}>Consultation Fees</Text>
-                <Text style={styles.feeAmount}>${appointment.fee}</Text>
+                <Text style={styles.feeLabel}>Payment Status</Text>
+                <Text style={styles.feeAmount}>
+                  {appointment?.paymentStatus === 'PAID' ? 'Paid' : 
+                   appointment?.paymentStatus === 'UNPAID' ? 'Unpaid' : 
+                   appointment?.paymentStatus === 'REFUNDED' ? 'Refunded' : 'N/A'}
+                </Text>
               </View>
               <View style={styles.actionButtons}>
                 <TouchableOpacity style={styles.actionBtn} activeOpacity={0.7}>
@@ -129,48 +341,89 @@ const AppointmentDetailsScreen = () => {
           <View style={styles.appointmentTypeSection}>
             <Text style={styles.sectionLabel}>Type of Appointment</Text>
             <View style={styles.typeBadge}>
-              <Ionicons name="medical-outline" size={16} color={colors.success} />
-              <Text style={styles.typeText}>{appointment.appointmentType}</Text>
+              <Ionicons 
+                name={appointmentData.appointmentType === 'Direct Visit' ? 'medical-outline' : 'videocam-outline'} 
+                size={16} 
+                color={colors.success} 
+              />
+              <Text style={styles.typeText}>{appointmentData.appointmentType}</Text>
             </View>
           </View>
-
-          {isDoctor && appointment.personWithPatient && (
-            <View style={styles.personSection}>
-              <Text style={styles.sectionLabel}>Person with patient</Text>
-              <View style={styles.personBadge}>
-                <Text style={styles.personText}>{appointment.personWithPatient}</Text>
-              </View>
-            </View>
-          )}
 
           <View style={styles.detailsSection}>
             <View style={styles.detailItem}>
               <Text style={styles.detailLabel}>Appointment Date & Time</Text>
-              <Text style={styles.detailValue}>{appointment.date}</Text>
+              <Text style={styles.detailValue}>{appointmentData.date}</Text>
             </View>
-            {status === 'upcoming' && (
-              <>
-                <View style={styles.detailItem}>
-                  <Text style={styles.detailLabel}>Clinic Location</Text>
-                  <Text style={styles.detailValue}>{appointment.clinic}</Text>
-                </View>
-                <View style={styles.detailItem}>
-                  <Text style={styles.detailLabel}>Location</Text>
-                  <Text style={styles.detailValue}>{appointment.location}</Text>
-                </View>
-              </>
+            {appointmentData.clinic && appointmentData.clinic !== 'Not specified' && (
+              <View style={styles.detailItem}>
+                <Text style={styles.detailLabel}>Clinic Location</Text>
+                <Text style={styles.detailValue}>{appointmentData.clinic}</Text>
+              </View>
             )}
-            <View style={styles.detailItem}>
-              <Text style={styles.detailLabel}>Visit Type</Text>
-              <Text style={styles.detailValue}>{appointment.visitType}</Text>
-            </View>
+            {appointmentData.visitType && (
+              <View style={styles.detailItem}>
+                <Text style={styles.detailLabel}>Visit Type / Notes</Text>
+                <Text style={styles.detailValue}>{appointmentData.visitType}</Text>
+              </View>
+            )}
+            {appointment?.appointmentNumber && (
+              <View style={styles.detailItem}>
+                <Text style={styles.detailLabel}>Appointment Number</Text>
+                <Text style={styles.detailValue}>{appointment.appointmentNumber}</Text>
+              </View>
+            )}
           </View>
 
-          {status === 'upcoming' && isDoctor && (
+          {/* Action Buttons based on status and role */}
+          {appointment?.status === 'CONFIRMED' && isDoctor && (
+            <View style={styles.statusActionButtons}>
+              <TouchableOpacity
+                style={[styles.statusActionBtn, styles.completedBtn]}
+                onPress={() => handleStatusUpdate('COMPLETED')}
+                disabled={updateStatusMutation.isPending}
+                activeOpacity={0.8}
+              >
+                {updateStatusMutation.isPending ? (
+                  <ActivityIndicator size="small" color={colors.textWhite} />
+                ) : (
+                  <>
+                    <Ionicons name="checkmark-circle" size={18} color={colors.textWhite} />
+                    <Text style={styles.statusActionBtnText}>Mark as Completed</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.statusActionBtn, styles.noShowBtn]}
+                onPress={() => handleStatusUpdate('NO_SHOW')}
+                disabled={updateStatusMutation.isPending}
+                activeOpacity={0.8}
+              >
+                {updateStatusMutation.isPending ? (
+                  <ActivityIndicator size="small" color={colors.textWhite} />
+                ) : (
+                  <>
+                    <Ionicons name="close-circle" size={18} color={colors.textWhite} />
+                    <Text style={styles.statusActionBtnText}>Mark as No Show</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            </View>
+          )}
+          {status === 'upcoming' && isDoctor && appointment?.status === 'PENDING' && (
             <TouchableOpacity 
               style={styles.startSessionBtn} 
               activeOpacity={0.8}
-              onPress={() => navigation.navigate('StartAppointment', { appointmentId: appointment.id })}
+              onPress={() => navigation.navigate('StartAppointment', { appointmentId: appointmentId })}
+            >
+              <Text style={styles.startSessionText}>Start Session</Text>
+            </TouchableOpacity>
+          )}
+          {status === 'upcoming' && isDoctor && appointment?.status === 'CONFIRMED' && (
+            <TouchableOpacity 
+              style={styles.startSessionBtn} 
+              activeOpacity={0.8}
+              onPress={() => navigation.navigate('StartAppointment', { appointmentId: appointmentId })}
             >
               <Text style={styles.startSessionText}>Start Session</Text>
             </TouchableOpacity>
@@ -210,42 +463,7 @@ const AppointmentDetailsScreen = () => {
           )}
         </View>
 
-        {/* Recent Appointments */}
-        <View style={styles.recentSection}>
-          <Text style={styles.recentTitle}>Recent Appointments</Text>
-          {recentAppointments.map((apt) => (
-            <TouchableOpacity
-              key={apt.id}
-              style={styles.recentCard}
-              onPress={() => navigation.navigate('AppointmentDetails', { appointmentId: apt.id })}
-              activeOpacity={0.7}
-            >
-              <Image source={apt.doctorImg} style={styles.recentImage} />
-              <View style={styles.recentInfo}>
-                <Text style={styles.recentId}>{apt.id}</Text>
-                <Text style={styles.recentDoctor}>{apt.doctor}</Text>
-                <View style={styles.recentDate}>
-                  <Ionicons name="time-outline" size={14} color={colors.textSecondary} />
-                  <Text style={styles.recentDateText}>{apt.date}</Text>
-                </View>
-                <View style={styles.recentTypes}>
-                  {apt.types.map((type, idx) => (
-                    <View key={idx} style={styles.recentTypeBadge}>
-                      <Text style={styles.recentTypeText}>{type}</Text>
-                    </View>
-                  ))}
-                </View>
-              </View>
-              <TouchableOpacity
-                style={styles.recentViewBtn}
-                onPress={() => navigation.navigate('AppointmentDetails', { appointmentId: apt.id })}
-                activeOpacity={0.7}
-              >
-                <Ionicons name="eye-outline" size={18} color={colors.textSecondary} />
-              </TouchableOpacity>
-            </TouchableOpacity>
-          ))}
-        </View>
+        {/* Recent Appointments - Can be added later if needed */}
       </ScrollView>
     </SafeAreaView>
   );
@@ -552,6 +770,67 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     alignSelf: 'flex-start',
+  },
+  statusActionButtons: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 12,
+  },
+  statusActionBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    borderRadius: 8,
+    gap: 6,
+  },
+  completedBtn: {
+    backgroundColor: colors.success,
+  },
+  noShowBtn: {
+    backgroundColor: '#F59E0B', // Amber/orange color
+  },
+  statusActionBtnText: {
+    color: colors.textWhite,
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  loadingContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 60,
+  },
+  loadingText: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    marginTop: 12,
+  },
+  emptyContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 60,
+    paddingHorizontal: 32,
+  },
+  emptyText: {
+    fontSize: 16,
+    color: colors.textSecondary,
+    marginTop: 16,
+    textAlign: 'center',
+  },
+  retryButton: {
+    marginTop: 16,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    backgroundColor: colors.primary,
+    borderRadius: 8,
+  },
+  retryButtonText: {
+    color: colors.textWhite,
+    fontWeight: '600',
+    fontSize: 14,
   },
 });
 
