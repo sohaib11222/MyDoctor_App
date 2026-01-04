@@ -5,15 +5,26 @@ import {
   StyleSheet,
   TouchableOpacity,
   SafeAreaView,
-  Image,
-  Dimensions,
+  ActivityIndicator,
   Alert,
+  Dimensions,
 } from 'react-native';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
+import {
+  StreamVideo,
+  StreamCall,
+  CallContent,
+  useCallStateHooks,
+  ParticipantView,
+} from '@stream-io/video-react-native-sdk';
 import { ChatStackParamList } from '../../navigation/types';
 import { colors } from '../../constants/colors';
 import { Ionicons } from '@expo/vector-icons';
+import { useVideoCall } from '../../hooks/useVideoCall';
+import { useAuth } from '../../contexts/AuthContext';
+import Toast from 'react-native-toast-message';
+import * as videoApi from '../../services/video';
 
 type VideoCallScreenNavigationProp = StackNavigationProp<ChatStackParamList, 'VideoCall'>;
 type VideoCallRouteProp = RouteProp<ChatStackParamList, 'VideoCall'>;
@@ -24,76 +35,114 @@ export const VideoCallScreen = () => {
   const navigation = useNavigation<VideoCallScreenNavigationProp>();
   const route = useRoute<VideoCallRouteProp>();
   const { callId } = route.params;
-  const [callActive, setCallActive] = useState(true);
-  const [videoEnabled, setVideoEnabled] = useState(true);
-  const [audioEnabled, setAudioEnabled] = useState(true);
-  const [callDuration, setCallDuration] = useState(0);
+  const { user } = useAuth();
+  const [callStarted, setCallStarted] = useState(false);
+  const startCallRef = useRef(false);
+  const [isCallActive, setIsCallActive] = useState(false);
 
-  // Mock patient info - in real app, fetch based on callId
-  const patientInfo = {
-    name: 'Kelly Joseph',
-    avatar: require('../../../assets/avatar.png'),
-    appointmentId: '#Apt0001',
-    isOnline: true,
-  };
+  // Use appointmentId from callId (assuming callId is appointmentId)
+  const appointmentId = callId;
+
+  const { client, call, loading, error, startCall, endCall } = useVideoCall(appointmentId);
 
   useEffect(() => {
-    // Start call timer
-    const timer = setInterval(() => {
-      setCallDuration((prev) => prev + 1);
-    }, 1000);
+    if (appointmentId && user && !startCallRef.current && !loading) {
+      console.log('🚀 [VideoCallScreen] Starting video call...');
+      startCallRef.current = true;
+      setCallStarted(true);
 
-    return () => {
-      clearInterval(timer);
-    };
-  }, []);
+      startCall()
+        .then(() => {
+          console.log('✅ [VideoCallScreen] Video call started successfully');
+          Toast.show({
+            type: 'success',
+            text1: 'Video call started',
+          });
+          setIsCallActive(true);
+        })
+        .catch((err: any) => {
+          console.error('❌ [VideoCallScreen] Error starting call:', err);
+          let errorMessage = err.response?.data?.message || err.message || 'Failed to start video call';
 
-  const formatTime = (seconds: number) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-  };
+          if (err.message?.includes('permission') || err.message?.includes('Permission')) {
+            errorMessage = err.message;
+            Toast.show({
+              type: 'error',
+              text1: errorMessage,
+              visibilityTime: 8000,
+            });
+          } else {
+            Toast.show({
+              type: 'error',
+              text1: errorMessage,
+            });
+          }
 
-  const handleEndCall = () => {
+          startCallRef.current = false;
+          setCallStarted(false);
+        });
+    }
+  }, [appointmentId, user, loading, startCall]);
+
+  const handleEndCall = async () => {
     Alert.alert('End Call', 'Are you sure you want to end this call?', [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'End Call',
         style: 'destructive',
-        onPress: () => {
-          setCallActive(false);
-          // Navigate back to appointments or chat
-          navigation.goBack();
+        onPress: async () => {
+          try {
+            setIsCallActive(false);
+            if (call && appointmentId) {
+              try {
+                const sessionData = await videoApi.getVideoSessionByAppointment(appointmentId);
+                if (sessionData.data?.sessionId) {
+                  await videoApi.endVideoSession(sessionData.data.sessionId);
+                }
+              } catch (err) {
+                console.error('Error ending session on backend:', err);
+              }
+            }
+            await endCall();
+            Toast.show({
+              type: 'success',
+              text1: 'Call ended',
+            });
+            navigation.goBack();
+          } catch (err) {
+            Toast.show({
+              type: 'error',
+              text1: 'Error ending call',
+            });
+            console.error(err);
+          }
         },
       },
     ]);
   };
 
-  const toggleVideo = () => {
-    setVideoEnabled((prev) => !prev);
-    // In real app, toggle video track
-  };
-
-  const toggleAudio = () => {
-    setAudioEnabled((prev) => !prev);
-    // In real app, toggle audio track
-  };
-
-  if (!callActive) {
+  if (loading || !client || !call) {
     return (
       <SafeAreaView style={styles.container}>
-        <View style={styles.callEndedContainer}>
-          <View style={styles.callEndedIcon}>
-            <Ionicons name="call" size={64} color={colors.error} />
-          </View>
-          <Text style={styles.callEndedTitle}>Call Ended</Text>
-          <Text style={styles.callEndedText}>The video consultation has been ended.</Text>
-          <TouchableOpacity
-            style={styles.backButton}
-            onPress={() => navigation.goBack()}
-            activeOpacity={0.8}
-          >
-            <Text style={styles.backButtonText}>Back to Appointments</Text>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={colors.primary} />
+          <Text style={styles.loadingText}>Preparing video call...</Text>
+          {!client && <Text style={styles.loadingSubtext}>Initializing client...</Text>}
+          {!call && <Text style={styles.loadingSubtext}>Creating call...</Text>}
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (error) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.errorContainer}>
+          <Ionicons name="alert-circle" size={64} color={colors.error} />
+          <Text style={styles.errorTitle}>Error</Text>
+          <Text style={styles.errorText}>{error}</Text>
+          <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
+            <Text style={styles.backButtonText}>Go Back</Text>
           </TouchableOpacity>
         </View>
       </SafeAreaView>
@@ -102,94 +151,175 @@ export const VideoCallScreen = () => {
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* Call Header */}
-      <View style={styles.callHeader}>
-        <View style={styles.patientInfo}>
-          <View style={styles.patientAvatarContainer}>
-            <Image source={patientInfo.avatar} style={styles.patientAvatar} />
-            {patientInfo.isOnline && <View style={styles.onlineIndicator} />}
-          </View>
-          <View style={styles.patientDetails}>
-            <Text style={styles.patientName}>{patientInfo.name}</Text>
-            <Text style={styles.appointmentId}>Appointment: {patientInfo.appointmentId}</Text>
-          </View>
+      <StreamVideo client={client}>
+        <StreamCall call={call}>
+          <VideoCallContent onEndCall={handleEndCall} currentUserId={user?._id || user?.id} />
+        </StreamCall>
+      </StreamVideo>
+    </SafeAreaView>
+  );
+};
+
+// Separate component to use Stream hooks
+const VideoCallContent = ({
+  onEndCall,
+  currentUserId,
+}: {
+  onEndCall: () => void;
+  currentUserId?: string;
+}) => {
+  const { useCallCallingState, useParticipants } = useCallStateHooks();
+  const callingState = useCallCallingState();
+  const participants = useParticipants();
+
+  // Separate local and remote participants
+  const localParticipant = participants.find((p) => p.isLocalParticipant);
+  const remoteParticipants = participants.filter((p) => !p.isLocalParticipant);
+
+  // Get unique participants by userId
+  const uniqueRemoteParticipants = Array.from(
+    new Map(remoteParticipants.map((p) => [p.userId, p])).values()
+  );
+
+  // Don't render if call is not joined
+  if (callingState !== 'joined') {
+    return (
+      <View style={styles.container}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={colors.primary} />
+          <Text style={styles.loadingText}>Joining call... (State: {callingState})</Text>
         </View>
-        <TouchableOpacity style={styles.addUserButton} activeOpacity={0.7}>
-          <Ionicons name="person-add-outline" size={20} color={colors.textWhite} />
-        </TouchableOpacity>
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.container}>
+      {/* Header */}
+      <View style={styles.header}>
+        <Text style={styles.headerTitle}>Video Consultation</Text>
+        <Text style={styles.participantCount}>
+          {localParticipant && uniqueRemoteParticipants.length > 0 ? '2 participants' : '1 participant'}
+        </Text>
       </View>
 
-      {/* Video Area */}
+      {/* Video Area - 50/50 split */}
       <View style={styles.videoContainer}>
-        {/* Remote Video (Patient) */}
-        <View style={styles.remoteVideo}>
-          <Image
-            source={require('../../../assets/avatar.png')}
-            style={styles.videoPlaceholder}
-            resizeMode="cover"
-          />
-          {!videoEnabled && (
-            <View style={styles.videoDisabledOverlay}>
-              <Ionicons name="videocam-off" size={48} color={colors.textWhite} />
+        {/* Left side - Remote participant (Patient) */}
+        <View style={styles.videoPanel}>
+          {uniqueRemoteParticipants.length > 0 ? (
+            <>
+              <ParticipantView
+                participant={uniqueRemoteParticipants[0]}
+                style={styles.remoteVideo}
+              />
+              <View style={styles.participantLabel}>
+                <View style={[styles.labelDot, { backgroundColor: '#4CAF50' }]} />
+                <Text style={styles.labelText}>
+                  Patient: {uniqueRemoteParticipants[0].name || uniqueRemoteParticipants[0].userId || 'Patient'}
+                </Text>
+              </View>
+            </>
+          ) : (
+            <View style={styles.waitingContainer}>
+              <Text style={styles.waitingText}>Waiting for patient to join...</Text>
             </View>
           )}
         </View>
 
-        {/* Local Video (Doctor) */}
-        <View style={styles.localVideo}>
-          <Image
-            source={require('../../../assets/avatar.png')}
-            style={styles.localVideoPlaceholder}
-            resizeMode="cover"
-          />
-          {!videoEnabled && (
-            <View style={styles.localVideoDisabledOverlay}>
-              <Ionicons name="videocam-off" size={24} color={colors.textWhite} />
+        {/* Right side - Local participant (Doctor/You) */}
+        {localParticipant && (
+          <View style={styles.videoPanel}>
+            <ParticipantView participant={localParticipant} style={styles.localVideo} />
+            <View style={styles.participantLabel}>
+              <View style={[styles.labelDot, { backgroundColor: '#2196F3' }]} />
+              <Text style={styles.labelText}>Doctor: You</Text>
             </View>
-          )}
-        </View>
-
-        {/* Call Timer */}
-        <View style={styles.callTimer}>
-          <Text style={styles.timerText}>{formatTime(callDuration)}</Text>
-        </View>
+          </View>
+        )}
       </View>
 
       {/* Call Controls */}
-      <View style={styles.callControls}>
+      <CallControls onEndCall={onEndCall} />
+    </View>
+  );
+};
+
+// Call Controls Component
+const CallControls = ({ onEndCall }: { onEndCall: () => void }) => {
+  const { useMicrophoneState, useCameraState } = useCallStateHooks();
+  const micState = useMicrophoneState();
+  const cameraState = useCameraState();
+
+  const toggleMic = async () => {
+    try {
+      if (micState.microphone.enabled) {
+        await micState.microphone.disable();
+      } else {
+        await micState.microphone.enable();
+      }
+    } catch (err) {
+      console.error('Error toggling microphone:', err);
+    }
+  };
+
+  const toggleCamera = async () => {
+    try {
+      if (cameraState.camera.enabled) {
+        await cameraState.camera.disable();
+      } else {
+        await cameraState.camera.enable();
+      }
+    } catch (err) {
+      console.error('Error toggling camera:', err);
+    }
+  };
+
+  return (
+    <View style={styles.controlsContainer}>
+      <View style={styles.controls}>
+        {/* Microphone Toggle */}
         <TouchableOpacity
-          style={[styles.controlButton, !videoEnabled && styles.controlButtonMuted]}
-          onPress={toggleVideo}
+          style={[
+            styles.controlButton,
+            !micState.microphone.enabled && styles.controlButtonMuted,
+          ]}
+          onPress={toggleMic}
           activeOpacity={0.7}
         >
           <Ionicons
-            name={videoEnabled ? 'videocam' : 'videocam-off'}
+            name={micState.microphone.enabled ? 'mic' : 'mic-off'}
             size={24}
             color={colors.textWhite}
           />
         </TouchableOpacity>
 
+        {/* Camera Toggle */}
+        <TouchableOpacity
+          style={[
+            styles.controlButton,
+            !cameraState.camera.enabled && styles.controlButtonMuted,
+          ]}
+          onPress={toggleCamera}
+          activeOpacity={0.7}
+        >
+          <Ionicons
+            name={cameraState.camera.enabled ? 'videocam' : 'videocam-off'}
+            size={24}
+            color={colors.textWhite}
+          />
+        </TouchableOpacity>
+
+        {/* End Call */}
         <TouchableOpacity
           style={[styles.controlButton, styles.endCallButton]}
-          onPress={handleEndCall}
+          onPress={onEndCall}
           activeOpacity={0.7}
         >
           <Ionicons name="call" size={24} color={colors.textWhite} />
         </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.controlButton, !audioEnabled && styles.controlButtonMuted]}
-          onPress={toggleAudio}
-          activeOpacity={0.7}
-        >
-          <Ionicons
-            name={audioEnabled ? 'mic' : 'mic-off'}
-            size={24}
-            color={colors.textWhite}
-          />
-        </TouchableOpacity>
       </View>
-    </SafeAreaView>
+    </View>
   );
 };
 
@@ -198,129 +328,119 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#000',
   },
-  callHeader: {
+  loadingContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#000',
+  },
+  loadingText: {
+    color: colors.textWhite,
+    fontSize: 16,
+    marginTop: 16,
+  },
+  loadingSubtext: {
+    color: colors.textSecondary,
+    fontSize: 14,
+    marginTop: 8,
+  },
+  errorContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 32,
+    backgroundColor: '#000',
+  },
+  errorTitle: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: colors.textWhite,
+    marginTop: 24,
+    marginBottom: 12,
+  },
+  errorText: {
+    fontSize: 16,
+    color: colors.textSecondary,
+    textAlign: 'center',
+    marginBottom: 32,
+  },
+  header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     padding: 16,
     backgroundColor: 'rgba(0, 0, 0, 0.7)',
   },
-  patientInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-  },
-  patientAvatarContainer: {
-    position: 'relative',
-    marginRight: 12,
-  },
-  patientAvatar: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-  },
-  onlineIndicator: {
-    position: 'absolute',
-    bottom: 2,
-    right: 2,
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    backgroundColor: colors.success,
-    borderWidth: 2,
-    borderColor: '#000',
-  },
-  patientDetails: {
-    flex: 1,
-  },
-  patientName: {
-    fontSize: 16,
-    fontWeight: '600',
+  headerTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
     color: colors.textWhite,
-    marginBottom: 4,
   },
-  appointmentId: {
-    fontSize: 12,
+  participantCount: {
+    fontSize: 14,
     color: colors.textWhite,
-    opacity: 0.8,
-  },
-  addUserButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   videoContainer: {
     flex: 1,
+    flexDirection: 'row',
+    gap: 10,
+    padding: 10,
+  },
+  videoPanel: {
+    flex: 1,
+    backgroundColor: '#1a1a1a',
+    borderRadius: 8,
+    overflow: 'hidden',
     position: 'relative',
   },
   remoteVideo: {
     width: '100%',
     height: '100%',
-    position: 'relative',
-  },
-  videoPlaceholder: {
-    width: '100%',
-    height: '100%',
-  },
-  videoDisabledOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   localVideo: {
-    position: 'absolute',
-    top: 20,
-    right: 20,
-    width: 120,
-    height: 160,
-    borderRadius: 12,
-    overflow: 'hidden',
-    borderWidth: 2,
-    borderColor: colors.background,
-  },
-  localVideoPlaceholder: {
     width: '100%',
     height: '100%',
   },
-  localVideoDisabledOverlay: {
+  participantLabel: {
     position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
+    bottom: 10,
+    left: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 20,
+    gap: 8,
+  },
+  labelDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  labelText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: colors.textWhite,
+  },
+  waitingContainer: {
+    flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  callTimer: {
-    position: 'absolute',
-    top: 20,
-    left: 20,
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
-  },
-  timerText: {
-    fontSize: 14,
-    fontWeight: '600',
+  waitingText: {
+    fontSize: 18,
     color: colors.textWhite,
   },
-  callControls: {
+  controlsContainer: {
+    padding: 20,
+    backgroundColor: 'rgba(0, 0, 0, 0.9)',
+  },
+  controls: {
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 24,
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
-    gap: 20,
+    gap: 15,
   },
   controlButton: {
     width: 56,
@@ -339,27 +459,6 @@ const styles = StyleSheet.create({
     borderRadius: 32,
     backgroundColor: colors.error,
   },
-  callEndedContainer: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 32,
-  },
-  callEndedIcon: {
-    marginBottom: 24,
-  },
-  callEndedTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: colors.text,
-    marginBottom: 12,
-  },
-  callEndedText: {
-    fontSize: 16,
-    color: colors.textSecondary,
-    textAlign: 'center',
-    marginBottom: 32,
-  },
   backButton: {
     backgroundColor: colors.primary,
     paddingHorizontal: 24,
@@ -372,4 +471,3 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
 });
-
