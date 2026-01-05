@@ -790,20 +790,6 @@ const DoctorProfileScreen = () => {
                   <Ionicons name="call-outline" size={16} color={colors.textWhite} />
                   <Text style={styles.contactBtnText}>Audio</Text>
                 </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.contactBtn, styles.videoBtn]}
-                  onPress={() => {
-                    Toast.show({
-                      type: 'info',
-                      text1: 'Video Call',
-                      text2: 'Video call functionality coming soon',
-                    });
-                  }}
-                  activeOpacity={0.8}
-                >
-                  <Ionicons name="videocam-outline" size={16} color={colors.textWhite} />
-                  <Text style={styles.contactBtnText}>Video</Text>
-                </TouchableOpacity>
               </View>
             </View>
           </View>
@@ -1098,9 +1084,6 @@ const styles = StyleSheet.create({
   },
   audioBtn: {
     backgroundColor: '#8B5CF6',
-  },
-  videoBtn: {
-    backgroundColor: '#6366F1',
   },
   contactBtnText: {
     color: colors.textWhite,

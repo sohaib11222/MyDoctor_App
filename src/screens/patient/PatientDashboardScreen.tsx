@@ -315,7 +315,7 @@ export const PatientDashboardScreen = () => {
                       <Text style={styles.appointmentSpeciality}>{specialization}</Text>
                     </View>
                     <Ionicons
-                      name={appointment.bookingType === 'ONLINE' ? 'videocam' : 'medical'}
+                      name={appointment.bookingType === 'ONLINE' ? 'calendar' : 'medical'}
                       size={20}
                       color={colors.primary}
                     />

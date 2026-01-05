@@ -547,7 +547,7 @@ const BookingScreen = () => {
                     color={formData.bookingType === 'ONLINE' ? colors.primary : colors.textSecondary}
                   />
                   <Text style={styles.appointmentTypeTitle}>Online Consultation</Text>
-                  <Text style={styles.appointmentTypeDescription}>Video call with the doctor</Text>
+                  <Text style={styles.appointmentTypeDescription}>Online consultation with the doctor</Text>
                   {formData.bookingType === 'ONLINE' && (
                     <View style={styles.selectedIndicator}>
                       <Ionicons name="checkmark-circle" size={20} color={colors.primary} />

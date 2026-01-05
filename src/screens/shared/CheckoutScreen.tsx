@@ -40,7 +40,7 @@ const CheckoutScreen = () => {
     time: '10:00 AM',
     consultingFee: 100,
     bookingFee: 10,
-    videoCall: 50,
+    onlineConsultation: 50,
     total: 160,
   };
 
@@ -271,8 +271,8 @@ const CheckoutScreen = () => {
               <Text style={styles.summaryValue}>${bookingSummary.bookingFee}</Text>
             </View>
             <View style={styles.summaryRow}>
-              <Text style={styles.summaryLabel}>Video Call</Text>
-              <Text style={styles.summaryValue}>${bookingSummary.videoCall}</Text>
+              <Text style={styles.summaryLabel}>Online Consultation</Text>
+              <Text style={styles.summaryValue}>${bookingSummary.onlineConsultation}</Text>
             </View>
             <View style={styles.summaryDivider} />
             <View style={styles.summaryTotal}>

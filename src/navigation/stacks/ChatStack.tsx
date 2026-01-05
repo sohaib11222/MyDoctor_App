@@ -7,7 +7,6 @@ import { ChatStackParamList } from '../types';
 import { ChatListScreen } from '../../screens/shared/ChatListScreen';
 import { ChatDetailScreen } from '../../screens/shared/ChatDetailScreen';
 import { AdminChatScreen } from '../../screens/doctor/AdminChatScreen';
-import { VideoCallScreen } from '../../screens/doctor/VideoCallScreen';
 import { CustomHeader } from '../../components/common/CustomHeader';
 import { useAuth } from '../../contexts/AuthContext';
 import { colors } from '../../constants/colors';
@@ -41,17 +40,7 @@ export const ChatStack = () => {
                     </Text>
                   </View>
                 }
-                rightComponent={
-                  isDoctor ? (
-                    <TouchableOpacity
-                      style={styles.videoCallButton}
-                      onPress={() => headerNavigation.navigate('VideoCall', { callId: params?.chatId || '1' })}
-                      activeOpacity={0.7}
-                    >
-                      <Ionicons name="videocam" size={20} color={colors.textWhite} />
-                    </TouchableOpacity>
-                  ) : undefined
-                }
+                rightComponent={undefined}
               />
             );
           }
@@ -81,11 +70,6 @@ export const ChatStack = () => {
         component={AdminChatScreen}
         options={{ title: 'Admin Messages', headerShown: false }}
       />
-      <Stack.Screen 
-        name="VideoCall" 
-        component={VideoCallScreen}
-        options={{ headerShown: false }}
-      />
     </Stack.Navigator>
   );
 };
@@ -106,13 +90,5 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '600',
     color: colors.textWhite,
-  },
-  videoCallButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    alignItems: 'center',
-    justifyContent: 'center',
   },
 });

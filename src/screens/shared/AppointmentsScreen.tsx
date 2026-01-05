@@ -240,7 +240,7 @@ const AppointmentsScreen = () => {
             types.push(apt.clinicName);
           }
         } else if (apt.bookingType === 'ONLINE') {
-          types.push('Video Call');
+          types.push('Online');
         }
         
         return {

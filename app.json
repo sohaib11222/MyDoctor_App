@@ -13,7 +13,12 @@
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.mydoctor.app",
+      "infoPlist": {
+        "NSCameraUsageDescription": "This app needs access to your camera for video consultations with doctors.",
+        "NSMicrophoneUsageDescription": "This app needs access to your microphone for video consultations with doctors."
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -21,10 +26,27 @@
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "package": "com.mydoctor.app",
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.MODIFY_AUDIO_SETTINGS",
+        "android.permission.INTERNET",
+        "android.permission.ACCESS_NETWORK_STATE"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "plugins": [
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "The app accesses your photos to upload profile pictures and documents.",
+          "cameraPermission": "The app accesses your camera for video consultations and document uploads."
+        }
+      ]
+    ]
   }
 }

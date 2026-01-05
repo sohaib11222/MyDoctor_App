@@ -178,7 +178,7 @@ const AppointmentDetailsScreen = () => {
         clinic: appointment.clinicName || 'Not specified',
         location: appointment.clinicName || 'Not specified',
         visitType: appointment.patientNotes || 'General Visit',
-        appointmentType: appointment.bookingType === 'VISIT' ? 'Direct Visit' : 'Video Call',
+        appointmentType: appointment.bookingType === 'VISIT' ? 'Direct Visit' : 'Online',
         fee: 0, // Fee not in appointment model
         personWithPatient: undefined,
       };
@@ -193,7 +193,7 @@ const AppointmentDetailsScreen = () => {
         clinic: appointment.clinicName || 'Not specified',
         location: appointment.clinicName || 'Not specified',
         visitType: appointment.patientNotes || 'General Visit',
-        appointmentType: appointment.bookingType === 'VISIT' ? 'Direct Visit' : 'Video Call',
+        appointmentType: appointment.bookingType === 'VISIT' ? 'Direct Visit' : 'Online',
         fee: 0, // Fee not in appointment model
         personWithPatient: undefined,
       };
@@ -202,7 +202,7 @@ const AppointmentDetailsScreen = () => {
 
   const recentAppointments = [
     { id: '#Apt0002', doctor: isDoctor ? 'Kelly Stevens' : 'Dr.Shanta Nesmith', doctorImg: require('../../../assets/avatar.png'), date: '11 Nov 2024 10.45 AM', types: ['General Visit', 'Chat'], email: 'shanta@example.com', phone: '+1 504 368 6874' },
-    { id: '#Apt0003', doctor: isDoctor ? 'Samuel Anderson' : 'Dr.John Ewel', doctorImg: require('../../../assets/avatar.png'), date: '27 Oct 2024 09.30 AM', types: ['General Visit', 'Video Call'], email: 'john@example.com', phone: '+1 749 104 6291' },
+    { id: '#Apt0003', doctor: isDoctor ? 'Samuel Anderson' : 'Dr.John Ewel', doctorImg: require('../../../assets/avatar.png'), date: '27 Oct 2024 09.30 AM', types: ['General Visit', 'Online'], email: 'john@example.com', phone: '+1 749 104 6291' },
   ];
 
   const getStatusBadge = () => {
@@ -342,7 +342,7 @@ const AppointmentDetailsScreen = () => {
             <Text style={styles.sectionLabel}>Type of Appointment</Text>
             <View style={styles.typeBadge}>
               <Ionicons 
-                name={appointmentData.appointmentType === 'Direct Visit' ? 'medical-outline' : 'videocam-outline'} 
+                name={appointmentData.appointmentType === 'Direct Visit' ? 'medical-outline' : 'calendar-outline'} 
                 size={16} 
                 color={colors.success} 
               />
@@ -428,7 +428,7 @@ const AppointmentDetailsScreen = () => {
               <Text style={styles.startSessionText}>Start Session</Text>
             </TouchableOpacity>
           )}
-          {status === 'upcoming' && !isDoctor && (
+          {status === 'upcoming' && !isDoctor && appointment?.bookingType !== 'ONLINE' && (
             <TouchableOpacity style={styles.startSessionBtn} activeOpacity={0.8}>
               <Text style={styles.startSessionText}>View Details</Text>
             </TouchableOpacity>

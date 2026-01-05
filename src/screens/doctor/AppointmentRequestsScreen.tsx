@@ -117,7 +117,7 @@ export const AppointmentRequestsScreen = () => {
       const isNew = new Date(apt.createdAt).getTime() > Date.now() - 24 * 60 * 60 * 1000; // Within last 24 hours
       
       // Get appointment type display
-      let appointmentType = 'Video Call';
+      let appointmentType = 'Online';
       if (apt.bookingType === 'VISIT') {
         appointmentType = 'Direct Visit';
       }
@@ -174,8 +174,8 @@ export const AppointmentRequestsScreen = () => {
 
   const getAppointmentTypeIcon = (type: string) => {
     switch (type) {
-      case 'Video Call':
-        return { name: 'videocam-outline', color: colors.info };
+      case 'Online':
+        return { name: 'calendar-outline', color: colors.info };
       case 'Audio Call':
         return { name: 'call-outline', color: colors.primary };
       case 'Direct Visit':

@@ -11,10 +11,14 @@ import { AvailableTimingsScreen } from '../../screens/doctor/AvailableTimingsScr
 import { AppointmentRequestsScreen } from '../../screens/doctor/AppointmentRequestsScreen';
 import { MyPatientsScreen } from '../../screens/doctor/MyPatientsScreen';
 import { CustomHeader } from '../../components/common/CustomHeader';
+import { useAuth } from '../../contexts/AuthContext';
 
 const Stack = createNativeStackNavigator<AppointmentsStackParamList>();
 
 export const AppointmentsStack = () => {
+  const { user } = useAuth();
+  const isDoctor = user?.role === 'doctor';
+
   return (
     <Stack.Navigator
       screenOptions={{
