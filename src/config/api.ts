@@ -3,19 +3,11 @@ import { Platform } from 'react-native';
 /**
  * API Configuration
  * 
- * IMPORTANT: Update these URLs based on your setup:
- * 
- * For Android Emulator: Use http://10.0.2.2:5000/api
- * For iOS Simulator: Use http://localhost:5000/api
- * For Physical Device: Use your computer's IP address (e.g., http://192.168.1.100:5000/api)
- * 
- * To find your computer's IP:
- * - Windows: Run `ipconfig` in CMD and look for IPv4 Address
- * - Mac/Linux: Run `ifconfig` or `ip addr` and look for your network interface IP
+ * Live backend URL for production
  */
 
-// Default API base URL - UPDATE THIS FOR YOUR SETUP
-const DEFAULT_API_URL = 'http://localhost:5000/api';
+// Live API base URL
+const LIVE_API_URL = 'https://mydoctoradmin.mydoctorplus.it/api';
 
 // Platform-specific URLs
 const getApiBaseUrl = (): string => {
@@ -26,21 +18,8 @@ const getApiBaseUrl = (): string => {
     return envUrl;
   }
 
-  // Platform detection
-  if (Platform.OS === 'android') {
-    // Android Emulator uses 10.0.2.2 to access host machine's localhost
-    // For physical Android device, use your computer's IP address
-    // Updated to use IP: 192.168.1.11
-    return 'http://192.168.0.109:5000/api';
-  } else if (Platform.OS === 'ios') {
-    // iOS Simulator can use localhost
-    // For physical iOS device, use your computer's IP address
-    // Updated to use IP: 192.168.1.11
-    return 'http://192.168.1.11:5000/api';
-  }
-
-  // Fallback
-  return DEFAULT_API_URL;
+  // Use live URL for all platforms
+  return LIVE_API_URL;
 };
 
 export const API_BASE_URL = getApiBaseUrl();

@@ -47,6 +47,11 @@
           "cameraPermission": "The app accesses your camera for video consultations and document uploads."
         }
       ]
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "f81ba192-9906-42ec-bf90-33076ee276c4"
+      }
+    }
   }
 }
