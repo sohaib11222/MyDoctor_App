@@ -91,6 +91,30 @@ export interface DoctorListItem {
   };
   fullName?: string;
   profileImage?: string;
+  // Direct properties (from API response)
+  clinics?: Array<{
+    city?: string;
+    state?: string;
+    address?: string;
+    country?: string;
+  }>;
+  consultationFees?: {
+    clinic?: number;
+    online?: number;
+  };
+  isAvailableOnline?: boolean;
+  ratingAvg?: number;
+  ratingCount?: number;
+  specialization?: {
+    _id: string;
+    name: string;
+  } | string;
+  subscriptionExpiresAt?: string;
+  rating?: {
+    average: number;
+    count: number;
+  };
+  // Nested doctorProfile properties
   doctorProfile?: {
     specialization?: {
       _id: string;
@@ -104,6 +128,7 @@ export interface DoctorListItem {
       city?: string;
       state?: string;
       address?: string;
+      country?: string;
     }>;
     consultationFee?: number;
     consultationFees?: {
@@ -111,23 +136,16 @@ export interface DoctorListItem {
       online?: number;
     };
     ratingAvg?: number;
+    ratingCount?: number;
     rating?: {
       average: number;
       count: number;
     };
+    profileImage?: string;
     services?: Array<{
       name: string;
       price?: number;
     }>;
-  };
-  specialization?: {
-    _id: string;
-    name: string;
-  } | string;
-  subscriptionExpiresAt?: string;
-  rating?: {
-    average: number;
-    count: number;
   };
 }
 

@@ -134,8 +134,11 @@ const DoctorProfileScreen = () => {
     const responseData = favoritesResponse.data || favoritesResponse;
     const favorites = responseData.favorites || [];
     return favorites.some((fav: any) => {
-      const favDoctorId = typeof fav.doctorId === 'object' ? fav.doctorId._id || fav.doctorId : fav.doctorId;
-      return String(favDoctorId) === String(doctorId);
+      if (!fav || !fav.doctorId) return false;
+      const favDoctorId = fav.doctorId && typeof fav.doctorId === 'object' && fav.doctorId !== null 
+        ? (fav.doctorId._id || fav.doctorId) 
+        : fav.doctorId;
+      return favDoctorId ? String(favDoctorId) === String(doctorId) : false;
     });
   }, [favoritesResponse, doctorId]);
 
@@ -145,8 +148,11 @@ const DoctorProfileScreen = () => {
     const responseData = favoritesResponse.data || favoritesResponse;
     const favorites = responseData.favorites || [];
     const favorite = favorites.find((fav: any) => {
-      const favDoctorId = typeof fav.doctorId === 'object' ? fav.doctorId._id || fav.doctorId : fav.doctorId;
-      return String(favDoctorId) === String(doctorId);
+      if (!fav || !fav.doctorId) return false;
+      const favDoctorId = fav.doctorId && typeof fav.doctorId === 'object' && fav.doctorId !== null 
+        ? (fav.doctorId._id || fav.doctorId) 
+        : fav.doctorId;
+      return favDoctorId ? String(favDoctorId) === String(doctorId) : false;
     });
     return favorite?._id || null;
   }, [favoritesResponse, doctorId]);
@@ -229,7 +235,7 @@ const DoctorProfileScreen = () => {
     try {
       const doctorName = doctor?.userId?.fullName || doctor?.fullName || 'Doctor';
       await Share.share({
-        message: `Check out ${doctorName} on MyDoctor App!`,
+        message: `Check out ${doctorName} on Mydoctor+ App!`,
         title: doctorName,
       });
     } catch (error) {

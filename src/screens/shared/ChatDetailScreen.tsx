@@ -129,7 +129,7 @@ const ChatDetailScreen = () => {
   const flatListRef = useRef<FlatList>(null);
 
   // For patients: Get or create conversation first if conversationId is not set
-  const { data: conversationData, isLoading: conversationLoading } = useQuery({
+  const { data: patientConversationData, isLoading: patientConversationLoading } = useQuery({
     queryKey: ['patientConversation', doctorId, appointmentId, user?.id],
     queryFn: async () => {
       if (!isDoctor && doctorId && appointmentId && user?.id) {
@@ -141,19 +141,51 @@ const ChatDetailScreen = () => {
     retry: 1,
   });
 
+  // For doctors: Get or create conversation first if conversationId is not set
+  const { data: doctorConversationData, isLoading: doctorConversationLoading } = useQuery({
+    queryKey: ['doctorConversation', user?.id, patientId, appointmentId],
+    queryFn: async () => {
+      if (isDoctor && user?.id && patientId && appointmentId) {
+        return await chatApi.startConversationWithPatient(
+          user.id,
+          patientId,
+          appointmentId
+        );
+      }
+      return null;
+    },
+    enabled: !!(isDoctor && user?.id && patientId && appointmentId && !conversationId),
+    retry: 1,
+  });
+
   // Update conversationId if we got it from the API
+  const conversationData = isDoctor ? doctorConversationData : patientConversationData;
+  const conversationLoading = isDoctor ? doctorConversationLoading : patientConversationLoading;
   const actualConversationId = conversationId || conversationData?.data?._id || chatId;
+
+  // Check if we have the required parameters
+  const hasRequiredParams = isDoctor 
+    ? (!!patientId && !!appointmentId)
+    : (!!doctorId && !!appointmentId);
 
   // Fetch messages for conversation
   const { data: messagesResponse, isLoading: messagesLoading, error, refetch } = useQuery({
     queryKey: ['conversationMessages', actualConversationId],
-    queryFn: () => chatApi.getMessages(actualConversationId, { page: 1, limit: 100 }),
-    enabled: !!actualConversationId,
+    queryFn: () => {
+      if (!actualConversationId) {
+        throw new Error('Conversation ID is required');
+      }
+      return chatApi.getMessages(actualConversationId, { page: 1, limit: 100 });
+    },
+    enabled: !!actualConversationId && hasRequiredParams,
     retry: 1,
     refetchInterval: 5000, // Poll every 5 seconds for new messages
   });
 
   const isLoading = messagesLoading || conversationLoading;
+  
+  // Check if we're still waiting for conversation to be created
+  const isWaitingForConversation = !actualConversationId && hasRequiredParams && !conversationLoading;
 
   // Transform backend messages to UI format
   const messages = useMemo(() => {
@@ -397,17 +429,44 @@ const ChatDetailScreen = () => {
           {isLoading && (
             <View style={styles.loadingContainer}>
               <ActivityIndicator size="large" color={colors.primary} />
-              <Text style={styles.loadingText}>Loading messages...</Text>
+              <Text style={styles.loadingText}>
+                {conversationLoading ? 'Setting up conversation...' : 'Loading messages...'}
+              </Text>
             </View>
           )}
           
-          {error && (
+          {!hasRequiredParams && !isLoading && (
+            <View style={styles.errorContainer}>
+              <Ionicons name="alert-circle-outline" size={48} color={colors.error} />
+              <Text style={styles.errorText}>
+                {isDoctor 
+                  ? 'Patient information is missing'
+                  : 'Doctor information is missing'}
+              </Text>
+              <Text style={styles.errorSubtext}>
+                Please go back and try again
+              </Text>
+            </View>
+          )}
+          
+          {error && !conversationLoading && actualConversationId && (
             <View style={styles.errorContainer}>
               <Ionicons name="alert-circle-outline" size={48} color={colors.error} />
               <Text style={styles.errorText}>Failed to load messages</Text>
+              <Text style={styles.errorSubtext}>
+                {error?.response?.data?.message || error?.message || 'Please try again'}
+              </Text>
               <TouchableOpacity style={styles.retryButton} onPress={() => refetch()}>
                 <Text style={styles.retryButtonText}>Retry</Text>
               </TouchableOpacity>
+            </View>
+          )}
+          
+          {isWaitingForConversation && (
+            <View style={styles.errorContainer}>
+              <ActivityIndicator size="large" color={colors.primary} />
+              <Text style={styles.errorText}>Creating conversation...</Text>
+              <Text style={styles.errorSubtext}>Please wait</Text>
             </View>
           )}
           
@@ -720,6 +779,12 @@ const styles = StyleSheet.create({
     marginTop: 12,
     fontSize: 14,
     color: colors.error,
+    textAlign: 'center',
+  },
+  errorSubtext: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    marginTop: 8,
     textAlign: 'center',
   },
   retryButton: {

@@ -11,6 +11,8 @@ import {
   ScrollView,
   ActivityIndicator,
   RefreshControl,
+  Alert,
+  Modal,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
@@ -97,6 +99,8 @@ interface UIAppointment {
   isNew?: boolean;
   status: 'upcoming' | 'cancelled' | 'completed';
   appointmentStatus: string; // Backend status
+  doctorId?: string; // Doctor ID for patient to chat
+  patientId?: string; // Patient ID for doctor to chat
 }
 
 const AppointmentsScreen = () => {
@@ -107,6 +111,11 @@ const AppointmentsScreen = () => {
   const [activeTab, setActiveTab] = useState<'upcoming' | 'cancelled' | 'completed'>('upcoming');
   const [searchQuery, setSearchQuery] = useState('');
   const [refreshing, setRefreshing] = useState(false);
+  const [showFilterModal, setShowFilterModal] = useState(false);
+  const [showDateFilterModal, setShowDateFilterModal] = useState(false);
+  const [filterBy, setFilterBy] = useState<'all' | 'online' | 'visit'>('all');
+  const [fromDate, setFromDate] = useState<Date | null>(null);
+  const [toDate, setToDate] = useState<Date | null>(null);
 
   // Determine status filter based on active tab
   const getStatusFilter = (): appointmentApi.AppointmentFilters['status'][] => {
@@ -124,9 +133,28 @@ const AppointmentsScreen = () => {
 
   // Fetch appointments for doctors (using real API)
   const { data: appointmentsData, isLoading, error, refetch } = useQuery({
-    queryKey: ['appointments', isDoctor ? 'doctor' : 'patient', activeTab],
+    queryKey: ['appointments', isDoctor ? 'doctor' : 'patient', activeTab, fromDate, toDate],
     queryFn: async () => {
       const statuses = getStatusFilter();
+      
+      if (__DEV__) {
+        console.log('📅 Fetching appointments:', {
+          activeTab,
+          statuses,
+          isDoctor,
+          fromDate: fromDate?.toISOString().split('T')[0],
+          toDate: toDate?.toISOString().split('T')[0],
+        });
+      }
+      
+      // Build date filter if provided
+      const dateFilter: any = {};
+      if (fromDate) {
+        dateFilter.fromDate = fromDate.toISOString().split('T')[0]; // YYYY-MM-DD format
+      }
+      if (toDate) {
+        dateFilter.toDate = toDate.toISOString().split('T')[0]; // YYYY-MM-DD format
+      }
       
       // Fetch all statuses for the active tab
       const allPromises = statuses.map(status =>
@@ -134,6 +162,7 @@ const AppointmentsScreen = () => {
           status,
           page: 1,
           limit: 100, // Get all for now, can add pagination later
+          ...dateFilter, // Include date filters if provided
         })
       );
       
@@ -142,12 +171,46 @@ const AppointmentsScreen = () => {
       // Combine all appointments
       let allAppointments: appointmentApi.Appointment[] = [];
       
-      results.forEach(result => {
+      results.forEach((result, index) => {
         const responseData = result.data || result;
+        if (__DEV__) {
+          console.log(`📅 Status ${statuses[index]} response:`, {
+            status: statuses[index],
+            hasData: !!responseData,
+            appointmentsCount: responseData?.appointments?.length || 0,
+            pagination: responseData?.pagination,
+          });
+        }
         if (responseData?.appointments) {
           allAppointments = [...allAppointments, ...responseData.appointments];
         }
       });
+      
+      if (__DEV__) {
+        console.log('📅 Total appointments fetched:', allAppointments.length);
+        console.log('📅 Appointments by status:', {
+          PENDING: allAppointments.filter(a => a.status === 'PENDING').length,
+          CONFIRMED: allAppointments.filter(a => a.status === 'CONFIRMED').length,
+          CANCELLED: allAppointments.filter(a => a.status === 'CANCELLED').length,
+          REJECTED: allAppointments.filter(a => a.status === 'REJECTED').length,
+          COMPLETED: allAppointments.filter(a => a.status === 'COMPLETED').length,
+          NO_SHOW: allAppointments.filter(a => a.status === 'NO_SHOW').length,
+        });
+      }
+      
+      // Additional client-side date filtering if needed (in case API doesn't support it)
+      if (fromDate || toDate) {
+        allAppointments = allAppointments.filter(apt => {
+          const aptDate = new Date(apt.appointmentDate);
+          if (fromDate && aptDate < fromDate) return false;
+          if (toDate) {
+            const toDateEnd = new Date(toDate);
+            toDateEnd.setHours(23, 59, 59, 999); // Include entire end date
+            if (aptDate > toDateEnd) return false;
+          }
+          return true;
+        });
+      }
       
       // Sort by date (newest first)
       allAppointments.sort((a, b) => {
@@ -200,8 +263,19 @@ const AppointmentsScreen = () => {
           const patientName = apt.patientId?.fullName?.toLowerCase() || '';
           const doctorName = apt.doctorId?.fullName?.toLowerCase() || '';
           const appointmentNumber = apt.appointmentNumber?.toLowerCase() || '';
-          return patientName.includes(searchLower) || doctorName.includes(searchLower) || appointmentNumber.includes(searchLower);
+          if (!patientName.includes(searchLower) && !doctorName.includes(searchLower) && !appointmentNumber.includes(searchLower)) {
+            return false;
+          }
         }
+        
+        // Filter by booking type (online/visit)
+        if (filterBy === 'online' && apt.bookingType !== 'ONLINE') {
+          return false;
+        }
+        if (filterBy === 'visit' && apt.bookingType !== 'VISIT') {
+          return false;
+        }
+        
         return true;
       })
       .map(apt => {
@@ -243,6 +317,14 @@ const AppointmentsScreen = () => {
           types.push('Online');
         }
         
+        // Extract doctorId and patientId
+        const doctorId = apt.doctorId && typeof apt.doctorId === 'object' && apt.doctorId !== null
+          ? apt.doctorId._id || apt.doctorId
+          : apt.doctorId;
+        const patientId = apt.patientId && typeof apt.patientId === 'object' && apt.patientId !== null
+          ? apt.patientId._id || apt.patientId
+          : apt.patientId;
+        
         return {
           id: apt.appointmentNumber || apt._id,
           appointmentId: apt._id,
@@ -255,9 +337,11 @@ const AppointmentsScreen = () => {
           isNew,
           status: activeTab as 'upcoming' | 'cancelled' | 'completed',
           appointmentStatus: apt.status,
+          doctorId: String(doctorId || ''),
+          patientId: String(patientId || ''),
         } as UIAppointment;
       });
-  }, [appointmentsData, searchQuery, isDoctor, activeTab]);
+  }, [appointmentsData, searchQuery, isDoctor, activeTab, filterBy]);
 
   const getTabCount = (tab: string) => {
     if (!tabCounts) return 0;
@@ -280,6 +364,102 @@ const AppointmentsScreen = () => {
       queryClient.invalidateQueries({ queryKey: ['appointmentTabCounts'] }),
     ]);
     setRefreshing(false);
+  };
+
+  // Cancel appointment mutation
+  const cancelAppointmentMutation = useMutation({
+    mutationFn: (appointmentId: string) => appointmentApi.cancelAppointment(appointmentId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['appointments'] });
+      queryClient.invalidateQueries({ queryKey: ['appointmentTabCounts'] });
+      Toast.show({
+        type: 'success',
+        text1: 'Appointment Cancelled',
+        text2: 'Your appointment has been cancelled successfully',
+      });
+    },
+    onError: (error: any) => {
+      Toast.show({
+        type: 'error',
+        text1: 'Failed to Cancel',
+        text2: error.response?.data?.message || error.message || 'Please try again',
+      });
+    },
+  });
+
+  const handleCancelAppointment = (appointmentId: string) => {
+    Alert.alert(
+      'Cancel Appointment',
+      'Are you sure you want to cancel this appointment?',
+      [
+        { text: 'No', style: 'cancel' },
+        {
+          text: 'Yes, Cancel',
+          style: 'destructive',
+          onPress: () => {
+            cancelAppointmentMutation.mutate(appointmentId);
+          },
+        },
+      ]
+    );
+  };
+
+  const handleChat = (item: UIAppointment) => {
+    if (isDoctor) {
+      // Doctor chatting with patient
+      if (!item.patientId) {
+        Toast.show({
+          type: 'error',
+          text1: 'Error',
+          text2: 'Patient information not available',
+        });
+        return;
+      }
+      if (!item.appointmentId) {
+        Toast.show({
+          type: 'error',
+          text1: 'Error',
+          text2: 'Appointment information not available',
+        });
+        return;
+      }
+      (navigation as any).navigate('Chat', {
+        screen: 'ChatDetail',
+        params: {
+          recipientName: item.name,
+          patientId: item.patientId,
+          appointmentId: item.appointmentId,
+          // Don't pass chatId or conversationId - let ChatDetailScreen create/get it
+        },
+      });
+    } else {
+      // Patient chatting with doctor
+      if (!item.doctorId) {
+        Toast.show({
+          type: 'error',
+          text1: 'Error',
+          text2: 'Doctor information not available',
+        });
+        return;
+      }
+      if (!item.appointmentId) {
+        Toast.show({
+          type: 'error',
+          text1: 'Error',
+          text2: 'Appointment information not available',
+        });
+        return;
+      }
+      (navigation as any).navigate('Chat', {
+        screen: 'ChatDetail',
+        params: {
+          recipientName: item.name,
+          doctorId: item.doctorId,
+          appointmentId: item.appointmentId,
+          // Don't pass chatId or conversationId - let ChatDetailScreen create/get it
+        },
+      });
+    }
   };
 
   const renderAppointmentCard = ({ item }: { item: UIAppointment }) => {
@@ -322,17 +502,37 @@ const AppointmentsScreen = () => {
         <View style={styles.appointmentActions}>
           <TouchableOpacity
             style={styles.actionBtn}
-            onPress={() => navigation.navigate('AppointmentDetails', { appointmentId: item.id })}
+            onPress={(e) => {
+              e.stopPropagation();
+              navigation.navigate('AppointmentDetails', { appointmentId: item.appointmentId });
+            }}
             activeOpacity={0.7}
           >
             <Ionicons name="eye-outline" size={18} color={colors.textSecondary} />
           </TouchableOpacity>
-          <TouchableOpacity style={styles.actionBtn} activeOpacity={0.7}>
+          <TouchableOpacity
+            style={styles.actionBtn}
+            onPress={(e) => {
+              e.stopPropagation();
+              handleChat(item);
+            }}
+            activeOpacity={0.7}
+          >
             <Ionicons name="chatbubble-outline" size={18} color={colors.textSecondary} />
           </TouchableOpacity>
-          <TouchableOpacity style={styles.actionBtn} activeOpacity={0.7}>
-            <Ionicons name="close-circle-outline" size={18} color={colors.error} />
-          </TouchableOpacity>
+          {!isDoctor && activeTab === 'upcoming' && (
+            <TouchableOpacity
+              style={styles.actionBtn}
+              onPress={(e) => {
+                e.stopPropagation();
+                handleCancelAppointment(item.appointmentId);
+              }}
+              activeOpacity={0.7}
+              disabled={cancelAppointmentMutation.isPending}
+            >
+              <Ionicons name="close-circle-outline" size={18} color={colors.error} />
+            </TouchableOpacity>
+          )}
         </View>
       </View>
 
@@ -471,13 +671,49 @@ const AppointmentsScreen = () => {
 
       {/* Filter Bar */}
       <View style={styles.filterBar}>
-        <TouchableOpacity style={styles.filterBtn} activeOpacity={0.7}>
-          <Ionicons name="calendar-outline" size={16} color={colors.textSecondary} />
-          <Text style={styles.filterText}>From Date - To Date</Text>
+        <TouchableOpacity
+          style={[styles.filterBtn, (fromDate || toDate) && styles.filterBtnActive]}
+          activeOpacity={0.7}
+          onPress={() => setShowDateFilterModal(true)}
+        >
+          <Ionicons
+            name="calendar-outline"
+            size={16}
+            color={(fromDate || toDate) ? colors.primary : colors.textSecondary}
+          />
+          <Text
+            style={[
+              styles.filterText,
+              (fromDate || toDate) && styles.filterTextActive,
+            ]}
+          >
+            {fromDate && toDate
+              ? `${fromDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - ${toDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
+              : fromDate
+              ? `From ${fromDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
+              : toDate
+              ? `To ${toDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
+              : 'From Date - To Date'}
+          </Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.filterBtn} activeOpacity={0.7}>
-          <Ionicons name="filter-outline" size={16} color={colors.textSecondary} />
-          <Text style={styles.filterText}>Filter By</Text>
+        <TouchableOpacity
+          style={[styles.filterBtn, filterBy !== 'all' && styles.filterBtnActive]}
+          activeOpacity={0.7}
+          onPress={() => setShowFilterModal(true)}
+        >
+          <Ionicons
+            name="filter-outline"
+            size={16}
+            color={filterBy !== 'all' ? colors.primary : colors.textSecondary}
+          />
+          <Text
+            style={[
+              styles.filterText,
+              filterBy !== 'all' && styles.filterTextActive,
+            ]}
+          >
+            Filter By {filterBy !== 'all' ? `(${filterBy})` : ''}
+          </Text>
         </TouchableOpacity>
       </View>
 
@@ -513,6 +749,209 @@ const AppointmentsScreen = () => {
           }
         />
       )}
+
+      {/* Filter By Modal (Bottom Sheet) */}
+      <Modal
+        visible={showFilterModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowFilterModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <TouchableOpacity
+            style={styles.modalOverlayTouchable}
+            activeOpacity={1}
+            onPress={() => setShowFilterModal(false)}
+          />
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Filter By</Text>
+              <TouchableOpacity
+                onPress={() => setShowFilterModal(false)}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="close" size={24} color={colors.text} />
+              </TouchableOpacity>
+            </View>
+            <View style={styles.modalBody}>
+              <TouchableOpacity
+                style={[
+                  styles.filterOption,
+                  filterBy === 'all' && styles.filterOptionActive,
+                ]}
+                onPress={() => {
+                  setFilterBy('all');
+                  setShowFilterModal(false);
+                }}
+                activeOpacity={0.7}
+              >
+                <Text
+                  style={[
+                    styles.filterOptionText,
+                    filterBy === 'all' && styles.filterOptionTextActive,
+                  ]}
+                >
+                  All Appointments
+                </Text>
+                {filterBy === 'all' && (
+                  <Ionicons name="checkmark-circle" size={20} color={colors.primary} />
+                )}
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.filterOption,
+                  filterBy === 'online' && styles.filterOptionActive,
+                ]}
+                onPress={() => {
+                  setFilterBy('online');
+                  setShowFilterModal(false);
+                }}
+                activeOpacity={0.7}
+              >
+                <Text
+                  style={[
+                    styles.filterOptionText,
+                    filterBy === 'online' && styles.filterOptionTextActive,
+                  ]}
+                >
+                  Online Appointments
+                </Text>
+                {filterBy === 'online' && (
+                  <Ionicons name="checkmark-circle" size={20} color={colors.primary} />
+                )}
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.filterOption,
+                  filterBy === 'visit' && styles.filterOptionActive,
+                ]}
+                onPress={() => {
+                  setFilterBy('visit');
+                  setShowFilterModal(false);
+                }}
+                activeOpacity={0.7}
+              >
+                <Text
+                  style={[
+                    styles.filterOptionText,
+                    filterBy === 'visit' && styles.filterOptionTextActive,
+                  ]}
+                >
+                  Direct Visit Appointments
+                </Text>
+                {filterBy === 'visit' && (
+                  <Ionicons name="checkmark-circle" size={20} color={colors.primary} />
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Date Range Filter Modal (Bottom Sheet) */}
+      <Modal
+        visible={showDateFilterModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowDateFilterModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <TouchableOpacity
+            style={styles.modalOverlayTouchable}
+            activeOpacity={1}
+            onPress={() => setShowDateFilterModal(false)}
+          />
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Select Date Range</Text>
+              <TouchableOpacity
+                onPress={() => setShowDateFilterModal(false)}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="close" size={24} color={colors.text} />
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={styles.modalBody} showsVerticalScrollIndicator={false}>
+              <View style={styles.dateInputContainer}>
+                <Text style={styles.dateLabel}>From Date</Text>
+                <TextInput
+                  style={styles.dateInput}
+                  placeholder="YYYY-MM-DD (e.g., 2024-01-15)"
+                  placeholderTextColor={colors.textLight}
+                  value={fromDate ? fromDate.toISOString().split('T')[0] : ''}
+                  onChangeText={(text) => {
+                    if (text) {
+                      const date = new Date(text);
+                      if (!isNaN(date.getTime())) {
+                        setFromDate(date);
+                      }
+                    } else {
+                      setFromDate(null);
+                    }
+                  }}
+                />
+                {fromDate && (
+                  <Text style={styles.dateDisplayText}>
+                    {fromDate.toLocaleDateString('en-US', {
+                      year: 'numeric',
+                      month: 'long',
+                      day: 'numeric',
+                    })}
+                  </Text>
+                )}
+              </View>
+              <View style={styles.dateInputContainer}>
+                <Text style={styles.dateLabel}>To Date</Text>
+                <TextInput
+                  style={styles.dateInput}
+                  placeholder="YYYY-MM-DD (e.g., 2024-12-31)"
+                  placeholderTextColor={colors.textLight}
+                  value={toDate ? toDate.toISOString().split('T')[0] : ''}
+                  onChangeText={(text) => {
+                    if (text) {
+                      const date = new Date(text);
+                      if (!isNaN(date.getTime())) {
+                        setToDate(date);
+                      }
+                    } else {
+                      setToDate(null);
+                    }
+                  }}
+                />
+                {toDate && (
+                  <Text style={styles.dateDisplayText}>
+                    {toDate.toLocaleDateString('en-US', {
+                      year: 'numeric',
+                      month: 'long',
+                      day: 'numeric',
+                    })}
+                  </Text>
+                )}
+              </View>
+              <View style={styles.modalActions}>
+                <TouchableOpacity
+                  style={[styles.modalButton, styles.modalButtonSecondary]}
+                  onPress={() => {
+                    setFromDate(null);
+                    setToDate(null);
+                    setShowDateFilterModal(false);
+                  }}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.modalButtonTextSecondary}>Clear</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.modalButton, styles.modalButtonPrimary]}
+                  onPress={() => setShowDateFilterModal(false)}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.modalButtonTextPrimary}>Apply</Text>
+                </TouchableOpacity>
+              </View>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 };
@@ -641,10 +1080,19 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     backgroundColor: colors.backgroundLight,
   },
+  filterBtnActive: {
+    backgroundColor: colors.primary + '20',
+    borderWidth: 1,
+    borderColor: colors.primary,
+  },
   filterText: {
     fontSize: 13,
     color: colors.textSecondary,
     marginLeft: 6,
+  },
+  filterTextActive: {
+    color: colors.primary,
+    fontWeight: '600',
   },
   listContent: {
     padding: 16,
@@ -810,6 +1258,120 @@ const styles = StyleSheet.create({
     color: colors.textWhite,
     fontWeight: '600',
     fontSize: 14,
+  },
+  // Modal Styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalOverlayTouchable: {
+    flex: 1,
+  },
+  modalContent: {
+    backgroundColor: colors.background,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingTop: 20,
+    paddingBottom: 40,
+    maxHeight: '80%',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: colors.text,
+  },
+  modalBody: {
+    paddingHorizontal: 20,
+    paddingTop: 20,
+  },
+  filterOption: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 16,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    backgroundColor: colors.backgroundLight,
+    marginBottom: 12,
+  },
+  filterOptionActive: {
+    backgroundColor: colors.primary + '20',
+    borderWidth: 1,
+    borderColor: colors.primary,
+  },
+  filterOptionText: {
+    fontSize: 16,
+    color: colors.text,
+  },
+  filterOptionTextActive: {
+    color: colors.primary,
+    fontWeight: '600',
+  },
+  dateInputContainer: {
+    marginBottom: 20,
+  },
+  dateLabel: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: colors.text,
+    marginBottom: 8,
+  },
+  dateInput: {
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    backgroundColor: colors.backgroundLight,
+    borderWidth: 1,
+    borderColor: colors.border,
+    fontSize: 16,
+    color: colors.text,
+  },
+  dateDisplayText: {
+    marginTop: 8,
+    fontSize: 14,
+    color: colors.textSecondary,
+    fontStyle: 'italic',
+  },
+  modalActions: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 20,
+    marginBottom: 20,
+  },
+  modalButton: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalButtonPrimary: {
+    backgroundColor: colors.primary,
+  },
+  modalButtonSecondary: {
+    backgroundColor: colors.backgroundLight,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  modalButtonTextPrimary: {
+    color: colors.textWhite,
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  modalButtonTextSecondary: {
+    color: colors.text,
+    fontSize: 16,
+    fontWeight: '500',
   },
 });
 

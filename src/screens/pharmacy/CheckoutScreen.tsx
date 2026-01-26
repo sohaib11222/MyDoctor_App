@@ -111,11 +111,8 @@ export const CheckoutScreen = () => {
         orderData.paymentMethod = formData.paymentMethod;
       }
 
-      // Create order first (payment will be processed after pharmacy owner confirms and sets shipping)
+      // Create order (payment is processed immediately during checkout)
       const orderResponse = await orderApi.createOrder(orderData);
-
-      // Don't process payment immediately - wait for pharmacy owner to confirm order and set shipping fee
-      // Payment will be processed when patient pays from order details screen
 
       return { order: orderResponse.data };
     },
@@ -123,7 +120,7 @@ export const CheckoutScreen = () => {
       Toast.show({
         type: 'success',
         text1: 'Order Placed Successfully',
-        text2: `Order #${data.order.orderNumber} has been placed! The pharmacy will confirm and set shipping fee.`,
+        text2: `Order #${data.order.orderNumber} has been placed and payment processed!`,
       });
       clearCart();
       navigation.navigate('PaymentSuccess', { orderId: data.order._id });

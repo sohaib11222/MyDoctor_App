@@ -54,7 +54,7 @@ export const getDoctorReviews = async (params?: {
   limit?: number;
 }): Promise<ReviewsResponse> => {
   const response = await api.get('/doctor/reviews', { params });
-  return response;
+  return response.data || response;
 };
 
 /**
@@ -71,6 +71,24 @@ export const getReviewsByDoctor = async (
   }
 ): Promise<ReviewsResponse> => {
   const response = await api.get(`/reviews/doctor/${doctorId}`, { params });
-  return response;
+  return response.data || response;
+};
+
+/**
+ * Create review (patient only)
+ * @param data - Review data (doctorId, appointmentId?, rating, reviewText, reviewType?)
+ * @returns Promise<{ success: boolean; message: string; data: Review }>
+ */
+export interface CreateReviewData {
+  doctorId: string;
+  appointmentId?: string;
+  rating: number;
+  reviewText?: string;
+  reviewType?: 'OVERALL' | 'APPOINTMENT';
+}
+
+export const createReview = async (data: CreateReviewData): Promise<{ success: boolean; message: string; data: Review }> => {
+  const response = await api.post('/reviews', data);
+  return response.data || response;
 };
 

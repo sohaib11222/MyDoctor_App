@@ -2,10 +2,12 @@ import React from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { useQuery } from '@tanstack/react-query';
 import { MoreStackParamList } from '../../navigation/types';
 import { useAuth } from '../../contexts/AuthContext';
 import { colors } from '../../constants/colors';
 import { Feather } from '@expo/vector-icons';
+import * as notificationApi from '../../services/notification';
 
 type MoreScreenNavigationProp = NativeStackNavigationProp<MoreStackParamList>;
 
@@ -13,8 +15,15 @@ export const MoreScreen = () => {
   const navigation = useNavigation<MoreScreenNavigationProp>();
   const { user, logout } = useAuth();
 
+  // Fetch unread notifications count
+  const { data: unreadCount = 0 } = useQuery({
+    queryKey: ['notifications', 'unread', 'count'],
+    queryFn: () => notificationApi.getUnreadNotificationsCount(),
+    refetchInterval: 30000, // Refetch every 30 seconds
+  });
+
   const getMenuItems = () => {
-    if (user?.role === 'admin' || (user as any)?.role === 'ADMIN') {
+    if ((user as any)?.role === 'ADMIN' || (user as any)?.role === 'admin') {
       return [
         { id: 1, title: 'All Orders', icon: 'shopping-bag', screen: 'AdminOrders' as keyof MoreStackParamList },
         { id: 2, title: 'Profile', icon: 'user', screen: 'Profile' as keyof MoreStackParamList },
@@ -81,11 +90,18 @@ export const MoreScreen = () => {
           <TouchableOpacity
             key={item.id}
             style={styles.menuItem}
-            onPress={() => navigation.navigate(item.screen)}
+            onPress={() => navigation.navigate(item.screen as any)}
           >
             <Feather name={item.icon as any} size={24} color={colors.primary} />
             <Text style={styles.menuItemText}>{item.title}</Text>
-            <Feather name="chevron-right" size={20} color={colors.textLight} />
+            <View style={styles.menuItemRight}>
+              {item.screen === 'Notifications' && unreadCount > 0 && (
+                <View style={styles.badge}>
+                  <Text style={styles.badgeText}>{unreadCount > 99 ? '99+' : unreadCount}</Text>
+                </View>
+              )}
+              <Feather name="chevron-right" size={20} color={colors.textLight} />
+            </View>
           </TouchableOpacity>
         ))}
       </View>
@@ -154,6 +170,25 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: colors.text,
     marginLeft: 16,
+  },
+  menuItemRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  badge: {
+    backgroundColor: colors.error,
+    borderRadius: 12,
+    minWidth: 24,
+    height: 24,
+    paddingHorizontal: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  badgeText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.textWhite,
   },
   logoutButton: {
     flexDirection: 'row',

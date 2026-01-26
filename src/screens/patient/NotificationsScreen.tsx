@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   View,
   Text,
@@ -6,105 +6,277 @@ import {
   ScrollView,
   TouchableOpacity,
   SafeAreaView,
+  ActivityIndicator,
+  RefreshControl,
+  FlatList,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { MoreStackParamList } from '../../navigation/types';
 import { colors } from '../../constants/colors';
 import { Ionicons } from '@expo/vector-icons';
+import * as notificationApi from '../../services/notification';
+import Toast from 'react-native-toast-message';
 
 type NotificationsScreenNavigationProp = NativeStackNavigationProp<MoreStackParamList>;
 
-interface Notification {
-  id: string;
-  icon: string;
-  title: string;
-  message: string;
-  time: string;
-}
-
-const notifications: Notification[] = [
-  {
-    id: '1',
-    icon: 'notifications',
-    title: 'Appointment Reminder',
-    message: 'Your appointment with Dr. John Doe is scheduled for tomorrow at 10:00 AM',
-    time: '2 hours ago',
-  },
-  {
-    id: '2',
-    icon: 'chatbubble',
-    title: 'New Message',
-    message: 'You have a new message from Dr. Sarah Smith',
-    time: '5 hours ago',
-  },
-  {
-    id: '3',
-    icon: 'document-text',
-    title: 'Prescription Ready',
-    message: 'Your prescription is ready for download',
-    time: '1 day ago',
-  },
-  {
-    id: '4',
-    icon: 'calendar',
-    title: 'Appointment Confirmed',
-    message: 'Your appointment with Dr. Michael Brown has been confirmed',
-    time: '2 days ago',
-  },
-  {
-    id: '5',
-    icon: 'checkmark-circle',
-    title: 'Payment Received',
-    message: 'Your payment of $300 has been received successfully',
-    time: '3 days ago',
-  },
-];
+type FilterType = 'all' | 'unread' | 'read';
 
 export const NotificationsScreen = () => {
   const navigation = useNavigation<NotificationsScreenNavigationProp>();
+  const queryClient = useQueryClient();
+  const [filter, setFilter] = useState<FilterType>('all');
+  const [refreshing, setRefreshing] = useState(false);
 
-  const getIconName = (icon: string) => {
-    const iconMap: { [key: string]: keyof typeof Ionicons.glyphMap } = {
-      notifications: 'notifications',
-      chatbubble: 'chatbubble',
-      'document-text': 'document-text',
-      calendar: 'calendar',
-      'checkmark-circle': 'checkmark-circle',
-    };
-    return iconMap[icon] || 'notifications';
+  // Build query params based on filter
+  const queryParams = useMemo(() => {
+    const params: notificationApi.NotificationFilters = { page: 1, limit: 50 };
+    if (filter === 'unread') {
+      params.isRead = false;
+    } else if (filter === 'read') {
+      params.isRead = true;
+    }
+    return params;
+  }, [filter]);
+
+  // Fetch notifications
+  const { data: notificationsResponse, isLoading, refetch } = useQuery({
+    queryKey: ['notifications', queryParams],
+    queryFn: () => notificationApi.getNotifications(queryParams),
+    refetchInterval: 30000, // Refetch every 30 seconds
+  });
+
+  // Mark as read mutation
+  const markAsReadMutation = useMutation({
+    mutationFn: (notificationId: string) => notificationApi.markNotificationAsRead(notificationId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['notifications'] });
+      queryClient.invalidateQueries({ queryKey: ['notifications', 'unread', 'count'] });
+      Toast.show({
+        type: 'success',
+        text1: 'Notification marked as read',
+      });
+    },
+    onError: (error: any) => {
+      const errorMessage = error?.response?.data?.message || error?.message || 'Failed to mark notification as read';
+      Toast.show({
+        type: 'error',
+        text1: 'Error',
+        text2: errorMessage,
+      });
+    },
+  });
+
+  // Mark all as read mutation
+  const markAllAsReadMutation = useMutation({
+    mutationFn: () => notificationApi.markAllNotificationsAsRead(),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['notifications'] });
+      queryClient.invalidateQueries({ queryKey: ['notifications', 'unread', 'count'] });
+      Toast.show({
+        type: 'success',
+        text1: 'All notifications marked as read',
+      });
+    },
+    onError: (error: any) => {
+      const errorMessage = error?.response?.data?.message || error?.message || 'Failed to mark all notifications as read';
+      Toast.show({
+        type: 'error',
+        text1: 'Error',
+        text2: errorMessage,
+      });
+    },
+  });
+
+  // Extract notifications
+  const notifications = useMemo(() => {
+    if (!notificationsResponse) return [];
+    const responseData = notificationsResponse.data || notificationsResponse;
+    return responseData.notifications || [];
+  }, [notificationsResponse]);
+
+  const unreadCount = notifications.filter(n => !n.isRead).length;
+
+  // Get notification icon based on type
+  const getNotificationIcon = (type: notificationApi.Notification['type']): keyof typeof Ionicons.glyphMap => {
+    const typeUpper = (type || 'SYSTEM').toUpperCase();
+    switch (typeUpper) {
+      case 'APPOINTMENT':
+        return 'calendar-outline';
+      case 'MESSAGE':
+        return 'chatbubble-outline';
+      case 'PAYMENT':
+        return 'wallet-outline';
+      case 'REVIEW':
+        return 'star-outline';
+      case 'PRESCRIPTION':
+        return 'document-text-outline';
+      default:
+        return 'notifications-outline';
+    }
   };
 
-  const handleDelete = (id: string) => {
-    // Handle delete notification
+  // Get notification icon color based on type
+  const getNotificationIconColor = (type: notificationApi.Notification['type']): string => {
+    const typeUpper = (type || 'SYSTEM').toUpperCase();
+    switch (typeUpper) {
+      case 'APPOINTMENT':
+        return '#3B82F6'; // blue
+      case 'MESSAGE':
+        return '#8B5CF6'; // violet
+      case 'PAYMENT':
+        return '#F59E0B'; // yellow
+      case 'REVIEW':
+        return '#F97316'; // orange
+      case 'PRESCRIPTION':
+        return '#10B981'; // green
+      default:
+        return colors.primary;
+    }
+  };
+
+  // Format time ago
+  const formatTimeAgo = (dateString: string): string => {
+    if (!dateString) return 'Just now';
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000);
+
+    if (diffInSeconds < 60) return 'Just now';
+    if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)} minutes ago`;
+    if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)} hours ago`;
+    if (diffInSeconds < 604800) return `${Math.floor(diffInSeconds / 86400)} days ago`;
+    
+    return date.toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' });
+  };
+
+  // Handle mark as read
+  const handleMarkAsRead = (notificationId: string) => {
+    markAsReadMutation.mutate(notificationId);
+  };
+
+  // Handle mark all as read
+  const handleMarkAllAsRead = () => {
+    markAllAsReadMutation.mutate();
+  };
+
+  // Handle refresh
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await refetch();
+    queryClient.invalidateQueries({ queryKey: ['notifications'] });
+    setRefreshing(false);
+  };
+
+  // Render notification item
+  const renderNotificationItem = ({ item }: { item: notificationApi.Notification }) => {
+    const iconName = getNotificationIcon(item.type);
+    const iconColor = getNotificationIconColor(item.type);
+
+    return (
+      <TouchableOpacity
+        style={[styles.notificationItem, !item.isRead && styles.unreadNotification]}
+        onPress={() => !item.isRead && handleMarkAsRead(item._id)}
+        activeOpacity={0.7}
+      >
+        <View style={[styles.notificationIcon, { backgroundColor: `${iconColor}20` }]}>
+          <Ionicons name={iconName} size={24} color={iconColor} />
+        </View>
+        <View style={styles.notificationContent}>
+          <Text style={styles.notificationTitle}>{item.title}</Text>
+          <Text style={styles.notificationMessage}>{item.body}</Text>
+          <Text style={styles.notificationTime}>{formatTimeAgo(item.createdAt)}</Text>
+        </View>
+        {!item.isRead && (
+          <View style={styles.unreadDot} />
+        )}
+      </TouchableOpacity>
+    );
   };
 
   return (
     <SafeAreaView style={styles.container}>
-      <ScrollView showsVerticalScrollIndicator={false}>
-        {notifications.map((notification) => (
-          <View key={notification.id} style={styles.notificationItem}>
-            <View style={styles.notificationIcon}>
-              <Ionicons
-                name={getIconName(notification.icon)}
-                size={24}
-                color={colors.primary}
-              />
+      {/* Header */}
+      <View style={styles.header}>
+        <TouchableOpacity
+          style={styles.backButton}
+          onPress={() => navigation.goBack()}
+          activeOpacity={0.7}
+        >
+          <Ionicons name="arrow-back" size={24} color={colors.text} />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>Notifications</Text>
+        {unreadCount > 0 && (
+          <TouchableOpacity
+            style={styles.markAllButton}
+            onPress={handleMarkAllAsRead}
+            disabled={markAllAsReadMutation.isPending}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.markAllText}>
+              {markAllAsReadMutation.isPending ? 'Marking...' : 'Mark All Read'}
+            </Text>
+          </TouchableOpacity>
+        )}
+      </View>
+
+      {/* Filter Tabs */}
+      <View style={styles.filterTabs}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabsScroll}>
+          <TouchableOpacity
+            style={[styles.tab, filter === 'all' && styles.tabActive]}
+            onPress={() => setFilter('all')}
+            activeOpacity={0.7}
+          >
+            <Text style={[styles.tabText, filter === 'all' && styles.tabTextActive]}>All</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.tab, filter === 'unread' && styles.tabActive]}
+            onPress={() => setFilter('unread')}
+            activeOpacity={0.7}
+          >
+            <Text style={[styles.tabText, filter === 'unread' && styles.tabTextActive]}>Unread</Text>
+            {filter !== 'unread' && unreadCount > 0 && (
+              <View style={styles.tabBadge}>
+                <Text style={styles.tabBadgeText}>{unreadCount}</Text>
+              </View>
+            )}
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.tab, filter === 'read' && styles.tabActive]}
+            onPress={() => setFilter('read')}
+            activeOpacity={0.7}
+          >
+            <Text style={[styles.tabText, filter === 'read' && styles.tabTextActive]}>Read</Text>
+          </TouchableOpacity>
+        </ScrollView>
+      </View>
+
+      {/* Notifications List */}
+      {isLoading ? (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={colors.primary} />
+          <Text style={styles.loadingText}>Loading notifications...</Text>
+        </View>
+      ) : (
+        <FlatList
+          data={notifications}
+          renderItem={renderNotificationItem}
+          keyExtractor={(item) => item._id}
+          contentContainerStyle={styles.listContent}
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
+          }
+          ListEmptyComponent={
+            <View style={styles.emptyContainer}>
+              <Ionicons name="notifications-outline" size={64} color={colors.textLight} />
+              <Text style={styles.emptyText}>No {filter === 'all' ? '' : filter} notifications</Text>
             </View>
-            <View style={styles.notificationContent}>
-              <Text style={styles.notificationTitle}>{notification.title}</Text>
-              <Text style={styles.notificationMessage}>{notification.message}</Text>
-              <Text style={styles.notificationTime}>{notification.time}</Text>
-            </View>
-            <TouchableOpacity
-              style={styles.deleteButton}
-              onPress={() => handleDelete(notification.id)}
-            >
-              <Ionicons name="trash-outline" size={20} color={colors.error} />
-            </TouchableOpacity>
-          </View>
-        ))}
-      </ScrollView>
+          }
+        />
+      )}
     </SafeAreaView>
   );
 };
@@ -114,19 +286,104 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.backgroundLight,
   },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: colors.background,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  backButton: {
+    padding: 8,
+    marginLeft: -8,
+  },
+  headerTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: colors.text,
+    flex: 1,
+    textAlign: 'center',
+  },
+  markAllButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  markAllText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.primary,
+  },
+  filterTabs: {
+    backgroundColor: colors.background,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  tabsScroll: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  tab: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    marginRight: 8,
+    borderRadius: 20,
+    backgroundColor: colors.backgroundLight,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  tabActive: {
+    backgroundColor: colors.primary,
+  },
+  tabText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: colors.textSecondary,
+  },
+  tabTextActive: {
+    color: colors.textWhite,
+    fontWeight: '600',
+  },
+  tabBadge: {
+    backgroundColor: colors.error,
+    borderRadius: 10,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    marginLeft: 6,
+    minWidth: 20,
+    alignItems: 'center',
+  },
+  tabBadgeText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: colors.textWhite,
+  },
+  listContent: {
+    padding: 16,
+  },
   notificationItem: {
     flexDirection: 'row',
     backgroundColor: colors.background,
     padding: 16,
-    marginBottom: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.borderLight,
+    marginBottom: 12,
+    borderRadius: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+    position: 'relative',
+  },
+  unreadNotification: {
+    borderLeftWidth: 4,
+    borderLeftColor: colors.primary,
   },
   notificationIcon: {
     width: 48,
     height: 48,
     borderRadius: 24,
-    backgroundColor: colors.primaryLight,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 12,
@@ -143,16 +400,43 @@ const styles = StyleSheet.create({
   notificationMessage: {
     fontSize: 14,
     color: colors.textSecondary,
-    marginBottom: 4,
+    marginBottom: 6,
     lineHeight: 20,
   },
   notificationTime: {
     fontSize: 12,
     color: colors.textLight,
   },
-  deleteButton: {
-    padding: 8,
+  unreadDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: colors.primary,
+    marginLeft: 8,
+    alignSelf: 'flex-start',
+    marginTop: 4,
+  },
+  loadingContainer: {
+    flex: 1,
+    alignItems: 'center',
     justifyContent: 'center',
+    paddingVertical: 60,
+  },
+  loadingText: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    marginTop: 12,
+  },
+  emptyContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 60,
+  },
+  emptyText: {
+    fontSize: 16,
+    color: colors.textSecondary,
+    marginTop: 16,
+    textTransform: 'capitalize',
   },
 });
 

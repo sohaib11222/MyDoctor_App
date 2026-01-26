@@ -139,12 +139,10 @@ export const OrderHistoryScreen = () => {
     const allOrders = allOrdersResponse?.data?.orders || [];
     const counts: Record<string, number> = {
       'ALL': allOrders.length,
-      'PENDING': 0,
       'CONFIRMED': 0,
       'PROCESSING': 0,
       'SHIPPED': 0,
       'DELIVERED': 0,
-      'CANCELLED': 0,
     };
     
     allOrders.forEach((order: orderApi.Order) => {
@@ -212,64 +210,12 @@ export const OrderHistoryScreen = () => {
           >
             <Text style={styles.actionButtonText}>View Details</Text>
           </TouchableOpacity>
-          {/* Only allow cancellation if order is not paid yet */}
-          {(order.status === 'PENDING' || order.status === 'CONFIRMED') && 
-           order.paymentStatus === 'PENDING' && (
-            <TouchableOpacity
-              style={[styles.actionButton, styles.cancelButton]}
-              onPress={() => {
-                Alert.alert(
-                  'Cancel Order',
-                  'Are you sure you want to cancel this order?',
-                  [
-                    { text: 'No', style: 'cancel' },
-                    {
-                      text: 'Yes, Cancel',
-                      style: 'destructive',
-                      onPress: async () => {
-                        try {
-                          await orderApi.cancelOrder(order._id);
-                          queryClient.invalidateQueries({ queryKey: ['patientOrders'] });
-                          Toast.show({
-                            type: 'success',
-                            text1: 'Order Cancelled',
-                            text2: 'Your order has been cancelled successfully',
-                          });
-                        } catch (error: any) {
-                          Toast.show({
-                            type: 'error',
-                            text1: 'Failed to Cancel',
-                            text2: error.response?.data?.message || error.message || 'Please try again',
-                          });
-                        }
-                      },
-                    },
-                  ]
-                );
-              }}
-            >
-              <Text style={[styles.actionButtonText, styles.cancelButtonText]}>Cancel</Text>
-            </TouchableOpacity>
-          )}
-          {/* Show Processing if shipping fee not set yet, Pay Now if shipping fee is set and payment pending */}
-          {(order.status === 'PENDING' || order.status === 'CONFIRMED') && 
-           (order.finalShipping === null || order.finalShipping === undefined) && 
-           order.paymentStatus === 'PENDING' && (
+          {/* Orders are paid immediately, so cancellation is not available */}
+          {/* Payment is now processed during checkout, so no Pay Now button */}
+          {order.paymentStatus === 'PAID' && (
             <View style={[styles.actionButton, styles.processingButton]}>
-              <Text style={[styles.actionButtonText, styles.processingButtonText]}>Processing...</Text>
+              <Text style={[styles.actionButtonText, styles.processingButtonText]}>Paid</Text>
             </View>
-          )}
-          {(order.paymentStatus === 'PENDING' || order.paymentStatus === 'PARTIAL' || order.requiresPaymentUpdate) && 
-           order.finalShipping !== null && order.finalShipping !== undefined && (
-            <TouchableOpacity
-              style={[styles.actionButton, styles.payButton]}
-              onPress={() => {
-                // Navigate to OrderDetails - works from both PharmacyStack and MoreStack
-                navigation.navigate('OrderDetails' as never, { orderId: order._id } as never);
-              }}
-            >
-              <Text style={[styles.actionButtonText, styles.payButtonText]}>Pay Now</Text>
-            </TouchableOpacity>
           )}
         </View>
       </TouchableOpacity>
@@ -321,7 +267,7 @@ export const OrderHistoryScreen = () => {
               </View>
             )}
           </TouchableOpacity>
-          {['PENDING', 'CONFIRMED', 'PROCESSING', 'SHIPPED', 'DELIVERED', 'CANCELLED'].map((status) => (
+          {['CONFIRMED', 'PROCESSING', 'SHIPPED', 'DELIVERED'].map((status) => (
             <TouchableOpacity
               key={status}
               style={[styles.filterOption, statusFilter === status && styles.filterOptionActive]}

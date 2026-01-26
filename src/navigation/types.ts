@@ -46,6 +46,7 @@ export type AppointmentsStackParamList = {
   AppointmentRequests: undefined;
   DoctorAppointmentsGrid: undefined;
   MyPatients: undefined;
+  VideoCall: { appointmentId: string };
 };
 
 export type ChatStackParamList = {

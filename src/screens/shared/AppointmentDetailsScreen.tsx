@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -9,6 +9,8 @@ import {
   SafeAreaView,
   ActivityIndicator,
   Alert,
+  Modal,
+  TextInput,
 } from 'react-native';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
@@ -18,6 +20,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { colors } from '../../constants/colors';
 import { Ionicons } from '@expo/vector-icons';
 import * as appointmentApi from '../../services/appointment';
+import * as reviewApi from '../../services/review';
 import Toast from 'react-native-toast-message';
 import { API_BASE_URL } from '../../config/api';
 
@@ -92,6 +95,11 @@ const AppointmentDetailsScreen = () => {
   const { appointmentId } = route.params;
 
   const queryClient = useQueryClient();
+  
+  // Review state
+  const [showReviewModal, setShowReviewModal] = useState(false);
+  const [reviewRating, setReviewRating] = useState(5);
+  const [reviewText, setReviewText] = useState('');
 
   // Fetch appointment details
   const { data: appointmentResponse, isLoading, error, refetch } = useQuery({
@@ -100,7 +108,101 @@ const AppointmentDetailsScreen = () => {
     retry: 1,
   });
 
-  const appointment = appointmentResponse?.data || appointmentResponse;
+  const appointment: appointmentApi.Appointment | null = appointmentResponse?.data || null;
+
+  // Check if review exists for this appointment (patient only)
+  const { data: existingReviewData } = useQuery({
+    queryKey: ['appointmentReview', appointmentId],
+    queryFn: async () => {
+      if (!appointment || appointment.status !== 'COMPLETED' || !appointment.doctorId || isDoctor) {
+        return null;
+      }
+      const doctorId = typeof appointment.doctorId === 'string' 
+        ? appointment.doctorId 
+        : appointment.doctorId._id;
+      if (!doctorId) return null;
+      try {
+        const reviews = await reviewApi.getReviewsByDoctor(doctorId, { page: 1, limit: 100 });
+        const reviewsList = reviews.data?.reviews || [];
+        return reviewsList.find(
+          (r: reviewApi.Review) =>
+            r.appointmentId === appointmentId || r.appointmentId === appointment?._id
+        );
+      } catch (error) {
+        console.error('Error fetching reviews:', error);
+        return null;
+      }
+    },
+    enabled: !!appointment && appointment.status === 'COMPLETED' && !!appointment.doctorId && !isDoctor,
+  });
+
+  const existingReview = existingReviewData;
+
+  // Create review mutation
+  const createReviewMutation = useMutation({
+    mutationFn: (data: reviewApi.CreateReviewData) => reviewApi.createReview(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['appointmentReview', appointmentId] });
+      queryClient.invalidateQueries({ queryKey: ['reviews'] });
+      Toast.show({
+        type: 'success',
+        text1: 'Review Submitted',
+        text2: 'Thank you for your feedback!',
+      });
+      setShowReviewModal(false);
+      setReviewText('');
+      setReviewRating(5);
+    },
+    onError: (error: any) => {
+      const errorMessage = error?.response?.data?.message || error?.message || 'Failed to submit review';
+      Toast.show({
+        type: 'error',
+        text1: 'Review Failed',
+        text2: errorMessage,
+      });
+    },
+  });
+
+  // Handle review submission
+  const handleReviewSubmit = () => {
+    if (!reviewText.trim()) {
+      Toast.show({
+        type: 'error',
+        text1: 'Review Required',
+        text2: 'Please provide a review text',
+      });
+      return;
+    }
+    if (!appointment || !appointment.doctorId) {
+      Toast.show({
+        type: 'error',
+        text1: 'Error',
+        text2: 'Doctor information not available',
+      });
+      return;
+    }
+
+    const doctorId = typeof appointment.doctorId === 'string' 
+      ? appointment.doctorId 
+      : appointment.doctorId._id;
+
+    if (!doctorId) {
+      Toast.show({
+        type: 'error',
+        text1: 'Error',
+        text2: 'Doctor ID not available',
+      });
+      return;
+    }
+
+    createReviewMutation.mutate({
+      doctorId,
+      appointmentId: appointment._id,
+      rating: reviewRating,
+      reviewText: reviewText.trim(),
+      reviewType: 'APPOINTMENT',
+    });
+  };
 
   // Update status mutation (for marking as completed/no-show)
   const updateStatusMutation = useMutation({
@@ -145,13 +247,132 @@ const AppointmentDetailsScreen = () => {
     );
   };
 
+  // Cancel appointment mutation
+  const cancelAppointmentMutation = useMutation({
+    mutationFn: (id: string) => appointmentApi.cancelAppointment(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['appointment', appointmentId] });
+      queryClient.invalidateQueries({ queryKey: ['appointments'] });
+      queryClient.invalidateQueries({ queryKey: ['appointmentTabCounts'] });
+      Toast.show({
+        type: 'success',
+        text1: 'Appointment Cancelled',
+        text2: 'Your appointment has been cancelled successfully',
+      });
+      refetch();
+    },
+    onError: (error: any) => {
+      Toast.show({
+        type: 'error',
+        text1: 'Failed to Cancel',
+        text2: error.response?.data?.message || error.message || 'Please try again',
+      });
+    },
+  });
+
+  // Handle appointment cancellation
+  const handleCancelAppointment = () => {
+    Alert.alert(
+      'Cancel Appointment',
+      'Are you sure you want to cancel this appointment?',
+      [
+        { text: 'No', style: 'cancel' },
+        {
+          text: 'Yes, Cancel',
+          style: 'destructive',
+          onPress: () => {
+            cancelAppointmentMutation.mutate(appointmentId);
+          },
+        },
+      ]
+    );
+  };
+
+  // Handle chat navigation
+  const handleChat = () => {
+    if (!appointment) {
+      Toast.show({
+        type: 'error',
+        text1: 'Error',
+        text2: 'Appointment information not available',
+      });
+      return;
+    }
+
+    if (isDoctor) {
+      // Doctor chatting with patient
+      const patientId = typeof appointment.patientId === 'string' 
+        ? appointment.patientId 
+        : appointment.patientId?._id;
+      
+      if (!patientId) {
+        Toast.show({
+          type: 'error',
+          text1: 'Error',
+          text2: 'Patient information not available',
+        });
+        return;
+      }
+
+      if (!appointment._id) {
+        Toast.show({
+          type: 'error',
+          text1: 'Error',
+          text2: 'Appointment information not available',
+        });
+        return;
+      }
+
+      (navigation as any).navigate('Chat', {
+        screen: 'ChatDetail',
+        params: {
+          recipientName: appointment.patientId?.fullName || 'Patient',
+          patientId: patientId,
+          appointmentId: appointment._id,
+        },
+      });
+    } else {
+      // Patient chatting with doctor
+      const doctorId = typeof appointment.doctorId === 'string' 
+        ? appointment.doctorId 
+        : appointment.doctorId?._id;
+      
+      if (!doctorId) {
+        Toast.show({
+          type: 'error',
+          text1: 'Error',
+          text2: 'Doctor information not available',
+        });
+        return;
+      }
+
+      if (!appointment._id) {
+        Toast.show({
+          type: 'error',
+          text1: 'Error',
+          text2: 'Appointment information not available',
+        });
+        return;
+      }
+
+      (navigation as any).navigate('Chat', {
+        screen: 'ChatDetail',
+        params: {
+          recipientName: appointment.doctorId?.fullName || 'Doctor',
+          doctorId: doctorId,
+          appointmentId: appointment._id,
+        },
+      });
+    }
+  };
+
   // Map backend status to UI status
   const status = useMemo(() => {
-    if (!appointment) return 'upcoming';
+    if (!appointment) return 'upcoming' as const;
     const backendStatus = appointment.status;
-    if (backendStatus === 'COMPLETED' || backendStatus === 'NO_SHOW') return 'completed';
-    if (backendStatus === 'CANCELLED' || backendStatus === 'REJECTED') return 'cancelled';
-    return 'upcoming';
+    if (backendStatus === 'COMPLETED' || backendStatus === 'NO_SHOW') return 'completed' as const;
+    if (backendStatus === 'CANCELLED' || backendStatus === 'REJECTED') return 'cancelled' as const;
+    return 'upcoming' as const;
   }, [appointment]);
 
   // Format appointment data for display
@@ -326,11 +547,20 @@ const AppointmentDetailsScreen = () => {
                 </Text>
               </View>
               <View style={styles.actionButtons}>
-                <TouchableOpacity style={styles.actionBtn} activeOpacity={0.7}>
+                <TouchableOpacity 
+                  style={styles.actionBtn} 
+                  activeOpacity={0.7}
+                  onPress={handleChat}
+                >
                   <Ionicons name="chatbubble-outline" size={18} color={colors.textSecondary} />
                 </TouchableOpacity>
-                {status === 'upcoming' && (
-                  <TouchableOpacity style={styles.actionBtn} activeOpacity={0.7}>
+                {!isDoctor && status === 'upcoming' && (
+                  <TouchableOpacity 
+                    style={styles.actionBtn} 
+                    activeOpacity={0.7}
+                    onPress={handleCancelAppointment}
+                    disabled={cancelAppointmentMutation.isPending}
+                  >
                     <Ionicons name="close-circle-outline" size={18} color={colors.error} />
                   </TouchableOpacity>
                 )}
@@ -410,7 +640,7 @@ const AppointmentDetailsScreen = () => {
               </TouchableOpacity>
             </View>
           )}
-          {status === 'upcoming' && isDoctor && appointment?.status === 'PENDING' && (
+          {/* {status === 'upcoming' && isDoctor && appointment?.status === 'PENDING' && (
             <TouchableOpacity 
               style={styles.startSessionBtn} 
               activeOpacity={0.8}
@@ -418,14 +648,36 @@ const AppointmentDetailsScreen = () => {
             >
               <Text style={styles.startSessionText}>Start Session</Text>
             </TouchableOpacity>
-          )}
+          )} */}
           {status === 'upcoming' && isDoctor && appointment?.status === 'CONFIRMED' && (
+            <>
+              {appointment?.bookingType === 'ONLINE' && (
+                <TouchableOpacity 
+                  style={[styles.startSessionBtn, { backgroundColor: colors.primary, marginBottom: 8 }]} 
+                  activeOpacity={0.8}
+                  onPress={() => navigation.navigate('VideoCall', { appointmentId: appointmentId })}
+                >
+                  <Ionicons name="videocam" size={18} color={colors.textWhite} />
+                  <Text style={styles.startSessionText}>Start Video Call</Text>
+                </TouchableOpacity>
+              )}
+              {/* <TouchableOpacity 
+                style={styles.startSessionBtn} 
+                activeOpacity={0.8}
+                onPress={() => navigation.navigate('StartAppointment', { appointmentId: appointmentId })}
+              >
+                <Text style={styles.startSessionText}>Start Session</Text>
+              </TouchableOpacity> */}
+            </>
+          )}
+          {status === 'upcoming' && !isDoctor && appointment?.bookingType === 'ONLINE' && appointment?.status === 'CONFIRMED' && (
             <TouchableOpacity 
-              style={styles.startSessionBtn} 
+              style={[styles.startSessionBtn, { backgroundColor: colors.primary }]} 
               activeOpacity={0.8}
-              onPress={() => navigation.navigate('StartAppointment', { appointmentId: appointmentId })}
+              onPress={() => navigation.navigate('VideoCall', { appointmentId: appointmentId })}
             >
-              <Text style={styles.startSessionText}>Start Session</Text>
+              <Ionicons name="videocam" size={18} color={colors.textWhite} />
+              <Text style={styles.startSessionText}>Start Video Call</Text>
             </TouchableOpacity>
           )}
           {status === 'upcoming' && !isDoctor && appointment?.bookingType !== 'ONLINE' && (
@@ -440,6 +692,22 @@ const AppointmentDetailsScreen = () => {
                 <Ionicons name="download-outline" size={18} color={colors.text} />
                 <Text style={styles.downloadBtnText}>Download Prescription</Text>
               </TouchableOpacity>
+              {!isDoctor && !existingReview && (
+                <TouchableOpacity
+                  style={styles.reviewBtn}
+                  activeOpacity={0.8}
+                  onPress={() => setShowReviewModal(true)}
+                >
+                  <Ionicons name="star-outline" size={18} color={colors.textWhite} />
+                  <Text style={styles.reviewBtnText}>Write a Review</Text>
+                </TouchableOpacity>
+              )}
+              {!isDoctor && existingReview && (
+                <View style={styles.reviewSubmitted}>
+                  <Ionicons name="checkmark-circle" size={18} color={colors.success} />
+                  <Text style={styles.reviewSubmittedText}>Review Submitted</Text>
+                </View>
+              )}
               <TouchableOpacity style={styles.rescheduleBtn} activeOpacity={0.8}>
                 <Text style={styles.rescheduleBtnText}>Reschedule Appointment</Text>
               </TouchableOpacity>
@@ -465,6 +733,108 @@ const AppointmentDetailsScreen = () => {
 
         {/* Recent Appointments - Can be added later if needed */}
       </ScrollView>
+
+      {/* Review Modal */}
+      <Modal
+        visible={showReviewModal}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => {
+          setShowReviewModal(false);
+          setReviewText('');
+          setReviewRating(5);
+        }}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Write a Review</Text>
+              <TouchableOpacity
+                onPress={() => {
+                  setShowReviewModal(false);
+                  setReviewText('');
+                  setReviewRating(5);
+                }}
+                style={styles.modalCloseBtn}
+              >
+                <Ionicons name="close" size={24} color={colors.text} />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={styles.modalBody} showsVerticalScrollIndicator={false}>
+              <Text style={styles.modalSubtitle}>
+                How would you rate your experience with {appointmentData?.name || 'the doctor'}?
+              </Text>
+
+              {/* Rating Stars */}
+              <View style={styles.ratingContainer}>
+                <View style={styles.starsContainer}>
+                  {[1, 2, 3, 4, 5].map((star) => (
+                    <TouchableOpacity
+                      key={star}
+                      onPress={() => setReviewRating(star)}
+                      activeOpacity={0.7}
+                      style={styles.starButton}
+                    >
+                      <Ionicons
+                        name={star <= reviewRating ? 'star' : 'star-outline'}
+                        size={32}
+                        color={star <= reviewRating ? '#FFD700' : colors.textSecondary}
+                      />
+                    </TouchableOpacity>
+                  ))}
+                </View>
+                <Text style={styles.ratingText}>{reviewRating} / 5</Text>
+              </View>
+
+              {/* Review Text */}
+              <View style={styles.reviewInputContainer}>
+                <Text style={styles.inputLabel}>Your Review</Text>
+                <TextInput
+                  style={styles.reviewInput}
+                  placeholder="Share your experience..."
+                  placeholderTextColor={colors.textLight}
+                  value={reviewText}
+                  onChangeText={setReviewText}
+                  multiline
+                  numberOfLines={6}
+                  textAlignVertical="top"
+                />
+              </View>
+            </ScrollView>
+
+            {/* Modal Footer */}
+            <View style={styles.modalFooter}>
+              <TouchableOpacity
+                style={styles.modalCancelBtn}
+                onPress={() => {
+                  setShowReviewModal(false);
+                  setReviewText('');
+                  setReviewRating(5);
+                }}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.modalCancelBtnText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.modalSubmitBtn,
+                  (!reviewText.trim() || createReviewMutation.isPending) && styles.modalSubmitBtnDisabled,
+                ]}
+                onPress={handleReviewSubmit}
+                disabled={!reviewText.trim() || createReviewMutation.isPending}
+                activeOpacity={0.8}
+              >
+                {createReviewMutation.isPending ? (
+                  <ActivityIndicator size="small" color={colors.textWhite} />
+                ) : (
+                  <Text style={styles.modalSubmitBtnText}>Submit Review</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 };
@@ -626,6 +996,9 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     alignItems: 'center',
     marginTop: 8,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 8,
   },
   startSessionText: {
     color: colors.textWhite,
@@ -665,6 +1038,148 @@ const styles = StyleSheet.create({
     color: colors.textWhite,
     fontSize: 14,
     fontWeight: '600',
+  },
+  reviewBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.success,
+    borderRadius: 12,
+    paddingVertical: 12,
+    borderWidth: 1,
+    borderColor: colors.success,
+  },
+  reviewBtnText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.textWhite,
+    marginLeft: 6,
+  },
+  reviewSubmitted: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.backgroundLight,
+    borderRadius: 12,
+    paddingVertical: 12,
+    borderWidth: 1,
+    borderColor: colors.success,
+  },
+  reviewSubmittedText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.success,
+    marginLeft: 6,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: colors.background,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: '90%',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: colors.text,
+  },
+  modalCloseBtn: {
+    padding: 4,
+  },
+  modalBody: {
+    padding: 16,
+    maxHeight: 400,
+  },
+  modalSubtitle: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    marginBottom: 16,
+  },
+  ratingContainer: {
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  starsContainer: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 8,
+  },
+  starButton: {
+    padding: 4,
+  },
+  ratingText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.text,
+  },
+  reviewInputContainer: {
+    marginBottom: 16,
+  },
+  inputLabel: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: colors.text,
+    marginBottom: 8,
+  },
+  reviewInput: {
+    backgroundColor: colors.backgroundLight,
+    borderRadius: 12,
+    padding: 12,
+    fontSize: 14,
+    color: colors.text,
+    minHeight: 120,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  modalFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    padding: 16,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    gap: 12,
+  },
+  modalCancelBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 12,
+    backgroundColor: colors.backgroundLight,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalCancelBtnText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.textSecondary,
+  },
+  modalSubmitBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 12,
+    backgroundColor: colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalSubmitBtnDisabled: {
+    backgroundColor: colors.textLight,
+    opacity: 0.5,
+  },
+  modalSubmitBtnText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.textWhite,
   },
   cancelledActions: {
     marginTop: 16,

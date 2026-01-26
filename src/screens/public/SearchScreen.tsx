@@ -142,10 +142,16 @@ const SearchScreen = () => {
   }, [doctorsResponse]);
 
   const specializations = useMemo(() => {
-    if (!specializationsResponse?.data) return [];
-    return Array.isArray(specializationsResponse.data) 
-      ? specializationsResponse.data 
-      : (specializationsResponse.data.data || []);
+    if (!specializationsResponse) return [];
+    // Handle different response structures
+    if (Array.isArray(specializationsResponse)) {
+      return specializationsResponse;
+    }
+    const responseData = (specializationsResponse as any)?.data || specializationsResponse;
+    if (Array.isArray(responseData)) {
+      return responseData;
+    }
+    return (responseData as any)?.data || [];
   }, [specializationsResponse]);
 
   const pagination = useMemo(() => {
@@ -160,12 +166,24 @@ const SearchScreen = () => {
     if (!favoritesResponse?.data?.favorites) return new Set<string>();
     const favorites = favoritesResponse.data.favorites;
     return new Set(
-      favorites.map((fav) => {
-        const doctorId = typeof fav.doctorId === 'object' 
-          ? fav.doctorId._id || fav.doctorId 
-          : fav.doctorId;
-        return String(doctorId);
-      })
+      favorites
+        .map((fav) => {
+          // Check if fav or fav.doctorId is null/undefined
+          if (!fav || !fav.doctorId || fav.doctorId === null) {
+            return null;
+          }
+          // Check if it's an object (but not null, which typeof also returns 'object')
+          const isObject = typeof fav.doctorId === 'object' && fav.doctorId !== null;
+          const doctorId = isObject 
+            ? (fav.doctorId as any)._id || fav.doctorId 
+            : fav.doctorId;
+          // Ensure doctorId is not null/undefined
+          if (!doctorId || doctorId === null) {
+            return null;
+          }
+          return String(doctorId);
+        })
+        .filter((id): id is string => id !== null && id !== undefined) // Filter out null/undefined values
     );
   }, [favoritesResponse]);
 
@@ -175,10 +193,19 @@ const SearchScreen = () => {
     const favorites = favoritesResponse.data.favorites;
     const map: Record<string, string> = {};
     favorites.forEach((fav) => {
-      const doctorId = typeof fav.doctorId === 'object' 
-        ? fav.doctorId._id || fav.doctorId 
+      // Check if fav or fav.doctorId is null/undefined
+      if (!fav || !fav.doctorId || fav.doctorId === null) {
+        return; // Skip this favorite
+      }
+      // Check if it's an object (but not null, which typeof also returns 'object')
+      const isObject = typeof fav.doctorId === 'object' && fav.doctorId !== null;
+      const doctorId = isObject 
+        ? (fav.doctorId as any)._id || fav.doctorId 
         : fav.doctorId;
-      map[String(doctorId)] = fav._id;
+      // Ensure doctorId is not null/undefined and fav._id exists
+      if (doctorId && doctorId !== null && fav._id) {
+        map[String(doctorId)] = fav._id;
+      }
     });
     return map;
   }, [favoritesResponse]);
@@ -193,7 +220,7 @@ const SearchScreen = () => {
         text1: 'Success',
         text2: 'Doctor added to favorites',
       });
-      queryClient.invalidateQueries(['favorites', userId]);
+      queryClient.invalidateQueries({ queryKey: ['favorites', userId] });
     },
     onError: (error: any) => {
       const errorMessage = error?.response?.data?.message || error?.message || 'Failed to add favorite';
@@ -214,7 +241,7 @@ const SearchScreen = () => {
         text1: 'Success',
         text2: 'Doctor removed from favorites',
       });
-      queryClient.invalidateQueries(['favorites', userId]);
+      queryClient.invalidateQueries({ queryKey: ['favorites', userId] });
     },
     onError: (error: any) => {
       const errorMessage = error?.response?.data?.message || error?.message || 'Failed to remove favorite';
@@ -252,47 +279,93 @@ const SearchScreen = () => {
 
   // Helper functions
   const getSpecialtyName = (doctor: doctorApi.DoctorListItem): string => {
+    // Check doctor.specialization first (direct, matching web format), then nested paths
+    if (doctor.specialization) {
+      // specialization can be an object (populated) or just an ID
+      if (typeof doctor.specialization === 'object' && doctor.specialization !== null && doctor.specialization.name) {
+        return doctor.specialization.name;
+      }
+    }
+    // Fallback to nested paths
     if (doctor.doctorProfile?.specialization) {
       const spec = doctor.doctorProfile.specialization;
-      return typeof spec === 'object' ? spec.name : 'General';
+      return typeof spec === 'object' && spec !== null && spec.name ? spec.name : 'General';
     }
     if (doctor.doctorProfile?.specializations?.[0]) {
       return doctor.doctorProfile.specializations[0].name || 'General';
-    }
-    if (doctor.specialization) {
-      const spec = doctor.specialization;
-      return typeof spec === 'object' ? spec.name : 'General';
     }
     return 'General';
   };
 
   const getRating = (doctor: doctorApi.DoctorListItem): number => {
-    return doctor.doctorProfile?.ratingAvg || 
-           doctor.doctorProfile?.rating?.average || 
+    // Check multiple possible paths for rating (matching web format)
+    return doctor.ratingAvg || 
+           doctor.doctorProfile?.ratingAvg || 
            doctor.rating?.average || 
+           doctor.doctorProfile?.rating?.average || 
            0;
   };
 
   const getLocation = (doctor: doctorApi.DoctorListItem): string => {
-    if (doctor.doctorProfile?.clinics?.[0]) {
-      const clinic = doctor.doctorProfile.clinics[0];
-      const city = clinic.city || '';
-      const state = clinic.state || '';
-      return city && state ? `${city}, ${state}` : city || state || 'Location not available';
+    // Check both doctor.clinics (direct) and doctor.doctorProfile.clinics (nested)
+    const clinics = doctor.clinics || doctor.doctorProfile?.clinics;
+    if (clinics && clinics.length > 0) {
+      const clinic = clinics[0];
+      // Build location string from available fields (matching web format)
+      const locationParts = [];
+      
+      // Add address if available
+      if (clinic.address) {
+        locationParts.push(clinic.address);
+      }
+      
+      // Add city if available
+      if (clinic.city) {
+        locationParts.push(clinic.city);
+      }
+      
+      // Add state if available
+      if (clinic.state) {
+        locationParts.push(clinic.state);
+      }
+      
+      // Add country if available
+      if (clinic.country) {
+        locationParts.push(clinic.country);
+      }
+      
+      if (locationParts.length > 0) {
+        return locationParts.join(', ');
+      }
     }
     return 'Location not available';
   };
 
   const getConsultationFee = (doctor: doctorApi.DoctorListItem): number => {
-    return doctor.doctorProfile?.consultationFee || 
-           doctor.doctorProfile?.consultationFees?.clinic || 
-           doctor.doctorProfile?.consultationFees?.online || 
-           0;
+    // Check both doctor.consultationFees (direct) and doctor.doctorProfile.consultationFees (nested)
+    const consultationFees = doctor.consultationFees || doctor.doctorProfile?.consultationFees;
+    if (consultationFees) {
+      // Prefer online fee, fallback to clinic fee (matching web format)
+      if (consultationFees.online) {
+        return consultationFees.online;
+      } else if (consultationFees.clinic) {
+        return consultationFees.clinic;
+      }
+    }
+    // Fallback to single consultationFee field
+    if (doctor.doctorProfile?.consultationFee) {
+      return doctor.doctorProfile.consultationFee;
+    }
+    return 0;
   };
 
   const isDoctorAvailable = (doctor: doctorApi.DoctorListItem): boolean => {
-    if (!doctor.subscriptionExpiresAt) return false;
-    return new Date(doctor.subscriptionExpiresAt) > new Date();
+    // Check isAvailableOnline from doctor profile (defaults to true if not set) - matching web format
+    if (doctor.isAvailableOnline !== undefined) {
+      return doctor.isAvailableOnline;
+    }
+    // Default to true if field is not present (matching web behavior)
+    return true;
   };
 
   const getDoctorImage = (doctor: doctorApi.DoctorListItem): string | null => {
@@ -351,8 +424,10 @@ const SearchScreen = () => {
     const doctorImage = getDoctorImage(item);
     const imageUri = doctorImage ? normalizeImageUrl(doctorImage) : null;
     const isFavorited = favoriteDoctorIds.has(doctorId);
-    const ratingCount = item.doctorProfile?.rating?.count || 
+    const ratingCount = item.ratingCount || 
                        item.rating?.count || 
+                       item.doctorProfile?.rating?.count || 
+                       item.doctorProfile?.ratingCount || 
                        0;
 
     return (
@@ -487,13 +562,13 @@ const SearchScreen = () => {
             <Ionicons name="options-outline" size={20} color={colors.primary} />
           </TouchableOpacity>
           <View style={styles.viewControls}>
-            <TouchableOpacity
+            {/* <TouchableOpacity
               style={styles.viewBtn}
               onPress={() => navigation.navigate('DoctorGrid')}
               activeOpacity={0.7}
             >
               <Ionicons name="grid" size={18} color={colors.textSecondary} />
-            </TouchableOpacity>
+            </TouchableOpacity> */}
             <TouchableOpacity style={[styles.viewBtn, styles.viewBtnActive]} activeOpacity={0.7}>
               <Ionicons name="list" size={18} color={colors.primary} />
             </TouchableOpacity>

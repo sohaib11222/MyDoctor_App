@@ -3,6 +3,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { AppointmentsStackParamList } from '../types';
 import AppointmentsScreen from '../../screens/shared/AppointmentsScreen';
 import AppointmentDetailsScreen from '../../screens/shared/AppointmentDetailsScreen';
+import VideoCallScreen from '../../screens/shared/VideoCallScreen';
 import BookingScreen from '../../screens/shared/BookingScreen';
 import CheckoutScreen from '../../screens/shared/CheckoutScreen';
 import BookingSuccessScreen from '../../screens/shared/BookingSuccessScreen';
@@ -76,6 +77,16 @@ export const AppointmentsStack = () => {
         name="MyPatients" 
         component={MyPatientsScreen}
         options={{ title: 'My Patients' }}
+      />
+      <Stack.Screen 
+        name="VideoCall" 
+        component={VideoCallScreen}
+        options={{ 
+          title: 'Video Call',
+          headerShown: false,
+          presentation: 'fullScreenModal',
+          animation: 'slide_from_bottom'
+        }}
       />
     </Stack.Navigator>
   );

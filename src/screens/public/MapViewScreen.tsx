@@ -13,7 +13,7 @@ import {
   Alert,
   Platform,
 } from 'react-native';
-import MapView, { Marker, PROVIDER_GOOGLE, Region } from 'react-native-maps';
+import MapView, { Marker, Region } from 'react-native-maps';
 import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import * as Location from 'expo-location';
@@ -45,6 +45,7 @@ const MapViewScreen = () => {
   const [showClinicModal, setShowClinicModal] = useState(false);
   const [locationPermission, setLocationPermission] = useState<boolean>(false);
   const [radius, setRadius] = useState(10); // Default 10km radius
+  const [mapError, setMapError] = useState<string | null>(null);
 
   // Get user's current location
   useEffect(() => {
@@ -212,20 +213,42 @@ const MapViewScreen = () => {
     <SafeAreaView style={styles.container}>
       {/* Map View */}
       <View style={styles.mapContainer}>
-        {userLocation ? (
+        {mapError ? (
+          <View style={styles.mapPlaceholder}>
+            <Ionicons name="alert-circle-outline" size={48} color={colors.error} />
+            <Text style={styles.mapPlaceholderText}>{mapError}</Text>
+            <Text style={styles.mapErrorSubtext}>
+              Google Maps API key is required. Please add your API key to app.json and rebuild the app.
+            </Text>
+            <Text style={styles.mapErrorSubtext}>
+              See GOOGLE_MAPS_SETUP.md for instructions.
+            </Text>
+          </View>
+        ) : userLocation ? (
           <MapView
             ref={mapRef}
             style={styles.map}
             initialRegion={initialRegion}
-            provider={Platform.OS === 'android' ? PROVIDER_GOOGLE : undefined}
+            // Use default provider (works without API key on iOS, but Android needs API key)
+            // If API key is not configured, this will show an error
+            // To fix: Add your Google Maps API key to app.json android.config.googleMaps.apiKey
+            // Don't specify provider - use default (works without API key, similar to Expo Go)
+            // provider={Platform.OS === 'android' ? PROVIDER_GOOGLE : undefined}
             showsUserLocation={true}
             showsMyLocationButton={false}
             showsCompass={true}
             toolbarEnabled={false}
-            // For OpenStreetMap, we can use custom map style or default
-            // Note: react-native-maps uses Google Maps by default on Android
-            // For true OpenStreetMap, you'd need to use a library like react-native-mapbox-gl
-            // But we'll use the default provider which works well
+            onMapReady={() => {
+              setMapError(null);
+            }}
+            onError={(error) => {
+              console.error('MapView error:', error);
+              if (error.nativeEvent?.message?.includes('API key') || error.nativeEvent?.message?.includes('apiKey')) {
+                setMapError('Google Maps API key not found');
+              } else {
+                setMapError('Failed to load map. Please check your connection.');
+              }
+            }}
           >
             {/* User location marker is handled by showsUserLocation */}
             
@@ -485,8 +508,19 @@ const styles = StyleSheet.create({
   },
   mapPlaceholderText: {
     marginTop: 12,
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.text,
+    textAlign: 'center',
+    paddingHorizontal: 20,
+  },
+  mapErrorSubtext: {
+    marginTop: 8,
     fontSize: 14,
     color: colors.textSecondary,
+    textAlign: 'center',
+    paddingHorizontal: 20,
+    lineHeight: 20,
   },
   mapControls: {
     position: 'absolute',

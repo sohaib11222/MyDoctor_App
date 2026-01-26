@@ -111,10 +111,14 @@ export const FavouritesScreen = () => {
   const doctorIds = useMemo(() => {
     return favorites
       .map((fav) => {
+        // Check if fav or fav.doctorId is null/undefined
+        if (!fav || !fav.doctorId || fav.doctorId === null) {
+          return null;
+        }
         const doctorId = typeof fav.doctorId === 'object' ? fav.doctorId._id || fav.doctorId : fav.doctorId;
         return doctorId;
       })
-      .filter(Boolean);
+      .filter((id): id is string => Boolean(id)); // Filter out null/undefined values
   }, [favorites]);
 
   // Fetch doctor profiles for favorites
@@ -146,27 +150,34 @@ export const FavouritesScreen = () => {
 
   // Combine favorites with doctor profiles
   const favoritesWithDetails = useMemo(() => {
-    return favorites.map((favorite) => {
-      const doctorId =
-        typeof favorite.doctorId === 'object' ? favorite.doctorId._id || favorite.doctorId : favorite.doctorId;
-      const doctorProfile = doctorProfilesMap[String(doctorId)];
-      const doctor = favorite.doctorId || {};
+    return favorites
+      .map((favorite) => {
+        // Check if favorite or favorite.doctorId is null/undefined
+        if (!favorite || !favorite.doctorId || favorite.doctorId === null) {
+          return null;
+        }
+        
+        const doctorId =
+          typeof favorite.doctorId === 'object' ? favorite.doctorId._id || favorite.doctorId : favorite.doctorId;
+        const doctorProfile = doctorProfilesMap[String(doctorId)];
+        const doctor = favorite.doctorId || {};
 
-      return {
-        ...favorite,
-        doctorId: String(doctorId),
-        doctor: doctorProfile || {
-          userId: {
-            fullName: (doctor as any).fullName || 'Unknown Doctor',
-            profileImage: (doctor as any).profileImage || null,
+        return {
+          ...favorite,
+          doctorId: String(doctorId),
+          doctor: doctorProfile || {
+            userId: {
+              fullName: (doctor as any).fullName || 'Unknown Doctor',
+              profileImage: (doctor as any).profileImage || null,
+            },
+            specialization: doctorProfile?.specialization || { name: 'General' },
+            ratingAvg: doctorProfile?.ratingAvg || 0,
+            ratingCount: doctorProfile?.ratingCount || 0,
+            clinics: doctorProfile?.clinics || [],
           },
-          specialization: doctorProfile?.specialization || { name: 'General' },
-          ratingAvg: doctorProfile?.ratingAvg || 0,
-          ratingCount: doctorProfile?.ratingCount || 0,
-          clinics: doctorProfile?.clinics || [],
-        },
-      };
-    });
+        };
+      })
+      .filter((fav): fav is NonNullable<typeof fav> => fav !== null); // Filter out null values
   }, [favorites, doctorProfilesMap]);
 
   // Filter favorites by search query

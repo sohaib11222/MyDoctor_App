@@ -104,8 +104,6 @@ export const PharmacyOrdersScreen = () => {
   const [refreshing, setRefreshing] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<orderApi.Order | null>(null);
   const [showStatusModal, setShowStatusModal] = useState(false);
-  const [showShippingModal, setShowShippingModal] = useState(false);
-  const [shippingFee, setShippingFee] = useState('');
   const limit = 10;
 
   const {
@@ -203,28 +201,7 @@ export const PharmacyOrdersScreen = () => {
     },
   });
 
-  const updateShippingMutation = useMutation({
-    mutationFn: ({ orderId, shippingFee }: { orderId: string; shippingFee: number }) =>
-      orderApi.updateShippingFee(orderId, shippingFee),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['pharmacyOrders'] });
-      setShowShippingModal(false);
-      setSelectedOrder(null);
-      setShippingFee('');
-      Toast.show({
-        type: 'success',
-        text1: 'Shipping fee updated successfully!',
-        text2: 'Patient will be notified to pay the updated amount.',
-      });
-    },
-    onError: (err: any) => {
-      Toast.show({
-        type: 'error',
-        text1: 'Failed to update shipping fee',
-        text2: err.response?.data?.message || err.message || 'Please try again.',
-      });
-    },
-  });
+  // Shipping fee update removed - payment is processed during checkout
 
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -237,11 +214,7 @@ export const PharmacyOrdersScreen = () => {
     setShowStatusModal(true);
   }, []);
 
-  const handleUpdateShipping = useCallback((order: orderApi.Order) => {
-    setSelectedOrder(order);
-    setShippingFee(order.shipping?.toString() || '0');
-    setShowShippingModal(true);
-  }, []);
+  // Shipping fee update removed - payment is processed during checkout
 
   const handleStatusChange = useCallback((status: orderApi.Order['status']) => {
     if (!selectedOrder) return;
@@ -293,16 +266,6 @@ export const PharmacyOrdersScreen = () => {
           >
             <Text style={styles.actionButtonText}>View Details</Text>
           </TouchableOpacity>
-          {/* Only allow setting shipping fee if order is not paid yet */}
-          {['PENDING', 'CONFIRMED'].includes(order.status) && 
-           order.paymentStatus === 'PENDING' && (
-            <TouchableOpacity
-              style={[styles.actionButton, styles.shippingButton]}
-              onPress={() => handleUpdateShipping(order)}
-            >
-              <Text style={[styles.actionButtonText, styles.shippingButtonText]}>Set Shipping</Text>
-            </TouchableOpacity>
-          )}
           {/* Only allow updating status if order is paid */}
           {order.paymentStatus === 'PAID' && 
            ['PENDING', 'CONFIRMED', 'PROCESSING', 'SHIPPED'].includes(order.status) && (
@@ -477,99 +440,7 @@ export const PharmacyOrdersScreen = () => {
         </View>
       </Modal>
 
-      {/* Shipping Fee Update Modal */}
-      <Modal
-        visible={showShippingModal}
-        transparent
-        animationType="slide"
-        onRequestClose={() => {
-          setShowShippingModal(false);
-          setSelectedOrder(null);
-          setShippingFee('');
-        }}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Update Shipping Fee</Text>
-              <TouchableOpacity
-                onPress={() => {
-                  setShowShippingModal(false);
-                  setSelectedOrder(null);
-                  setShippingFee('');
-                }}
-              >
-                <Ionicons name="close" size={24} color={colors.text} />
-              </TouchableOpacity>
-            </View>
-            <View style={styles.modalBody}>
-              {selectedOrder && (
-                <>
-                  <Text style={styles.modalOrderNumber}>Order #{selectedOrder.orderNumber}</Text>
-                  <Text style={styles.modalCurrentStatus}>
-                    Current Shipping: <Text style={{ color: colors.primary }}>
-                      ${selectedOrder.shipping?.toFixed(2) || '0.00'}
-                    </Text>
-                  </Text>
-                  {selectedOrder.initialShipping && selectedOrder.initialShipping !== selectedOrder.shipping && (
-                    <Text style={styles.modalNote}>
-                      Initial shipping was ${selectedOrder.initialShipping.toFixed(2)}
-                    </Text>
-                  )}
-                  <View style={styles.shippingInputContainer}>
-                    <Text style={styles.modalLabel}>New Shipping Fee ($):</Text>
-                    <TextInput
-                      style={styles.shippingInput}
-                      value={shippingFee}
-                      onChangeText={setShippingFee}
-                      placeholder="Enter shipping fee"
-                      keyboardType="decimal-pad"
-                      placeholderTextColor={colors.textLight}
-                    />
-                  </View>
-                  <View style={styles.modalActions}>
-                    <TouchableOpacity
-                      style={[styles.modalButton, styles.modalButtonCancel]}
-                      onPress={() => {
-                        setShowShippingModal(false);
-                        setSelectedOrder(null);
-                        setShippingFee('');
-                      }}
-                    >
-                      <Text style={styles.modalButtonTextCancel}>Cancel</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={[styles.modalButton, styles.modalButtonConfirm]}
-                      onPress={() => {
-                        const fee = parseFloat(shippingFee);
-                        if (isNaN(fee) || fee < 0) {
-                          Toast.show({
-                            type: 'error',
-                            text1: 'Invalid Amount',
-                            text2: 'Please enter a valid shipping fee',
-                          });
-                          return;
-                        }
-                        updateShippingMutation.mutate({
-                          orderId: selectedOrder._id,
-                          shippingFee: fee,
-                        });
-                      }}
-                      disabled={updateShippingMutation.isPending}
-                    >
-                      {updateShippingMutation.isPending ? (
-                        <ActivityIndicator size="small" color={colors.textWhite} />
-                      ) : (
-                        <Text style={styles.modalButtonTextConfirm}>Update</Text>
-                      )}
-                    </TouchableOpacity>
-                  </View>
-                </>
-              )}
-            </View>
-          </View>
-        </View>
-      </Modal>
+      {/* Shipping fee modal removed - payment is processed during checkout */}
     </SafeAreaView>
   );
 };

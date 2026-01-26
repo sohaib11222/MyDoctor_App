@@ -179,12 +179,8 @@ export const OrderDetailsScreen = () => {
   const pharmacy = typeof order.pharmacyId === 'object' ? order.pharmacyId : null;
   const pharmacyName = pharmacy?.name || 'Pharmacy';
   const shippingAddress = order.shippingAddress;
-  const amountToPay = order.requiresPaymentUpdate && order.initialTotal
-    ? order.total - order.initialTotal
-    : order.total;
-  // Only show payment button if shipping fee is set and payment is pending
-  const showPaymentButton = (order.paymentStatus === 'PENDING' || order.paymentStatus === 'PARTIAL') &&
-    order.finalShipping !== null && order.finalShipping !== undefined;
+  // Payment is now processed during checkout, so no payment button needed
+  const showPaymentButton = false;
 
   return (
     <SafeAreaView style={styles.container}>
