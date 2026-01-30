@@ -55,6 +55,12 @@ export interface PharmacyResponse {
   data: Pharmacy;
 }
 
+export interface MyPharmacyResponse {
+  success: boolean;
+  message: string;
+  data: Pharmacy | null;
+}
+
 export interface CreatePharmacyData {
   name: string;
   phone?: string;
@@ -76,7 +82,7 @@ export interface CreatePharmacyData {
  * List pharmacies with filtering
  */
 export const listPharmacies = async (params: PharmacyFilters = {}): Promise<PharmacyListResponse> => {
-  const response = await api.get('/pharmacy', { params });
+  const response: PharmacyListResponse = await api.get('/pharmacy', { params });
   return response;
 };
 
@@ -84,7 +90,12 @@ export const listPharmacies = async (params: PharmacyFilters = {}): Promise<Phar
  * Get pharmacy by ID
  */
 export const getPharmacyById = async (id: string): Promise<PharmacyResponse> => {
-  const response = await api.get(`/pharmacy/${id}`);
+  const response: PharmacyResponse = await api.get(`/pharmacy/${id}`);
+  return response;
+};
+
+export const getMyPharmacy = async (): Promise<MyPharmacyResponse> => {
+  const response: MyPharmacyResponse = await api.get('/pharmacy/me');
   return response;
 };
 
@@ -92,7 +103,7 @@ export const getPharmacyById = async (id: string): Promise<PharmacyResponse> => 
  * Create pharmacy (for doctors)
  */
 export const createPharmacy = async (data: CreatePharmacyData): Promise<PharmacyResponse> => {
-  const response = await api.post('/pharmacy', data);
+  const response: PharmacyResponse = await api.post('/pharmacy', data);
   return response;
 };
 
@@ -100,7 +111,7 @@ export const createPharmacy = async (data: CreatePharmacyData): Promise<Pharmacy
  * Update pharmacy (admin only)
  */
 export const updatePharmacy = async (id: string, data: Partial<CreatePharmacyData>): Promise<PharmacyResponse> => {
-  const response = await api.put(`/pharmacy/${id}`, data);
+  const response: PharmacyResponse = await api.put(`/pharmacy/${id}`, data);
   return response;
 };
 

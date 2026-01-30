@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -25,6 +25,12 @@ import * as appointmentApi from '../../services/appointment';
 import * as patientApi from '../../services/patient';
 import * as favoriteApi from '../../services/favorite';
 import * as specializationApi from '../../services/specialization';
+import * as profileApi from '../../services/profile';
+import * as subscriptionApi from '../../services/subscription';
+import * as weeklyScheduleApi from '../../services/weeklySchedule';
+import { ProfileIncompleteModal } from '../../components/common/ProfileIncompleteModal';
+import { AddTimingsModal } from '../../components/common/AddTimingsModal';
+import { BuySubscriptionModal } from '../../components/common/BuySubscriptionModal';
 import { API_BASE_URL } from '../../config/api';
 
 type HomeScreenNavigationProp = NativeStackNavigationProp<HomeStackParamList>;
@@ -87,6 +93,39 @@ export const HomeScreen = () => {
   const isDoctor = user?.role === 'doctor';
   const userId = user?._id || user?.id;
   const [refreshing, setRefreshing] = React.useState(false);
+  const [showProfileModal, setShowProfileModal] = useState(false);
+  const [showTimingsModal, setShowTimingsModal] = useState(false);
+  const [showSubscriptionModal, setShowSubscriptionModal] = useState(false);
+
+  // Fetch doctor profile to check completion status
+  const { data: doctorProfile, isLoading: profileLoading } = useQuery({
+    queryKey: ['doctorProfile'],
+    queryFn: () => profileApi.getDoctorProfile(),
+    enabled: isDoctor && !!user,
+    retry: 1,
+  });
+
+  // Fetch weekly schedule to check if timings are set
+  const { data: weeklySchedule, isLoading: scheduleLoading } = useQuery({
+    queryKey: ['weeklySchedule'],
+    queryFn: async () => {
+      const response = await weeklyScheduleApi.getWeeklySchedule();
+      return response.data || response;
+    },
+    enabled: isDoctor && !!user,
+    retry: 1,
+  });
+
+  // Fetch subscription to check if active subscription exists
+  const { data: mySubscription, isLoading: subscriptionLoading } = useQuery({
+    queryKey: ['mySubscription'],
+    queryFn: async () => {
+      const response = await subscriptionApi.getMySubscription();
+      return response.data || response;
+    },
+    enabled: isDoctor && !!user,
+    retry: 1,
+  });
 
   // Fetch dashboard data for doctors
   const { data: dashboardResponse, isLoading: dashboardLoading, error, refetch: refetchDashboard } = useQuery({
@@ -96,6 +135,61 @@ export const HomeScreen = () => {
     refetchInterval: 30000, // Refetch every 30 seconds
     retry: 1,
   });
+
+  // Check profile completion and show modal if incomplete
+  useEffect(() => {
+    // Only check after profile has loaded (not loading and data exists or is null)
+    if (user && user.role === 'doctor' && !profileLoading) {
+      const profileData = doctorProfile?.data || doctorProfile;
+      // Type guard to check if it's a DoctorProfile
+      const isDoctorProfile = (profile: any): profile is import('../../services/profile').DoctorProfile => {
+        return profile && typeof profile === 'object' && ('profileCompleted' in profile || 'specialization' in profile);
+      };
+      
+      // Only show modal if profile is explicitly incomplete (false) or doesn't exist
+      // Don't show if profileCompleted is true
+      if (!profileData) {
+        // Profile doesn't exist yet, show modal
+        const timer = setTimeout(() => {
+          setShowProfileModal(true);
+        }, 1000);
+        return () => clearTimeout(timer);
+      } else if (isDoctorProfile(profileData) && (profileData.profileCompleted === false || profileData.profileCompleted === undefined || profileData.profileCompleted === null)) {
+        // Profile exists but is incomplete
+        const timer = setTimeout(() => {
+          setShowProfileModal(true);
+        }, 1000);
+        return () => clearTimeout(timer);
+      } else if (isDoctorProfile(profileData) && profileData.profileCompleted === true && !scheduleLoading && !subscriptionLoading) {
+        // Profile is complete, check if subscription is active (only after both have loaded)
+        const subscription = (mySubscription as any)?.data || mySubscription;
+        const hasActiveSubscription = subscription?.hasActiveSubscription === true || 
+          (subscription?.subscriptionPlan && subscription?.subscriptionExpiresAt && 
+           new Date(subscription.subscriptionExpiresAt) > new Date());
+        
+        // Check if timings are set
+        const schedule = (weeklySchedule as any)?.data || weeklySchedule;
+        const hasTimings = schedule && schedule.days && schedule.days.some((day: any) => 
+          day.timeSlots && day.timeSlots.length > 0
+        );
+        
+        if (!hasActiveSubscription) {
+          // Show subscription modal after a delay
+          const timer = setTimeout(() => {
+            setShowSubscriptionModal(true);
+          }, 2500);
+          return () => clearTimeout(timer);
+        } else if (!hasTimings) {
+          // Show timings modal after a delay
+          const timer = setTimeout(() => {
+            setShowTimingsModal(true);
+          }, 2000);
+          return () => clearTimeout(timer);
+        }
+      }
+      // If profileCompleted is true, subscription is active, and timings are set, don't show any modal
+    }
+  }, [user, doctorProfile, profileLoading, weeklySchedule, scheduleLoading, mySubscription, subscriptionLoading]);
 
   // Fetch products count for doctor
   const { data: productsResponse, isLoading: productsLoading } = useQuery({
@@ -115,12 +209,12 @@ export const HomeScreen = () => {
 
   const dashboard = useMemo(() => {
     if (!dashboardResponse) return null;
-    const responseData = dashboardResponse.data || dashboardResponse;
+    const responseData = (dashboardResponse as any).data || dashboardResponse;
     if (responseData && (responseData.totalPatients !== undefined || responseData.todayAppointments !== undefined)) {
       return responseData;
     }
-    if (responseData && responseData.data && typeof responseData.data === 'object') {
-      return responseData.data;
+    if (responseData && (responseData as any).data && typeof (responseData as any).data === 'object') {
+      return (responseData as any).data;
     }
     return responseData;
   }, [dashboardResponse]);
@@ -178,14 +272,54 @@ export const HomeScreen = () => {
       );
     }
 
+    // Check if profile is incomplete
+    const doctorData = doctorProfile?.data || doctorProfile;
+    const isDoctorProfile = (profile: any): profile is import('../../services/profile').DoctorProfile => {
+      return profile && typeof profile === 'object' && ('profileCompleted' in profile || 'specialization' in profile);
+    };
+    const isProfileCompleted = isDoctorProfile(doctorData) && doctorData.profileCompleted === true && !profileLoading;
+
     return (
-      <ScrollView
-        style={styles.container}
-        showsVerticalScrollIndicator={false}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-      >
-        {/* Header Section */}
-        <View style={styles.header}>
+      <>
+        <ScrollView
+          style={styles.container}
+          showsVerticalScrollIndicator={false}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+        >
+          {/* Profile Incomplete Banner */}
+          {!isProfileCompleted && (
+            <View style={styles.warningBanner}>
+              <View style={styles.warningBannerContent}>
+                <Ionicons name="warning" size={20} color={colors.warning} />
+                <View style={styles.warningBannerText}>
+                  <Text style={styles.warningBannerTitle}>Profile Incomplete!</Text>
+                  <Text style={styles.warningBannerMessage}>
+                    Your profile is not complete. Please complete your profile to start accepting appointments.
+                  </Text>
+                </View>
+              </View>
+              <TouchableOpacity
+                style={styles.warningBannerButton}
+                onPress={() => {
+                  try {
+                    const tabNavigator = navigation.getParent();
+                    if (tabNavigator) {
+                      (tabNavigator as any).navigate('More', { screen: 'ProfileSettings' });
+                    } else {
+                      navigation.navigate('More' as any, { screen: 'ProfileSettings' } as any);
+                    }
+                  } catch (error) {
+                    console.warn('Navigation error:', error);
+                  }
+                }}
+              >
+                <Text style={styles.warningBannerButtonText}>Complete Profile Now</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {/* Header Section */}
+          <View style={styles.header}>
           <View style={styles.headerContent}>
             <Text style={styles.greeting}>Hello, Dr. {user?.name?.split(' ')[0] || 'Doctor'}</Text>
             <Text style={styles.title}>My Patients</Text>
@@ -311,6 +445,54 @@ export const HomeScreen = () => {
           )}
         </View>
       </ScrollView>
+
+      {/* Modals */}
+      <ProfileIncompleteModal
+        show={showProfileModal}
+        onClose={() => setShowProfileModal(false)}
+        onGoToProfile={() => {
+          setShowProfileModal(false);
+          const tabNavigator = navigation.getParent();
+          if (tabNavigator) {
+            (tabNavigator as any).navigate('More', { screen: 'ProfileSettings' });
+          }
+        }}
+      />
+      <AddTimingsModal
+        show={showTimingsModal}
+        onClose={() => setShowTimingsModal(false)}
+        onGoToTimings={() => {
+          setShowTimingsModal(false);
+          try {
+            const tabNavigator = navigation.getParent();
+            if (tabNavigator) {
+              (tabNavigator as any).navigate('Appointments', { screen: 'AvailableTimings' });
+            } else {
+              navigation.navigate('Appointments' as any, { screen: 'AvailableTimings' } as any);
+            }
+          } catch (error) {
+            console.warn('Navigation error:', error);
+          }
+        }}
+      />
+      <BuySubscriptionModal
+        show={showSubscriptionModal}
+        onClose={() => setShowSubscriptionModal(false)}
+        onGoToSubscription={() => {
+          setShowSubscriptionModal(false);
+          try {
+            const tabNavigator = navigation.getParent();
+            if (tabNavigator) {
+              (tabNavigator as any).navigate('More', { screen: 'Subscription' });
+            } else {
+              navigation.navigate('More' as any, { screen: 'Subscription' } as any);
+            }
+          } catch (error) {
+            console.warn('Navigation error:', error);
+          }
+        }}
+      />
+    </>
     );
   }
 
@@ -602,7 +784,7 @@ export const HomeScreen = () => {
                     </View>
                   </View>
                   <View style={styles.doctorFooter}>
-                    <Text style={styles.doctorFee}>${consultationFee}</Text>
+                    <Text style={styles.doctorFee}>€{consultationFee}</Text>
                     <Button
                       title="Book"
                       onPress={() => navigation.navigate('DoctorProfile', { doctorId: String(doctorId) })}
@@ -866,6 +1048,46 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     textAlign: 'center',
     lineHeight: 20,
+  },
+  warningBanner: {
+    backgroundColor: colors.warningLight,
+    margin: 16,
+    padding: 16,
+    borderRadius: 12,
+    borderLeftWidth: 4,
+    borderLeftColor: colors.warning,
+  },
+  warningBannerContent: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginBottom: 12,
+    gap: 12,
+  },
+  warningBannerText: {
+    flex: 1,
+  },
+  warningBannerTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.text,
+    marginBottom: 4,
+  },
+  warningBannerMessage: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    lineHeight: 20,
+  },
+  warningBannerButton: {
+    backgroundColor: colors.warning,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    alignSelf: 'flex-start',
+  },
+  warningBannerButtonText: {
+    color: colors.textWhite,
+    fontSize: 14,
+    fontWeight: '600',
   },
   // Doctor-specific styles
   statsContainer: {

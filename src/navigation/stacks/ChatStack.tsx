@@ -61,9 +61,9 @@ export const ChatStack = () => {
       <Stack.Screen 
         name="ChatDetail" 
         component={ChatDetailScreen}
-        options={({ route }) => ({ 
-          title: route.params.recipientName,
-        })}
+        options={{ 
+          headerShown: false, // Hide navigation header to avoid duplicate
+        }}
       />
       <Stack.Screen 
         name="AdminChat" 

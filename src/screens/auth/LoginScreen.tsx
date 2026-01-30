@@ -81,6 +81,7 @@ export const LoginScreen = () => {
   const roles: { value: UserRole; label: string; icon: string }[] = [
     { value: 'patient', label: 'Patient', icon: 'user' },
     { value: 'doctor', label: 'Doctor', icon: 'briefcase' },
+    { value: 'pharmacy', label: 'Pharmacy', icon: 'shopping-bag' },
   ];
 
   return (

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -31,7 +31,6 @@ const APPOINTMENT_DURATIONS = [15, 30, 45, 60];
 export const AvailableTimingsScreen = () => {
   const navigation = useNavigation<AvailableTimingsScreenNavigationProp>();
   const queryClient = useQueryClient();
-  const [activeTab, setActiveTab] = useState<'general' | 'clinic'>('general');
   const [activeDay, setActiveDay] = useState('Monday');
   const [showSlotModal, setShowSlotModal] = useState(false);
   const [modalMode, setModalMode] = useState<'add' | 'edit'>('add');
@@ -40,7 +39,15 @@ export const AvailableTimingsScreen = () => {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [dayToDelete, setDayToDelete] = useState<string | null>(null);
 
-  // Form state for modal
+  // Form state for modal - 12-hour format
+  const [startHour, setStartHour] = useState('9');
+  const [startMinute, setStartMinute] = useState('00');
+  const [startPeriod, setStartPeriod] = useState<'AM' | 'PM'>('AM');
+  const [endHour, setEndHour] = useState('10');
+  const [endMinute, setEndMinute] = useState('00');
+  const [endPeriod, setEndPeriod] = useState<'AM' | 'PM'>('AM');
+  
+  // 24-hour format for backend
   const [startTime, setStartTime] = useState('');
   const [endTime, setEndTime] = useState('');
   const [isAvailable, setIsAvailable] = useState(true);
@@ -183,10 +190,102 @@ export const AvailableTimingsScreen = () => {
     },
   });
 
+  // Convert 24-hour to 12-hour components
+  const parse24To12 = (time24: string): { hour: string; minute: string; period: 'AM' | 'PM' } => {
+    if (!time24) return { hour: '9', minute: '00', period: 'AM' };
+    
+    const [hours, minutes] = time24.split(':').map(Number);
+    const period: 'AM' | 'PM' = hours >= 12 ? 'PM' : 'AM';
+    const hours12 = hours % 12 || 12;
+    
+    return {
+      hour: hours12.toString(),
+      minute: minutes.toString().padStart(2, '0'),
+      period
+    };
+  };
+
+  // Convert 12-hour components to 24-hour format
+  const convert12To24 = (hour: string, minute: string, period: 'AM' | 'PM'): string => {
+    let hours = parseInt(hour, 10);
+    const minutes = minute.padStart(2, '0');
+    
+    if (period === 'PM' && hours !== 12) {
+      hours += 12;
+    } else if (period === 'AM' && hours === 12) {
+      hours = 0;
+    }
+    
+    return `${hours.toString().padStart(2, '0')}:${minutes}`;
+  };
+
+  // Update 24-hour time when 12-hour components change
+  useEffect(() => {
+    if (startHour && startMinute && startPeriod) {
+      const time24 = convert12To24(startHour, startMinute, startPeriod);
+      setStartTime(time24);
+    }
+  }, [startHour, startMinute, startPeriod]);
+
+  useEffect(() => {
+    if (endHour && endMinute && endPeriod) {
+      const time24 = convert12To24(endHour, endMinute, endPeriod);
+      setEndTime(time24);
+    }
+  }, [endHour, endMinute, endPeriod]);
+
+  // Initialize form when modal opens or slot changes
+  const prevModalOpenRef = useRef(false);
+  const prevSelectedSlotIdRef = useRef<string | null>(null);
+  
+  useEffect(() => {
+    const isModalJustOpened = showSlotModal && !prevModalOpenRef.current;
+    const isSlotChanged = selectedSlot?._id !== prevSelectedSlotIdRef.current;
+    
+    if (showSlotModal && (isModalJustOpened || isSlotChanged)) {
+      if (selectedSlot && modalMode === 'edit') {
+        const start12 = parse24To12(selectedSlot.startTime || '');
+        const end12 = parse24To12(selectedSlot.endTime || '');
+        
+        setStartHour(start12.hour);
+        setStartMinute(start12.minute);
+        setStartPeriod(start12.period);
+        setEndHour(end12.hour);
+        setEndMinute(end12.minute);
+        setEndPeriod(end12.period);
+        
+        setStartTime(selectedSlot.startTime || '');
+        setEndTime(selectedSlot.endTime || '');
+        setIsAvailable(selectedSlot.isAvailable !== undefined ? selectedSlot.isAvailable : true);
+      } else if (modalMode === 'add' && isModalJustOpened) {
+        // Default values for add mode - only when modal first opens
+        setStartHour('9');
+        setStartMinute('00');
+        setStartPeriod('AM');
+        setEndHour('10');
+        setEndMinute('00');
+        setEndPeriod('AM');
+        setStartTime('09:00');
+        setEndTime('10:00');
+        setIsAvailable(true);
+      }
+      setErrors({});
+    }
+    
+    prevModalOpenRef.current = showSlotModal;
+    prevSelectedSlotIdRef.current = selectedSlot?._id || null;
+  }, [showSlotModal, selectedSlot?._id, modalMode]);
+
   // Reset modal form
   const resetModal = () => {
-    setStartTime('');
-    setEndTime('');
+    setStartHour('9');
+    setStartMinute('00');
+    setStartPeriod('AM');
+    setEndHour('10');
+    setEndMinute('00');
+    setEndPeriod('AM');
+    setStartTime('09:00');
+    setEndTime('10:00');
     setIsAvailable(true);
     setErrors({});
     setSelectedSlot(null);
@@ -205,8 +304,7 @@ export const AvailableTimingsScreen = () => {
     setSelectedDayForModal(dayOfWeek);
     setModalMode('edit');
     setSelectedSlot(slot);
-    setStartTime(slot.startTime || '');
-    setEndTime(slot.endTime || '');
+    // The useEffect will handle setting the 12-hour format values
     setIsAvailable(slot.isAvailable !== undefined ? slot.isAvailable : true);
     setErrors({});
     setShowSlotModal(true);
@@ -265,13 +363,42 @@ export const AvailableTimingsScreen = () => {
 
   // Handle save slot from modal
   const handleSaveSlot = () => {
-    if (!validateModal()) {
+    // Convert 12-hour format to 24-hour format
+    const currentStartTime = convert12To24(startHour, startMinute, startPeriod);
+    const currentEndTime = convert12To24(endHour, endMinute, endPeriod);
+    
+    // Update state with converted times
+    setStartTime(currentStartTime);
+    setEndTime(currentEndTime);
+    
+    // Validate using the converted times
+    const newErrors: { startTime?: string; endTime?: string } = {};
+
+    if (!currentStartTime) {
+      newErrors.startTime = 'Start time is required';
+    } else if (!isValidTime(currentStartTime)) {
+      newErrors.startTime = 'Invalid time format. Use HH:MM (e.g., 09:00)';
+    }
+
+    if (!currentEndTime) {
+      newErrors.endTime = 'End time is required';
+    } else if (!isValidTime(currentEndTime)) {
+      newErrors.endTime = 'Invalid time format. Use HH:MM (e.g., 10:00)';
+    }
+
+    if (currentStartTime && currentEndTime && !isStartBeforeEnd(currentStartTime, currentEndTime)) {
+      newErrors.endTime = 'End time must be after start time';
+    }
+
+    setErrors(newErrors);
+    
+    if (Object.keys(newErrors).length > 0) {
       return;
     }
 
     const slotData: weeklyScheduleApi.TimeSlot = {
-      startTime,
-      endTime,
+      startTime: currentStartTime,
+      endTime: currentEndTime,
       isAvailable,
     };
 
@@ -360,41 +487,11 @@ export const AvailableTimingsScreen = () => {
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* Main Tabs */}
-      <View style={styles.mainTabs}>
-        <TouchableOpacity
-          style={[styles.mainTab, activeTab === 'general' && styles.mainTabActive]}
-          onPress={() => setActiveTab('general')}
-        >
-          <Text style={[styles.mainTabText, activeTab === 'general' && styles.mainTabTextActive]}>
-            General Availability
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.mainTab, activeTab === 'clinic' && styles.mainTabActive]}
-          onPress={() => setActiveTab('clinic')}
-        >
-          <Text style={[styles.mainTabText, activeTab === 'clinic' && styles.mainTabTextActive]}>
-            Clinic Availability
-          </Text>
-        </TouchableOpacity>
-      </View>
-
-      {activeTab === 'clinic' && (
-        <View style={styles.clinicSelector}>
-          <Text style={styles.clinicLabel}>Select Clinic</Text>
-          <View style={styles.clinicInfo}>
-            <Text style={styles.clinicInfoText}>Clinic-specific availability coming soon!</Text>
-          </View>
-        </View>
-      )}
-
-      {activeTab === 'general' && (
-        <ScrollView
-          style={styles.content}
-          showsVerticalScrollIndicator={false}
-          refreshControl={<RefreshControl refreshing={isLoading} onRefresh={refetch} />}
-        >
+      <ScrollView
+        style={styles.content}
+        showsVerticalScrollIndicator={false}
+        refreshControl={<RefreshControl refreshing={isLoading} onRefresh={refetch} />}
+      >
           <View style={styles.card}>
             <Text style={styles.cardTitle}>Select Available Slots</Text>
 
@@ -484,7 +581,6 @@ export const AvailableTimingsScreen = () => {
             </View>
           </View>
         </ScrollView>
-      )}
 
       {/* Time Slot Modal */}
       <Modal
@@ -512,35 +608,251 @@ export const AvailableTimingsScreen = () => {
               </TouchableOpacity>
             </View>
 
-            <View style={styles.modalBody}>
+            <ScrollView style={styles.modalBody} showsVerticalScrollIndicator={false}>
               <View style={styles.formGroup}>
                 <Text style={styles.formLabel}>
                   Start Time <Text style={styles.required}>*</Text>
                 </Text>
-                <Text style={styles.formHint}>Format: HH:MM (24-hour, e.g., 09:00, 14:30)</Text>
-                <TextInput
-                  style={[styles.formInput, errors.startTime && styles.formInputError]}
-                  placeholder="09:00"
-                  value={startTime}
-                  onChangeText={setStartTime}
-                  maxLength={5}
-                />
+                <View style={styles.timePickerContainer}>
+                  <View style={styles.timePickerRow}>
+                    <View style={styles.pickerWrapper}>
+                      <Text style={styles.pickerLabel}>Hour</Text>
+                      <View style={[styles.pickerContainer, errors.startTime && styles.pickerError]}>
+                        <ScrollView 
+                          style={styles.pickerScroll} 
+                          nestedScrollEnabled
+                          showsVerticalScrollIndicator={false}
+                        >
+                          {Array.from({ length: 12 }, (_, i) => i + 1).map((hour) => (
+                            <TouchableOpacity
+                              key={hour}
+                              style={[
+                                styles.pickerOption,
+                                startHour === hour.toString() && styles.pickerOptionActive,
+                              ]}
+                              onPress={() => {
+                                setStartHour(hour.toString());
+                              }}
+                            >
+                              <Text
+                                style={[
+                                  styles.pickerOptionText,
+                                  startHour === hour.toString() && styles.pickerOptionTextActive,
+                                ]}
+                              >
+                                {hour}
+                              </Text>
+                            </TouchableOpacity>
+                          ))}
+                        </ScrollView>
+                      </View>
+                    </View>
+                    <Text style={styles.timeSeparator}>:</Text>
+                    <View style={styles.pickerWrapper}>
+                      <Text style={styles.pickerLabel}>Minute</Text>
+                      <View style={[styles.pickerContainer, errors.startTime && styles.pickerError]}>
+                        <ScrollView style={styles.pickerScroll} nestedScrollEnabled>
+                          {Array.from({ length: 12 }, (_, i) => (i * 5).toString().padStart(2, '0')).map((min) => (
+                            <TouchableOpacity
+                              key={min}
+                              style={[
+                                styles.pickerOption,
+                                startMinute === min && styles.pickerOptionActive,
+                              ]}
+                              onPress={() => setStartMinute(min)}
+                            >
+                              <Text
+                                style={[
+                                  styles.pickerOptionText,
+                                  startMinute === min && styles.pickerOptionTextActive,
+                                ]}
+                              >
+                                {min}
+                              </Text>
+                            </TouchableOpacity>
+                          ))}
+                        </ScrollView>
+                      </View>
+                    </View>
+                    <View style={styles.pickerWrapper}>
+                      <Text style={styles.pickerLabel}>Period</Text>
+                      <View style={[styles.pickerContainer, errors.startTime && styles.pickerError]}>
+                        <ScrollView 
+                          style={styles.pickerScroll} 
+                          nestedScrollEnabled
+                          showsVerticalScrollIndicator={false}
+                        >
+                          <TouchableOpacity
+                            style={[
+                              styles.pickerOption,
+                              startPeriod === 'AM' && styles.pickerOptionActive,
+                            ]}
+                            onPress={() => {
+                              setStartPeriod('AM');
+                            }}
+                          >
+                            <Text
+                              style={[
+                                styles.pickerOptionText,
+                                startPeriod === 'AM' && styles.pickerOptionTextActive,
+                              ]}
+                            >
+                              AM
+                            </Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            style={[
+                              styles.pickerOption,
+                              startPeriod === 'PM' && styles.pickerOptionActive,
+                            ]}
+                            onPress={() => {
+                              setStartPeriod('PM');
+                            }}
+                          >
+                            <Text
+                              style={[
+                                styles.pickerOptionText,
+                                startPeriod === 'PM' && styles.pickerOptionTextActive,
+                              ]}
+                            >
+                              PM
+                            </Text>
+                          </TouchableOpacity>
+                        </ScrollView>
+                      </View>
+                    </View>
+                  </View>
+                </View>
                 {errors.startTime && <Text style={styles.errorText}>{errors.startTime}</Text>}
+                <Text style={styles.formHint}>
+                  Selected: {startHour}:{startMinute} {startPeriod} ({startTime && to12Hour(startTime)})
+                </Text>
               </View>
 
               <View style={styles.formGroup}>
                 <Text style={styles.formLabel}>
                   End Time <Text style={styles.required}>*</Text>
                 </Text>
-                <Text style={styles.formHint}>Format: HH:MM (24-hour, e.g., 10:00, 15:30)</Text>
-                <TextInput
-                  style={[styles.formInput, errors.endTime && styles.formInputError]}
-                  placeholder="10:00"
-                  value={endTime}
-                  onChangeText={setEndTime}
-                  maxLength={5}
-                />
+                <View style={styles.timePickerContainer}>
+                  <View style={styles.timePickerRow}>
+                    <View style={styles.pickerWrapper}>
+                      <Text style={styles.pickerLabel}>Hour</Text>
+                      <View style={[styles.pickerContainer, errors.endTime && styles.pickerError]}>
+                        <ScrollView 
+                          style={styles.pickerScroll} 
+                          nestedScrollEnabled
+                          showsVerticalScrollIndicator={false}
+                        >
+                          {Array.from({ length: 12 }, (_, i) => i + 1).map((hour) => (
+                            <TouchableOpacity
+                              key={hour}
+                              style={[
+                                styles.pickerOption,
+                                endHour === hour.toString() && styles.pickerOptionActive,
+                              ]}
+                              onPress={() => {
+                                setEndHour(hour.toString());
+                              }}
+                            >
+                              <Text
+                                style={[
+                                  styles.pickerOptionText,
+                                  endHour === hour.toString() && styles.pickerOptionTextActive,
+                                ]}
+                              >
+                                {hour}
+                              </Text>
+                            </TouchableOpacity>
+                          ))}
+                        </ScrollView>
+                      </View>
+                    </View>
+                    <Text style={styles.timeSeparator}>:</Text>
+                    <View style={styles.pickerWrapper}>
+                      <Text style={styles.pickerLabel}>Minute</Text>
+                      <View style={[styles.pickerContainer, errors.endTime && styles.pickerError]}>
+                        <ScrollView 
+                          style={styles.pickerScroll} 
+                          nestedScrollEnabled
+                          showsVerticalScrollIndicator={false}
+                        >
+                          {Array.from({ length: 12 }, (_, i) => (i * 5).toString().padStart(2, '0')).map((min) => (
+                            <TouchableOpacity
+                              key={min}
+                              style={[
+                                styles.pickerOption,
+                                endMinute === min && styles.pickerOptionActive,
+                              ]}
+                              onPress={() => {
+                                setEndMinute(min);
+                              }}
+                            >
+                              <Text
+                                style={[
+                                  styles.pickerOptionText,
+                                  endMinute === min && styles.pickerOptionTextActive,
+                                ]}
+                              >
+                                {min}
+                              </Text>
+                            </TouchableOpacity>
+                          ))}
+                        </ScrollView>
+                      </View>
+                    </View>
+                    <View style={styles.pickerWrapper}>
+                      <Text style={styles.pickerLabel}>Period</Text>
+                      <View style={[styles.pickerContainer, errors.endTime && styles.pickerError]}>
+                        <ScrollView 
+                          style={styles.pickerScroll} 
+                          nestedScrollEnabled
+                          showsVerticalScrollIndicator={false}
+                        >
+                          <TouchableOpacity
+                            style={[
+                              styles.pickerOption,
+                              endPeriod === 'AM' && styles.pickerOptionActive,
+                            ]}
+                            onPress={() => {
+                              setEndPeriod('AM');
+                            }}
+                          >
+                            <Text
+                              style={[
+                                styles.pickerOptionText,
+                                endPeriod === 'AM' && styles.pickerOptionTextActive,
+                              ]}
+                            >
+                              AM
+                            </Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            style={[
+                              styles.pickerOption,
+                              endPeriod === 'PM' && styles.pickerOptionActive,
+                            ]}
+                            onPress={() => {
+                              setEndPeriod('PM');
+                            }}
+                          >
+                            <Text
+                              style={[
+                                styles.pickerOptionText,
+                                endPeriod === 'PM' && styles.pickerOptionTextActive,
+                              ]}
+                            >
+                              PM
+                            </Text>
+                          </TouchableOpacity>
+                        </ScrollView>
+                      </View>
+                    </View>
+                  </View>
+                </View>
                 {errors.endTime && <Text style={styles.errorText}>{errors.endTime}</Text>}
+                <Text style={styles.formHint}>
+                  Selected: {endHour}:{endMinute} {endPeriod} ({endTime && to12Hour(endTime)})
+                </Text>
               </View>
 
               <View style={styles.formGroup}>
@@ -555,7 +867,7 @@ export const AvailableTimingsScreen = () => {
                 </TouchableOpacity>
                 <Text style={styles.formHint}>Uncheck to mark this slot as unavailable</Text>
               </View>
-            </View>
+            </ScrollView>
 
             <View style={styles.modalFooter}>
               <Button
@@ -624,52 +936,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.backgroundLight,
-  },
-  mainTabs: {
-    flexDirection: 'row',
-    backgroundColor: colors.background,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-  mainTab: {
-    flex: 1,
-    paddingVertical: 16,
-    alignItems: 'center',
-    borderBottomWidth: 2,
-    borderBottomColor: 'transparent',
-  },
-  mainTabActive: {
-    borderBottomColor: colors.primary,
-  },
-  mainTabText: {
-    fontSize: 14,
-    color: colors.textSecondary,
-    fontWeight: '500',
-  },
-  mainTabTextActive: {
-    color: colors.primary,
-    fontWeight: '600',
-  },
-  clinicSelector: {
-    padding: 16,
-    backgroundColor: colors.background,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-  clinicLabel: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: colors.text,
-    marginBottom: 8,
-  },
-  clinicInfo: {
-    padding: 12,
-    backgroundColor: colors.primaryLight,
-    borderRadius: 8,
-  },
-  clinicInfoText: {
-    fontSize: 14,
-    color: colors.text,
   },
   content: {
     flex: 1,
@@ -985,5 +1251,66 @@ const styles = StyleSheet.create({
   },
   confirmModalButton: {
     flex: 1,
+  },
+  timePickerContainer: {
+    marginTop: 8,
+  },
+  timePickerRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+  },
+  pickerWrapper: {
+    flex: 1,
+  },
+  pickerLabel: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    marginBottom: 4,
+    fontWeight: '500',
+  },
+  pickerContainer: {
+    height: 120,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 8,
+    backgroundColor: colors.backgroundLight,
+    overflow: 'hidden',
+  },
+  pickerError: {
+    borderColor: colors.error,
+  },
+  pickerScroll: {
+    flex: 1,
+  },
+  pickerOption: {
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+    backgroundColor: colors.backgroundLight,
+  },
+  pickerOptionActive: {
+    backgroundColor: colors.primary,
+  },
+  pickerOptionText: {
+    fontSize: 14,
+    color: colors.text,
+    textAlign: 'center',
+  },
+  pickerOptionTextActive: {
+    color: colors.textWhite,
+    fontWeight: '600',
+  },
+  timeSeparator: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: colors.text,
+    marginTop: 28,
+  },
+  errorText: {
+    fontSize: 12,
+    color: colors.error,
+    marginTop: 4,
   },
 });

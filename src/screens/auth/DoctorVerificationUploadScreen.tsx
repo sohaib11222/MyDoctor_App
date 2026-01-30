@@ -20,6 +20,8 @@ import { Ionicons } from '@expo/vector-icons';
 import Toast from 'react-native-toast-message';
 import * as uploadApi from '../../services/upload';
 import { API_BASE_URL } from '../../config/api';
+import { copyImageToCacheUri, deleteCacheFiles } from '../../utils/imageUpload';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 type DoctorVerificationUploadScreenNavigationProp = NativeStackNavigationProp<AuthStackParamList>;
 
@@ -157,62 +159,61 @@ export const DoctorVerificationUploadScreen = () => {
     }
 
     setLoading(true);
+    let tempFileUris: string[] = [];
+
     try {
-      // Create FormData - backend expects field name 'files' as array
-      // React Native FormData format: { uri, name, type }
-      const formData = new FormData();
+      // Helper to get MIME type and filename
+      const getMimeAndName = (file: SelectedFile, index: number) => {
+        const fileName = file.name || `image-${Date.now()}-${index}.jpg`;
+        const ext = fileName.split('.').pop()?.toLowerCase() || 'jpg';
+        const mime =
+          ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : 'image/jpeg';
+        const name = fileName.includes('.') ? fileName : `image-${Date.now()}-${index}.${ext}`;
+        return { mime, name };
+      };
 
-      // Append all files with field name 'files' (backend middleware expects 'files')
-      selectedFiles.forEach((file, index) => {
-        // React Native FormData requires this specific format
-        // Ensure URI is properly formatted (file:// or content://)
-        const fileUri = file.uri.startsWith('file://') || file.uri.startsWith('content://') 
-          ? file.uri 
-          : `file://${file.uri}`;
-        
-        formData.append('files', {
-          uri: fileUri,
-          name: file.name || `image_${index}.jpg`,
-          type: file.type || 'image/jpeg',
-        } as any);
-        
-        if (__DEV__) {
-          console.log(`📎 Appending file ${index + 1}:`, {
-            uri: fileUri.substring(0, 50) + '...',
-            name: file.name,
-            type: file.type,
-          });
-        }
-      });
+      // Copy each image to cache (file://). Android cannot read content://; axios FormData → ERR_NETWORK.
+      const copied = await Promise.all(
+        selectedFiles.map(async (file, index) => {
+          const { mime, name } = getMimeAndName(file, index);
+          const fileUri = await copyImageToCacheUri(file.uri, index, mime);
+          tempFileUris.push(fileUri);
+          return { uri: fileUri, mime, name };
+        })
+      );
 
-      // Debug: Log FormData in development
       if (__DEV__) {
-        console.log('📤 Uploading FormData with', selectedFiles.length, 'file(s)');
+        console.log('📤 Uploading', copied.length, 'file(s) via XMLHttpRequest');
         console.log('📤 Full API URL:', `${API_BASE_URL}/upload/doctor-docs`);
-        console.log('📤 Selected files:', selectedFiles.map(f => ({ 
-          name: f.name, 
-          type: f.type, 
-          size: f.size ? `${(f.size / 1024 / 1024).toFixed(2)}MB` : 'unknown' 
-        })));
       }
 
-      // Upload using API
-      // Note: Response interceptor already extracts response.data, so response is the data object
-      const response = await uploadApi.uploadDoctorDocs(formData);
+      // Upload using XMLHttpRequest (handles file:// URIs correctly)
+      const response = await uploadApi.uploadDoctorDocs(copied);
 
       // Check response - backend returns { success: true, message: '...', data: { urls: [...] } }
       // Since interceptor extracts response.data, response is already the data object
       if (response?.success || response?.data?.urls || response?.urls) {
+        // Mark documents as submitted to prevent navigation back to upload screen
+        // Set this BEFORE navigation to ensure it's saved
+        await AsyncStorage.setItem('doctor_documents_submitted', 'true');
+        
+        if (__DEV__) {
+          const flag = await AsyncStorage.getItem('doctor_documents_submitted');
+          console.log('✅ Documents submitted flag set:', flag);
+        }
+
         Toast.show({
           type: 'success',
           text1: 'Documents Uploaded',
           text2: 'Verification documents uploaded successfully! Your documents are under review.',
         });
 
-        // Navigate to pending approval
-        setTimeout(() => {
-          navigation.replace('PendingApproval');
-        }, 1000);
+        // Use reset instead of replace to clear navigation stack and prevent going back
+        // Reset immediately (no setTimeout) to prevent any race conditions
+        navigation.reset({
+          index: 0,
+          routes: [{ name: 'PendingApproval' }],
+        });
       } else {
         throw new Error(response?.message || 'Upload failed: Invalid response');
       }
@@ -258,6 +259,10 @@ To find your computer's IP:
         visibilityTime: 5000,
       });
     } finally {
+      // Clean up temp files
+      if (tempFileUris.length > 0) {
+        await deleteCacheFiles(tempFileUris);
+      }
       setLoading(false);
     }
   };

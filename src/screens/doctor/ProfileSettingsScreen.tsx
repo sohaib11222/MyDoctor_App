@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   View,
   Text,
@@ -23,14 +23,28 @@ import * as uploadApi from '../../services/upload';
 import * as ImagePicker from 'expo-image-picker';
 import Toast from 'react-native-toast-message';
 import { API_BASE_URL } from '../../config/api';
+import { copyImageToCacheUri, deleteCacheFiles } from '../../utils/imageUpload';
+import { getNextTab, TabType, PROFILE_SETTINGS_TABS } from '../../utils/profileSettingsTabs';
+import * as specializationApi from '../../services/specialization';
+import * as insuranceApi from '../../services/insurance';
 
-type TabType = 'basic' | 'experience' | 'education' | 'awards' | 'clinics' | 'business' | 'social';
+type TabTypeLocal = 'basic' | 'specialties' | 'experience' | 'education' | 'awards' | 'clinics' | 'insurance' | 'business' | 'social';
+
+// Helper function to get next tab (fallback if import fails)
+const getNextTabLocal = (currentTab: TabTypeLocal): TabTypeLocal | null => {
+  const tabOrder: TabTypeLocal[] = ['basic', 'specialties', 'experience', 'education', 'awards', 'clinics', 'insurance', 'business', 'social'];
+  const currentIndex = tabOrder.indexOf(currentTab);
+  if (currentIndex === -1 || currentIndex === tabOrder.length - 1) {
+    return null;
+  }
+  return tabOrder[currentIndex + 1];
+};
 
 export const ProfileSettingsScreen = () => {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const [refreshing, setRefreshing] = useState(false);
-  const [activeTab, setActiveTab] = useState<TabType>('basic');
+  const [activeTab, setActiveTab] = useState<TabTypeLocal>('basic');
   const experienceCounterRef = useRef(0);
   const educationCounterRef = useRef(0);
   const awardCounterRef = useRef(0);
@@ -47,7 +61,13 @@ export const ProfileSettingsScreen = () => {
   const [doctorProfileData, setDoctorProfileData] = useState({
     title: '',
     biography: '',
+    specializationId: '',
+    consultationFees: {
+      clinic: '' as string | number,
+      online: '' as string | number,
+    },
     memberships: [] as Array<{ name: string }>,
+    services: [] as Array<{ name: string; price: number }>,
     experience: [] as Array<{ hospital: string; fromYear: string; toYear: string; designation: string }>,
     education: [] as Array<{ degree: string; college: string; year: string }>,
     awards: [] as Array<{ title: string; year: string }>,
@@ -77,8 +97,14 @@ export const ProfileSettingsScreen = () => {
     website: '',
   });
 
+  // Insurance state (for insurance tab)
+  const [convenzionato, setConvenzionato] = useState(false);
+  const [selectedInsuranceIds, setSelectedInsuranceIds] = useState<string[]>([]);
+
   // Profile image preview
   const [profileImagePreview, setProfileImagePreview] = useState('');
+  // Selected image asset (not uploaded yet)
+  const [selectedImageAsset, setSelectedImageAsset] = useState<ImagePicker.ImagePickerAsset | null>(null);
 
   // Get user ID (support both _id and id)
   const userId = user?._id || user?.id;
@@ -103,6 +129,36 @@ export const ProfileSettingsScreen = () => {
     enabled: !!user && !!userId,
     retry: 1,
   });
+
+  // Fetch specializations for specialties tab
+  const { data: specializationsData, isLoading: specializationsLoading } = useQuery({
+    queryKey: ['specializations'],
+    queryFn: () => specializationApi.getAllSpecializations(),
+    enabled: activeTab === 'specialties',
+    retry: 1,
+  });
+
+  const specializations = useMemo(() => {
+    if (!specializationsData) return [];
+    if (Array.isArray(specializationsData)) return specializationsData;
+    const responseData = (specializationsData as any)?.data || specializationsData;
+    if (Array.isArray(responseData)) return responseData;
+    return (responseData as any)?.data || [];
+  }, [specializationsData]);
+
+  // Fetch insurance companies for insurance tab
+  const { data: insuranceCompaniesData, isLoading: insuranceLoading } = useQuery({
+    queryKey: ['activeInsuranceCompanies'],
+    queryFn: () => insuranceApi.getActiveInsuranceCompanies(),
+    enabled: activeTab === 'insurance',
+    retry: 1,
+  });
+
+  const insuranceCompanies = useMemo(() => {
+    if (!insuranceCompaniesData) return [];
+    if (Array.isArray(insuranceCompaniesData)) return insuranceCompaniesData;
+    return [];
+  }, [insuranceCompaniesData]);
 
   // Update user profile mutation
   const updateUserProfileMutation = useMutation({
@@ -135,7 +191,7 @@ export const ProfileSettingsScreen = () => {
       }
       return profileApi.updateDoctorProfile(data);
     },
-    onSuccess: () => {
+    onSuccess: async () => {
       queryClient.invalidateQueries({ queryKey: ['doctorProfile'] });
       queryClient.invalidateQueries({ queryKey: ['userProfile', user?._id] });
       Toast.show({
@@ -143,6 +199,62 @@ export const ProfileSettingsScreen = () => {
         text1: 'Success',
         text2: 'Doctor profile updated successfully!',
       });
+      
+      // Check if profile is still incomplete and navigate to next tab
+      try {
+        const updatedProfile = await queryClient.fetchQuery({
+          queryKey: ['doctorProfile'],
+          queryFn: () => profileApi.getDoctorProfile(),
+        });
+        const profileData = updatedProfile?.data || updatedProfile;
+        const isDoctorProfile = (profile: any): profile is profileApi.DoctorProfile => {
+          return profile && typeof profile === 'object' && ('profileCompleted' in profile || 'specialization' in profile);
+        };
+        const isProfileCompleted = isDoctorProfile(profileData) && profileData.profileCompleted === true;
+        
+        // Only navigate if profile is still incomplete
+        if (!isProfileCompleted) {
+          try {
+            const nextTab = getNextTab(activeTab as TabType);
+            if (nextTab) {
+              // Small delay to show success message before navigation
+              setTimeout(() => {
+                setActiveTab(nextTab as TabTypeLocal);
+              }, 500);
+            }
+          } catch (navError) {
+            console.error('Error getting next tab:', navError);
+            // Fallback: manually determine next tab
+            const tabOrder: TabTypeLocal[] = ['basic', 'specialties', 'experience', 'education', 'awards', 'clinics', 'insurance', 'business', 'social'];
+            const currentIndex = tabOrder.indexOf(activeTab);
+            if (currentIndex >= 0 && currentIndex < tabOrder.length - 1) {
+              setTimeout(() => {
+                setActiveTab(tabOrder[currentIndex + 1]);
+              }, 500);
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Error checking profile completion:', error);
+        // Still try to navigate even if check fails
+        try {
+          const nextTab = typeof getNextTab === 'function' ? getNextTab(activeTab as TabType) : getNextTabLocal(activeTab);
+          if (nextTab) {
+            setTimeout(() => {
+              setActiveTab(nextTab as TabTypeLocal);
+            }, 500);
+          }
+        } catch (navError) {
+          console.error('Error navigating to next tab:', navError);
+          // Fallback: use local helper
+          const nextTab = getNextTabLocal(activeTab);
+          if (nextTab) {
+            setTimeout(() => {
+              setActiveTab(nextTab);
+            }, 500);
+          }
+        }
+      }
     },
     onError: (error: any) => {
       const errorMessage = error?.response?.data?.message || error?.message || 'Failed to update doctor profile';
@@ -154,38 +266,36 @@ export const ProfileSettingsScreen = () => {
     },
   });
 
-  // Upload profile image mutation
-  const uploadImageMutation = useMutation({
-    mutationFn: async (file: any) => {
-      const formData = new FormData();
-      formData.append('file', {
-        uri: file.uri,
-        type: file.type || 'image/jpeg',
-        name: file.fileName || 'profile.jpg',
-      } as any);
-      return uploadApi.uploadProfileImage(formData);
-    },
-    onSuccess: (response) => {
-      const relativeUrl = response.data?.url || response.url;
+  // Upload profile image function (called on save, not on selection)
+  const uploadProfileImage = async (asset: ImagePicker.ImagePickerAsset): Promise<string> => {
+    let tempFileUri: string | null = null;
+    try {
+      // Get MIME type and filename
+      const getMimeAndName = (asset: ImagePicker.ImagePickerAsset) => {
+        const fileName = asset.fileName || `profile-${Date.now()}.jpg`;
+        const ext = fileName.split('.').pop()?.toLowerCase() || 'jpg';
+        const mime =
+          ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : 'image/jpeg';
+        const name = fileName.includes('.') ? fileName : `profile-${Date.now()}.${ext}`;
+        return { mime, name };
+      };
+
+      const { mime, name } = getMimeAndName(asset);
+      tempFileUri = await copyImageToCacheUri(asset.uri, 0, mime);
+      const response = await uploadApi.uploadProfileImage({ uri: tempFileUri, mime, name });
+      
+      const responseData = response?.data || response;
+      const relativeUrl = responseData?.url || responseData?.data?.url || response?.url;
       const baseURL = API_BASE_URL?.replace('/api', '') || 'http://localhost:5000';
-      const imageUrl = relativeUrl.startsWith('http') ? relativeUrl : `${baseURL}${relativeUrl}`;
-      setUserProfileData((prev) => ({ ...prev, profileImage: imageUrl }));
-      setProfileImagePreview(relativeUrl);
-      Toast.show({
-        type: 'success',
-        text1: 'Success',
-        text2: 'Image uploaded successfully!',
-      });
-    },
-    onError: (error: any) => {
-      const errorMessage = error?.response?.data?.message || error?.message || 'Failed to upload image';
-      Toast.show({
-        type: 'error',
-        text1: 'Error',
-        text2: errorMessage,
-      });
-    },
-  });
+      const imageUrl = relativeUrl?.startsWith('http') ? relativeUrl : `${baseURL}${relativeUrl}`;
+      
+      return imageUrl;
+    } finally {
+      if (tempFileUri) {
+        await deleteCacheFiles([tempFileUri]);
+      }
+    }
+  };
 
   // Initialize form data when profiles are loaded
   useEffect(() => {
@@ -203,10 +313,19 @@ export const ProfileSettingsScreen = () => {
   useEffect(() => {
     if (doctorProfile?.data) {
       const profile = doctorProfile.data as profileApi.DoctorProfile;
+      const specializationId = typeof profile.specialization === 'object' && profile.specialization?._id
+        ? profile.specialization._id
+        : (typeof profile.specialization === 'string' ? profile.specialization : '');
       setDoctorProfileData({
         title: profile.title || '',
         biography: profile.biography || '',
+        specializationId: specializationId,
+        consultationFees: {
+          clinic: profile.consultationFees?.clinic || '',
+          online: profile.consultationFees?.online || '',
+        },
         memberships: profile.memberships || [],
+        services: profile.services || [],
         experience: profile.experience || [],
         education: profile.education || [],
         awards: profile.awards || [],
@@ -216,7 +335,7 @@ export const ProfileSettingsScreen = () => {
       // Initialize business hours from first clinic
       if (profile.clinics && profile.clinics.length > 0 && profile.clinics[0].timings) {
         const hours: Record<string, { startTime: string; endTime: string }> = {};
-        profile.clinics[0].timings.forEach((timing) => {
+        profile.clinics[0].timings.forEach((timing: any) => {
           if (timing.dayOfWeek) {
             hours[timing.dayOfWeek] = {
               startTime: timing.startTime || '',
@@ -245,10 +364,26 @@ export const ProfileSettingsScreen = () => {
           website: '',
         });
       }
+
+      // Initialize insurance settings
+      setConvenzionato(profile.convenzionato === true);
+      if (profile.insuranceCompanies && Array.isArray(profile.insuranceCompanies)) {
+        const ids = profile.insuranceCompanies
+          .map((ins: any) => {
+            if (typeof ins === 'object' && ins !== null) {
+              return ins._id || ins.id;
+            }
+            return ins;
+          })
+          .filter(Boolean);
+        setSelectedInsuranceIds(ids);
+      } else {
+        setSelectedInsuranceIds([]);
+      }
     }
   }, [doctorProfile]);
 
-  // Handle image selection
+  // Handle image selection (just store locally, don't upload)
   const handleImagePicker = async () => {
     const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permissionResult.granted) {
@@ -273,11 +408,14 @@ export const ProfileSettingsScreen = () => {
         });
         return;
       }
-      uploadImageMutation.mutate(asset);
+      // Store asset locally and show preview (don't upload yet)
+      setSelectedImageAsset(asset);
+      setProfileImagePreview(asset.uri);
     }
   };
 
   const handleRemoveImage = () => {
+    setSelectedImageAsset(null);
     setProfileImagePreview('');
     setUserProfileData((prev) => ({ ...prev, profileImage: '' }));
   };
@@ -305,6 +443,18 @@ export const ProfileSettingsScreen = () => {
     setDoctorProfileData((prev) => ({
       ...prev,
       memberships: prev.memberships.filter((_, i) => i !== index),
+    }));
+  };
+
+  // Handle consultation fee changes
+  const handleConsultationFeeChange = (type: 'clinic' | 'online', value: string) => {
+    // Keep as string for TextInput, will convert to number on save
+    setDoctorProfileData((prev) => ({
+      ...prev,
+      consultationFees: {
+        ...prev.consultationFees,
+        [type]: value,
+      },
     }));
   };
 
@@ -510,7 +660,7 @@ export const ProfileSettingsScreen = () => {
   };
 
   // Handle submit based on active tab
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (activeTab === 'basic') {
       // Validate required fields
       if (!userProfileData.fullName || !userProfileData.phone) {
@@ -522,19 +672,39 @@ export const ProfileSettingsScreen = () => {
         return;
       }
 
+      // Upload image first if a new one is selected
+      let imageUrl = userProfileData.profileImage;
+      if (selectedImageAsset) {
+        try {
+          imageUrl = await uploadProfileImage(selectedImageAsset);
+          setSelectedImageAsset(null); // Clear selected asset after upload
+          setUserProfileData((prev) => ({ ...prev, profileImage: imageUrl }));
+        } catch (error: any) {
+          const errorMessage = error?.response?.data?.message || error?.message || 'Failed to upload image';
+          Toast.show({
+            type: 'error',
+            text1: 'Upload Error',
+            text2: errorMessage,
+          });
+          return; // Don't proceed with profile update if image upload fails
+        }
+      }
+
       // Prepare user profile data
       const userUpdateData: any = {};
       if (userProfileData.fullName) userUpdateData.fullName = userProfileData.fullName;
       if (userProfileData.phone) userUpdateData.phone = userProfileData.phone;
-      if (userProfileData.profileImage && userProfileData.profileImage.trim()) {
+      if (imageUrl && imageUrl.trim()) {
         if (
-          userProfileData.profileImage.startsWith('http://') ||
-          userProfileData.profileImage.startsWith('https://')
+          imageUrl.startsWith('http://') ||
+          imageUrl.startsWith('https://')
         ) {
-          userUpdateData.profileImage = userProfileData.profileImage;
-        } else if (userProfileData.profileImage.startsWith('/uploads')) {
+          userUpdateData.profileImage = imageUrl;
+        } else if (imageUrl.startsWith('/uploads')) {
           const baseURL = API_BASE_URL?.replace('/api', '') || 'http://localhost:5000';
-          userUpdateData.profileImage = `${baseURL}${userProfileData.profileImage}`;
+          userUpdateData.profileImage = `${baseURL}${imageUrl}`;
+        } else {
+          userUpdateData.profileImage = imageUrl;
         }
       }
 
@@ -544,6 +714,15 @@ export const ProfileSettingsScreen = () => {
       if (doctorProfileData.biography) doctorUpdateData.biography = doctorProfileData.biography;
       if (doctorProfileData.memberships && doctorProfileData.memberships.length > 0) {
         doctorUpdateData.memberships = doctorProfileData.memberships.filter((m) => m.name && m.name.trim());
+      }
+      // Include consultationFees if either value is provided
+      const clinicFee = doctorProfileData.consultationFees.clinic;
+      const onlineFee = doctorProfileData.consultationFees.online;
+      if (clinicFee || onlineFee) {
+        doctorUpdateData.consultationFees = {
+          clinic: clinicFee && clinicFee !== '' ? parseFloat(clinicFee.toString()) : null,
+          online: onlineFee && onlineFee !== '' ? parseFloat(onlineFee.toString()) : null,
+        };
       }
 
       // Update user profile
@@ -555,6 +734,41 @@ export const ProfileSettingsScreen = () => {
       if (Object.keys(doctorUpdateData).length > 0) {
         updateDoctorProfileMutation.mutate(doctorUpdateData);
       }
+    } else if (activeTab === 'specialties') {
+      // Validate specialization
+      if (!doctorProfileData.specializationId) {
+        Toast.show({
+          type: 'error',
+          text1: 'Error',
+          text2: 'Please select a specialization',
+        });
+        return;
+      }
+
+      // Validate services
+      const validServices = doctorProfileData.services
+        .filter((s) => s.name && s.name.trim() && s.price > 0)
+        .map((s) => ({
+          name: s.name.trim(),
+          price: parseFloat(String(s.price)) || 0,
+        }));
+
+      if (validServices.length === 0) {
+        Toast.show({
+          type: 'error',
+          text1: 'Error',
+          text2: 'Please add at least one service',
+        });
+        return;
+      }
+
+      // Prepare update data
+      const updateData = {
+        specializationId: doctorProfileData.specializationId,
+        services: validServices,
+      };
+
+      updateDoctorProfileMutation.mutate(updateData);
     } else if (activeTab === 'experience') {
       const validExperiences = doctorProfileData.experience
         .filter((exp) => exp.hospital && exp.hospital.trim())
@@ -732,6 +946,22 @@ export const ProfileSettingsScreen = () => {
       }
 
       updateDoctorProfileMutation.mutate({ socialLinks: socialLinksData });
+    } else if (activeTab === 'insurance') {
+      // If convenzionato is enabled but no insurance selected, show warning
+      if (convenzionato && selectedInsuranceIds.length === 0) {
+        Toast.show({
+          type: 'error',
+          text1: 'Error',
+          text2: 'Please select at least one insurance company if you accept insurance',
+        });
+        return;
+      }
+
+      const insuranceData: any = {
+        convenzionato: convenzionato === true,
+        insuranceCompanies: convenzionato ? selectedInsuranceIds : [],
+      };
+      updateDoctorProfileMutation.mutate(insuranceData);
     }
   };
 
@@ -804,13 +1034,9 @@ export const ProfileSettingsScreen = () => {
             <TouchableOpacity
               style={styles.photoButton}
               onPress={handleImagePicker}
-              disabled={uploadImageMutation.isPending}
+              disabled={updateUserProfileMutation.isPending || updateDoctorProfileMutation.isPending}
             >
-              {uploadImageMutation.isPending ? (
-                <ActivityIndicator size="small" color={colors.textWhite} />
-              ) : (
-                <Text style={styles.photoButtonText}>Upload New</Text>
-              )}
+              <Text style={styles.photoButtonText}>Select Image</Text>
             </TouchableOpacity>
             {displayImageUrl && (
               <TouchableOpacity style={styles.photoButtonRemove} onPress={handleRemoveImage}>
@@ -880,6 +1106,37 @@ export const ProfileSettingsScreen = () => {
         <Text style={styles.hintText}>This information will be displayed on your profile page</Text>
       </View>
 
+      {/* Consultation Fees */}
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Consultation Fees</Text>
+        <View style={styles.feesRow}>
+          <View style={styles.feeInput}>
+            <Input
+              label="In-Person Visit Fee (€)"
+              value={typeof doctorProfileData.consultationFees.clinic === 'number' 
+                ? doctorProfileData.consultationFees.clinic.toString() 
+                : (doctorProfileData.consultationFees.clinic || '')}
+              onChangeText={(text) => handleConsultationFeeChange('clinic', text)}
+              placeholder="0.00"
+              keyboardType="decimal-pad"
+            />
+            <Text style={styles.hintText}>Fee for physical clinic visits</Text>
+          </View>
+          <View style={styles.feeInput}>
+            <Input
+              label="Online Consultation Fee (€)"
+              value={typeof doctorProfileData.consultationFees.online === 'number' 
+                ? doctorProfileData.consultationFees.online.toString() 
+                : (doctorProfileData.consultationFees.online || '')}
+              onChangeText={(text) => handleConsultationFeeChange('online', text)}
+              placeholder="0.00"
+              keyboardType="decimal-pad"
+            />
+            <Text style={styles.hintText}>Fee for video/online consultations</Text>
+          </View>
+        </View>
+      </View>
+
       {/* Memberships */}
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Memberships</Text>
@@ -909,6 +1166,128 @@ export const ProfileSettingsScreen = () => {
         <TouchableOpacity style={styles.addButton} onPress={handleAddMembership}>
           <Ionicons name="add-circle-outline" size={20} color={colors.primary} />
           <Text style={styles.addButtonText}>Add New</Text>
+        </TouchableOpacity>
+      </View>
+    </ScrollView>
+  );
+
+  const handleSpecializationChange = (specializationId: string) => {
+    setDoctorProfileData((prev) => ({ ...prev, specializationId }));
+  };
+
+  const handleServiceChange = (index: number, field: 'name' | 'price', value: string | number) => {
+    setDoctorProfileData((prev) => {
+      const newServices = [...prev.services];
+      if (!newServices[index]) {
+        newServices[index] = { name: '', price: 0 };
+      }
+      newServices[index] = {
+        ...newServices[index],
+        [field]: field === 'price' ? (typeof value === 'string' ? parseFloat(value) || 0 : value) : value,
+      };
+      return { ...prev, services: newServices };
+    });
+  };
+
+  const handleAddService = () => {
+    setDoctorProfileData((prev) => ({
+      ...prev,
+      services: [...prev.services, { name: '', price: 0 }],
+    }));
+  };
+
+  const handleRemoveService = (index: number) => {
+    Alert.alert('Remove Service', 'Are you sure you want to remove this service?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Remove',
+        style: 'destructive',
+        onPress: () => {
+          setDoctorProfileData((prev) => ({
+            ...prev,
+            services: prev.services.filter((_, i) => i !== index),
+          }));
+        },
+      },
+    ]);
+  };
+
+  const renderSpecialtiesTab = () => (
+    <ScrollView showsVerticalScrollIndicator={false}>
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Specialization</Text>
+        <Text style={styles.sectionSubtitle}>Select your medical specialization</Text>
+        
+        {specializationsLoading ? (
+          <ActivityIndicator size="small" color={colors.primary} style={{ marginVertical: 20 }} />
+        ) : (
+          <View style={styles.selectContainer}>
+            {specializations.map((spec: specializationApi.Specialization) => (
+              <TouchableOpacity
+                key={spec._id}
+                style={[
+                  styles.selectOption,
+                  doctorProfileData.specializationId === spec._id && styles.selectOptionActive,
+                ]}
+                onPress={() => handleSpecializationChange(spec._id)}
+              >
+                <View style={styles.selectOptionContent}>
+                  <Ionicons
+                    name={doctorProfileData.specializationId === spec._id ? 'radio-button-on' : 'radio-button-off'}
+                    size={24}
+                    color={doctorProfileData.specializationId === spec._id ? colors.primary : colors.textSecondary}
+                  />
+                  <View style={styles.selectOptionText}>
+                    <Text style={styles.selectOptionLabel}>{spec.name}</Text>
+                    {spec.description && (
+                      <Text style={styles.selectOptionDescription}>{spec.description}</Text>
+                    )}
+                  </View>
+                </View>
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
+      </View>
+
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Services</Text>
+        <Text style={styles.sectionSubtitle}>Add services you offer with their prices</Text>
+        
+        {doctorProfileData.services.length > 0 ? (
+          <View style={styles.listContainer}>
+            {doctorProfileData.services.map((service, index) => (
+              <View key={index} style={styles.itemCard}>
+                <Input
+                  label="Service Name *"
+                  value={service.name}
+                  onChangeText={(text) => handleServiceChange(index, 'name', text)}
+                  placeholder="Enter service name"
+                />
+                <Input
+                  label="Price (€) *"
+                  value={String(service.price || '')}
+                  onChangeText={(text) => handleServiceChange(index, 'price', text)}
+                  placeholder="0.00"
+                  keyboardType="numeric"
+                />
+                <TouchableOpacity
+                  style={styles.removeButton}
+                  onPress={() => handleRemoveService(index)}
+                >
+                  <Ionicons name="trash-outline" size={20} color={colors.error} />
+                  <Text style={styles.removeItemButtonText}>Remove</Text>
+                </TouchableOpacity>
+              </View>
+            ))}
+          </View>
+        ) : (
+          <Text style={styles.emptyText}>No services added yet</Text>
+        )}
+        
+        <TouchableOpacity style={styles.addButton} onPress={handleAddService}>
+          <Ionicons name="add-circle-outline" size={20} color={colors.primary} />
+          <Text style={styles.addButtonText}>Add Service</Text>
         </TouchableOpacity>
       </View>
     </ScrollView>
@@ -1248,10 +1627,131 @@ export const ProfileSettingsScreen = () => {
     );
   };
 
+  // Handle insurance toggle
+  const handleConvenzionatoToggle = (value: boolean) => {
+    setConvenzionato(value);
+    if (!value) {
+      setSelectedInsuranceIds([]);
+    }
+  };
+
+  // Handle insurance company selection
+  const handleInsuranceToggle = (insuranceId: string) => {
+    setSelectedInsuranceIds((prev) => {
+      if (prev.includes(insuranceId)) {
+        return prev.filter((id) => id !== insuranceId);
+      } else {
+        return [...prev, insuranceId];
+      }
+    });
+  };
+
+  const renderInsuranceTab = () => {
+    return (
+      <ScrollView showsVerticalScrollIndicator={false}>
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Insurance Settings</Text>
+          <Text style={styles.sectionSubtitle}>
+            Enable if you are partnered with insurance companies and accept insurance payments
+          </Text>
+
+          {/* Convenzionato Toggle */}
+          <View style={styles.toggleContainer}>
+            <View style={styles.toggleRow}>
+              <Text style={styles.toggleLabel}>Do you accept insurance? *</Text>
+              <TouchableOpacity
+                style={[styles.toggleSwitch, convenzionato && styles.toggleSwitchActive]}
+                onPress={() => handleConvenzionatoToggle(!convenzionato)}
+                disabled={updateDoctorProfileMutation.isPending}
+              >
+                <View style={[styles.toggleThumb, convenzionato && styles.toggleThumbActive]} />
+              </TouchableOpacity>
+            </View>
+            <Text style={styles.toggleHint}>
+              {convenzionato ? 'Yes, I accept insurance' : 'No, I do not accept insurance'}
+            </Text>
+          </View>
+
+          {/* Insurance Companies Selection */}
+          {convenzionato && (
+            <View style={styles.insuranceSection}>
+              <Text style={styles.sectionSubtitle}>Select Insurance Companies *</Text>
+              {insuranceLoading ? (
+                <View style={styles.loadingContainer}>
+                  <ActivityIndicator size="large" color={colors.primary} />
+                  <Text style={styles.loadingText}>Loading insurance companies...</Text>
+                </View>
+              ) : insuranceCompanies.length === 0 ? (
+                <View style={styles.warningCard}>
+                  <Ionicons name="warning-outline" size={24} color={colors.warning} />
+                  <Text style={styles.warningText}>
+                    No active insurance companies available. Please contact admin to add insurance companies.
+                  </Text>
+                </View>
+              ) : (
+                <View style={styles.insuranceGrid}>
+                  {insuranceCompanies.map((insurance) => {
+                    const insuranceId = insurance._id || insurance.id || '';
+                    const isSelected = selectedInsuranceIds.includes(insuranceId);
+                    const logoUrl = insurance.logo ? normalizeImageUrl(insurance.logo) : '';
+
+                    return (
+                      <TouchableOpacity
+                        key={insuranceId}
+                        style={[
+                          styles.insuranceCard,
+                          isSelected && styles.insuranceCardSelected,
+                        ]}
+                        onPress={() => handleInsuranceToggle(insuranceId)}
+                        activeOpacity={0.7}
+                      >
+                        <View style={styles.insuranceCardContent}>
+                          {logoUrl ? (
+                            <Image
+                              source={{ uri: logoUrl }}
+                              style={styles.insuranceLogo}
+                              resizeMode="contain"
+                            />
+                          ) : (
+                            <View style={styles.insurancePlaceholder}>
+                              <Ionicons name="shield" size={32} color={colors.textSecondary} />
+                            </View>
+                          )}
+                          <Text style={styles.insuranceName} numberOfLines={2}>
+                            {insurance.name}
+                          </Text>
+                          <View style={styles.insuranceCheck}>
+                            {isSelected ? (
+                              <Ionicons name="checkmark-circle" size={24} color={colors.primary} />
+                            ) : (
+                              <Ionicons name="ellipse-outline" size={24} color={colors.textSecondary} />
+                            )}
+                          </View>
+                        </View>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              )}
+              {convenzionato && selectedInsuranceIds.length === 0 && insuranceCompanies.length > 0 && (
+                <View style={styles.infoCard}>
+                  <Ionicons name="information-circle-outline" size={20} color={colors.info} />
+                  <Text style={styles.infoText}>Please select at least one insurance company</Text>
+                </View>
+              )}
+            </View>
+          )}
+        </View>
+      </ScrollView>
+    );
+  };
+
   const renderTabContent = () => {
     switch (activeTab) {
       case 'basic':
         return renderBasicTab();
+      case 'specialties':
+        return renderSpecialtiesTab();
       case 'experience':
         return renderExperienceTab();
       case 'education':
@@ -1260,6 +1760,8 @@ export const ProfileSettingsScreen = () => {
         return renderAwardsTab();
       case 'clinics':
         return renderClinicsTab();
+      case 'insurance':
+        return renderInsuranceTab();
       case 'business':
         return renderBusinessTab();
       case 'social':
@@ -1270,13 +1772,15 @@ export const ProfileSettingsScreen = () => {
   };
 
   const tabs = [
-    { key: 'basic' as TabType, label: 'Basic', icon: 'person' },
-    { key: 'experience' as TabType, label: 'Experience', icon: 'briefcase' },
-    { key: 'education' as TabType, label: 'Education', icon: 'school' },
-    { key: 'awards' as TabType, label: 'Awards', icon: 'trophy' },
-    { key: 'clinics' as TabType, label: 'Clinics', icon: 'business' },
-    { key: 'business' as TabType, label: 'Business Hours', icon: 'time' },
-    { key: 'social' as TabType, label: 'Social Links', icon: 'share-social' },
+    { key: 'basic' as TabTypeLocal, label: 'Basic', icon: 'person' },
+    { key: 'specialties' as TabTypeLocal, label: 'Specialties', icon: 'medical' },
+    { key: 'experience' as TabTypeLocal, label: 'Experience', icon: 'briefcase' },
+    { key: 'education' as TabTypeLocal, label: 'Education', icon: 'school' },
+    { key: 'awards' as TabTypeLocal, label: 'Awards', icon: 'trophy' },
+    { key: 'clinics' as TabTypeLocal, label: 'Clinics', icon: 'business' },
+    { key: 'insurance' as TabTypeLocal, label: 'Insurance', icon: 'shield' },
+    { key: 'business' as TabTypeLocal, label: 'Business Hours', icon: 'time' },
+    { key: 'social' as TabTypeLocal, label: 'Social Links', icon: 'share-social' },
   ];
 
   return (
@@ -1452,6 +1956,13 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     marginTop: 4,
   },
+  feesRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  feeInput: {
+    flex: 1,
+  },
   membershipsList: {
     marginBottom: 12,
   },
@@ -1602,5 +2113,165 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
     flexDirection: 'row',
     alignItems: 'center',
+  },
+  selectContainer: {
+    marginTop: 12,
+  },
+  selectScroll: {
+    maxHeight: 300,
+  },
+  selectOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 16,
+    marginBottom: 8,
+    backgroundColor: colors.background,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  selectOptionActive: {
+    borderColor: colors.primary,
+    backgroundColor: colors.primaryLight + '20',
+  },
+  selectOptionContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    gap: 12,
+  },
+  selectOptionText: {
+    flex: 1,
+  },
+  selectOptionLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.text,
+    marginBottom: 4,
+  },
+  selectOptionDescription: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    lineHeight: 16,
+  },
+  selectOptionTextActive: {
+    color: colors.primary,
+  },
+  selectLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.text,
+    marginBottom: 12,
+  },
+  toggleContainer: {
+    marginBottom: 24,
+  },
+  toggleRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  toggleLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.text,
+    flex: 1,
+  },
+  toggleSwitch: {
+    width: 50,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: colors.border,
+    justifyContent: 'center',
+    paddingHorizontal: 2,
+  },
+  toggleSwitchActive: {
+    backgroundColor: colors.primary,
+  },
+  toggleThumb: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: colors.background,
+    alignSelf: 'flex-start',
+  },
+  toggleThumbActive: {
+    alignSelf: 'flex-end',
+  },
+  toggleHint: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    marginTop: 4,
+  },
+  insuranceSection: {
+    marginTop: 24,
+  },
+  insuranceGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+    marginTop: 16,
+  },
+  insuranceCard: {
+    width: '48%',
+    backgroundColor: colors.backgroundLight,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: colors.border,
+    padding: 16,
+    alignItems: 'center',
+    minHeight: 140,
+  },
+  insuranceCardSelected: {
+    borderColor: colors.primary,
+    backgroundColor: colors.primaryLight + '20',
+  },
+  insuranceCardContent: {
+    alignItems: 'center',
+    width: '100%',
+  },
+  insuranceLogo: {
+    width: 60,
+    height: 60,
+    marginBottom: 8,
+  },
+  insurancePlaceholder: {
+    width: 60,
+    height: 60,
+    borderRadius: 8,
+    backgroundColor: colors.background,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 8,
+  },
+  insuranceName: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.text,
+    textAlign: 'center',
+    marginBottom: 8,
+    minHeight: 36,
+  },
+  insuranceCheck: {
+    marginTop: 4,
+  },
+  warningCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.warningLight || colors.backgroundLight,
+    padding: 16,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: colors.warning,
+    gap: 12,
+    marginTop: 16,
+  },
+  warningText: {
+    flex: 1,
+    fontSize: 14,
+    color: colors.text,
+    lineHeight: 20,
   },
 });

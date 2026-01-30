@@ -74,7 +74,7 @@ export interface UpdateProductData extends Partial<CreateProductData> {}
  * List products with filtering
  */
 export const listProducts = async (params: ProductFilters = {}): Promise<ProductListResponse> => {
-  const response = await api.get('/products', { params });
+  const response: ProductListResponse = await api.get('/products', { params });
   return response;
 };
 
@@ -82,7 +82,7 @@ export const listProducts = async (params: ProductFilters = {}): Promise<Product
  * Get product by ID
  */
 export const getProductById = async (id: string): Promise<ProductResponse> => {
-  const response = await api.get(`/products/${id}`);
+  const response: ProductResponse = await api.get(`/products/${id}`);
   return response;
 };
 
@@ -90,7 +90,7 @@ export const getProductById = async (id: string): Promise<ProductResponse> => {
  * Create product (automatically linked to doctor's pharmacy)
  */
 export const createProduct = async (data: CreateProductData): Promise<ProductResponse> => {
-  const response = await api.post('/products', data);
+  const response: ProductResponse = await api.post('/products', data);
   return response;
 };
 
@@ -98,7 +98,7 @@ export const createProduct = async (data: CreateProductData): Promise<ProductRes
  * Update product
  */
 export const updateProduct = async (id: string, data: UpdateProductData): Promise<ProductResponse> => {
-  const response = await api.put(`/products/${id}`, data);
+  const response: ProductResponse = await api.put(`/products/${id}`, data);
   return response;
 };
 
@@ -106,7 +106,7 @@ export const updateProduct = async (id: string, data: UpdateProductData): Promis
  * Delete product
  */
 export const deleteProduct = async (id: string): Promise<{ success: boolean; message: string }> => {
-  const response = await api.delete(`/products/${id}`);
+  const response: { success: boolean; message: string } = await api.delete(`/products/${id}`);
   return response;
 };
 

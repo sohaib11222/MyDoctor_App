@@ -13,7 +13,7 @@ import {
   Alert,
   Platform,
 } from 'react-native';
-import MapView, { Marker, Region } from 'react-native-maps';
+import { WebView } from 'react-native-webview';
 import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import * as Location from 'expo-location';
@@ -29,8 +29,6 @@ type MapViewScreenNavigationProp = StackNavigationProp<HomeStackParamList, 'MapV
 
 const { width, height } = Dimensions.get('window');
 
-// OpenStreetMap tile server URL
-const OPENSTREETMAP_TILE_URL = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
 
 interface ClinicMarker extends mappingApi.NearbyClinic {
   id: string;
@@ -38,14 +36,14 @@ interface ClinicMarker extends mappingApi.NearbyClinic {
 
 const MapViewScreen = () => {
   const navigation = useNavigation<MapViewScreenNavigationProp>();
-  const mapRef = useRef<MapView>(null);
   
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [selectedClinic, setSelectedClinic] = useState<ClinicMarker | null>(null);
   const [showClinicModal, setShowClinicModal] = useState(false);
   const [locationPermission, setLocationPermission] = useState<boolean>(false);
   const [radius, setRadius] = useState(10); // Default 10km radius
-  const [mapError, setMapError] = useState<string | null>(null);
+  const [mapLoaded, setMapLoaded] = useState(false);
+  const webViewRef = useRef<WebView>(null);
 
   // Get user's current location
   useEffect(() => {
@@ -79,16 +77,6 @@ const MapViewScreen = () => {
         };
 
         setUserLocation(coords);
-
-        // Center map on user location
-        if (mapRef.current) {
-          mapRef.current.animateToRegion({
-            latitude: coords.lat,
-            longitude: coords.lng,
-            latitudeDelta: 0.1,
-            longitudeDelta: 0.1,
-          }, 1000);
-        }
       } catch (error) {
         console.error('Error getting location:', error);
         Toast.show({
@@ -136,14 +124,13 @@ const MapViewScreen = () => {
     setSelectedClinic(clinic);
     setShowClinicModal(true);
     
-    // Animate map to marker
-    if (mapRef.current) {
-      mapRef.current.animateToRegion({
-        latitude: clinic.coordinates.lat,
-        longitude: clinic.coordinates.lng,
-        latitudeDelta: 0.05,
-        longitudeDelta: 0.05,
-      }, 500);
+    // Center map on marker in WebView
+    if (webViewRef.current && mapLoaded) {
+      webViewRef.current.postMessage(JSON.stringify({
+        type: 'centerOnLocation',
+        lat: clinic.coordinates.lat,
+        lng: clinic.coordinates.lng
+      }));
     }
   };
 
@@ -171,15 +158,6 @@ const MapViewScreen = () => {
       };
       setUserLocation(coords);
       
-      if (mapRef.current) {
-        mapRef.current.animateToRegion({
-          latitude: coords.lat,
-          longitude: coords.lng,
-          latitudeDelta: 0.1,
-          longitudeDelta: 0.1,
-        }, 1000);
-      }
-      
       Toast.show({
         type: 'success',
         text1: 'Location Updated',
@@ -194,89 +172,289 @@ const MapViewScreen = () => {
     }
   };
 
-  // Initial region for map
-  const initialRegion: Region = userLocation
-    ? {
-        latitude: userLocation.lat,
-        longitude: userLocation.lng,
-        latitudeDelta: 0.1,
-        longitudeDelta: 0.1,
+  // Generate HTML for Leaflet map (same as web app)
+  const mapHTML = useMemo(() => {
+    const center = userLocation || { lat: 40.7128, lng: -74.0060 };
+    const centerLat = center.lat && !isNaN(center.lat) ? center.lat : 40.7128;
+    const centerLng = center.lng && !isNaN(center.lng) ? center.lng : -74.0060;
+    const zoom = userLocation ? 12 : 10;
+    
+    // Prepare clinics data for JavaScript
+    const clinicsData = clinicMarkers.map(clinic => ({
+      id: clinic.id,
+      clinicName: clinic.clinicName,
+      doctorName: clinic.doctorName,
+      address: clinic.address,
+      city: clinic.city,
+      phone: clinic.phone,
+      distance: clinic.distance,
+      lat: clinic.coordinates.lat,
+      lng: clinic.coordinates.lng,
+      doctorId: clinic.doctorId,
+    }));
+
+    return `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body, html { width: 100%; height: 100%; overflow: hidden; }
+    #map { width: 100%; height: 100%; }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script>
+    const userLocation = ${userLocation ? JSON.stringify({ lat: centerLat, lng: centerLng }) : 'null'};
+    const clinics = ${JSON.stringify(clinicsData)};
+    let map;
+    let markers = [];
+    let userMarker = null;
+
+    function initMap() {
+      const center = userLocation || { lat: 40.7128, lng: -74.0060 };
+      map = L.map('map').setView([center.lat, center.lng], ${zoom});
+
+      // Add OpenStreetMap tiles (no API key required)
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© OpenStreetMap contributors',
+        maxZoom: 19
+      }).addTo(map);
+
+      // Add user location marker
+      if (userLocation) {
+        const userIcon = L.divIcon({
+          className: 'custom-user-marker',
+          html: '<div style="background-color: #4285F4; width: 20px; height: 20px; border-radius: 50%; border: 3px solid white; box-shadow: 0 2px 4px rgba(0,0,0,0.3);"></div>',
+          iconSize: [20, 20],
+          iconAnchor: [10, 10]
+        });
+        userMarker = L.marker([userLocation.lat, userLocation.lng], { icon: userIcon })
+          .addTo(map)
+          .bindPopup('Your Location');
       }
-    : {
-        latitude: 40.7128,
-        longitude: -74.0060,
-        latitudeDelta: 0.1,
-        longitudeDelta: 0.1,
-      };
+
+      // Add clinic markers
+      clinics.forEach(clinic => {
+        if (!clinic.lat || !clinic.lng || isNaN(clinic.lat) || isNaN(clinic.lng)) return;
+
+        const clinicIcon = L.divIcon({
+          className: 'custom-clinic-marker',
+          html: '<div style="background-color: #0d6efd; width: 40px; height: 40px; border-radius: 50%; border: 3px solid white; box-shadow: 0 2px 4px rgba(0,0,0,0.3); display: flex; align-items: center; justify-content: center; color: white; font-size: 20px;">🏥</div>',
+          iconSize: [40, 40],
+          iconAnchor: [20, 40]
+        });
+
+        const marker = L.marker([clinic.lat, clinic.lng], { icon: clinicIcon })
+          .addTo(map)
+          .bindPopup(\`
+            <div style="min-width: 200px;">
+              <h6 style="margin: 0 0 5px 0; font-weight: 600;">\${clinic.clinicName || 'Clinic'}</h6>
+              <p style="margin: 0; font-size: 13px; color: #666;">\${clinic.doctorName || ''}</p>
+              <p style="margin: 5px 0; font-size: 13px; color: #666;">\${clinic.address || ''}, \${clinic.city || ''}</p>
+              \${clinic.distance ? '<p style="margin: 5px 0; font-size: 12px; color: #0d6efd; font-weight: 600;">' + clinic.distance.toFixed(1) + ' km away</p>' : ''}
+            </div>
+          \`);
+
+        marker.on('click', () => {
+          window.ReactNativeWebView.postMessage(JSON.stringify({
+            type: 'markerClick',
+            clinicId: clinic.id
+          }));
+        });
+
+        markers.push(marker);
+      });
+
+      // Fit bounds to show all markers
+      if (markers.length > 0) {
+        try {
+          if (markers.length === 1) {
+            const position = markers[0].getLatLng();
+            map.setView([position.lat, position.lng], 13);
+          } else {
+            const group = new L.FeatureGroup(markers);
+            const bounds = group.getBounds();
+            if (bounds) {
+              map.fitBounds(bounds.pad(0.1));
+            }
+          }
+        } catch (e) {
+          console.error('Error fitting bounds:', e);
+        }
+      }
+
+      // Notify React Native that map is ready
+      window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'mapReady' }));
+    }
+
+    // Initialize map when Leaflet loads
+    if (window.L) {
+      initMap();
+    } else {
+      window.addEventListener('load', initMap);
+    }
+
+    // Handle messages from React Native
+    window.addEventListener('message', (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        if (data.type === 'updateLocation' && map) {
+          const { lat, lng } = data;
+          if (userMarker) {
+            userMarker.setLatLng([lat, lng]);
+          } else if (userLocation) {
+            const userIcon = L.divIcon({
+              className: 'custom-user-marker',
+              html: '<div style="background-color: #4285F4; width: 20px; height: 20px; border-radius: 50%; border: 3px solid white; box-shadow: 0 2px 4px rgba(0,0,0,0.3);"></div>',
+              iconSize: [20, 20],
+              iconAnchor: [10, 10]
+            });
+            userMarker = L.marker([lat, lng], { icon: userIcon })
+              .addTo(map)
+              .bindPopup('Your Location');
+          }
+          map.setView([lat, lng], 12);
+        } else if (data.type === 'centerOnLocation' && map) {
+          const { lat, lng } = data;
+          map.setView([lat, lng], 14);
+        } else if (data.type === 'updateClinics' && map) {
+          // Clear existing markers
+          markers.forEach(m => map.removeLayer(m));
+          markers = [];
+
+          // Add new clinic markers
+          data.clinics.forEach(clinic => {
+            if (!clinic.lat || !clinic.lng || isNaN(clinic.lat) || isNaN(clinic.lng)) return;
+
+            const clinicIcon = L.divIcon({
+              className: 'custom-clinic-marker',
+              html: '<div style="background-color: #0d6efd; width: 40px; height: 40px; border-radius: 50%; border: 3px solid white; box-shadow: 0 2px 4px rgba(0,0,0,0.3); display: flex; align-items: center; justify-content: center; color: white; font-size: 20px;">🏥</div>',
+              iconSize: [40, 40],
+              iconAnchor: [20, 40]
+            });
+
+            const marker = L.marker([clinic.lat, clinic.lng], { icon: clinicIcon })
+              .addTo(map)
+              .bindPopup(\`
+                <div style="min-width: 200px;">
+                  <h6 style="margin: 0 0 5px 0; font-weight: 600;">\${clinic.clinicName || 'Clinic'}</h6>
+                  <p style="margin: 0; font-size: 13px; color: #666;">\${clinic.doctorName || ''}</p>
+                  <p style="margin: 5px 0; font-size: 13px; color: #666;">\${clinic.address || ''}, \${clinic.city || ''}</p>
+                  \${clinic.distance ? '<p style="margin: 5px 0; font-size: 12px; color: #0d6efd; font-weight: 600;">' + clinic.distance.toFixed(1) + ' km away</p>' : ''}
+                </div>
+              \`);
+
+            marker.on('click', () => {
+              window.ReactNativeWebView.postMessage(JSON.stringify({
+                type: 'markerClick',
+                clinicId: clinic.id
+              }));
+            });
+
+            markers.push(marker);
+          });
+
+          // Fit bounds
+          if (markers.length > 0) {
+            try {
+              if (markers.length === 1) {
+                const position = markers[0].getLatLng();
+                map.setView([position.lat, position.lng], 13);
+              } else {
+                const group = new L.FeatureGroup(markers);
+                const bounds = group.getBounds();
+                if (bounds) {
+                  map.fitBounds(bounds.pad(0.1));
+                }
+              }
+            } catch (e) {
+              console.error('Error fitting bounds:', e);
+            }
+          }
+        }
+      } catch (e) {
+        console.error('Error handling message:', e);
+      }
+    });
+  </script>
+</body>
+</html>
+    `;
+  }, [userLocation, clinicMarkers]);
+
+  // Handle messages from WebView
+  const handleWebViewMessage = (event: any) => {
+    try {
+      const data = JSON.parse(event.nativeEvent.data);
+      if (data.type === 'mapReady') {
+        setMapLoaded(true);
+      } else if (data.type === 'markerClick') {
+        const clinic = clinicMarkers.find(c => c.id === data.clinicId);
+        if (clinic) {
+          handleMarkerPress(clinic);
+        }
+      }
+    } catch (error) {
+      console.error('Error parsing WebView message:', error);
+    }
+  };
+
+  // Update WebView when clinics change
+  useEffect(() => {
+    if (!mapLoaded || !webViewRef.current || !clinicMarkers.length) return;
+
+    const clinicsData = clinicMarkers.map(clinic => ({
+      id: clinic.id,
+      clinicName: clinic.clinicName,
+      doctorName: clinic.doctorName,
+      address: clinic.address,
+      city: clinic.city,
+      phone: clinic.phone,
+      distance: clinic.distance,
+      lat: clinic.coordinates.lat,
+      lng: clinic.coordinates.lng,
+      doctorId: clinic.doctorId,
+    }));
+
+    webViewRef.current.postMessage(JSON.stringify({
+      type: 'updateClinics',
+      clinics: clinicsData
+    }));
+  }, [clinicMarkers, mapLoaded]);
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* Map View */}
+      {/* Map View - Using WebView with Leaflet (same as web app, no API key required) */}
       <View style={styles.mapContainer}>
-        {mapError ? (
-          <View style={styles.mapPlaceholder}>
-            <Ionicons name="alert-circle-outline" size={48} color={colors.error} />
-            <Text style={styles.mapPlaceholderText}>{mapError}</Text>
-            <Text style={styles.mapErrorSubtext}>
-              Google Maps API key is required. Please add your API key to app.json and rebuild the app.
-            </Text>
-            <Text style={styles.mapErrorSubtext}>
-              See GOOGLE_MAPS_SETUP.md for instructions.
-            </Text>
-          </View>
-        ) : userLocation ? (
-          <MapView
-            ref={mapRef}
+        {userLocation ? (
+          <WebView
+            ref={webViewRef}
+            source={{ html: mapHTML }}
             style={styles.map}
-            initialRegion={initialRegion}
-            // Use default provider (works without API key on iOS, but Android needs API key)
-            // If API key is not configured, this will show an error
-            // To fix: Add your Google Maps API key to app.json android.config.googleMaps.apiKey
-            // Don't specify provider - use default (works without API key, similar to Expo Go)
-            // provider={Platform.OS === 'android' ? PROVIDER_GOOGLE : undefined}
-            showsUserLocation={true}
-            showsMyLocationButton={false}
-            showsCompass={true}
-            toolbarEnabled={false}
-            onMapReady={() => {
-              setMapError(null);
+            onMessage={handleWebViewMessage}
+            javaScriptEnabled={true}
+            domStorageEnabled={true}
+            startInLoadingState={true}
+            renderLoading={() => (
+          <View style={styles.mapPlaceholder}>
+                <ActivityIndicator size="large" color={colors.primary} />
+                <Text style={styles.mapPlaceholderText}>Loading map...</Text>
+          </View>
+            )}
+            onError={(syntheticEvent) => {
+              const { nativeEvent } = syntheticEvent;
+              console.error('WebView error: ', nativeEvent);
             }}
-            onError={(error) => {
-              console.error('MapView error:', error);
-              if (error.nativeEvent?.message?.includes('API key') || error.nativeEvent?.message?.includes('apiKey')) {
-                setMapError('Google Maps API key not found');
-              } else {
-                setMapError('Failed to load map. Please check your connection.');
-              }
-            }}
-          >
-            {/* User location marker is handled by showsUserLocation */}
-            
-            {/* Clinic markers */}
-            {clinicMarkers.map((clinic) => (
-              <Marker
-                key={clinic.id}
-                coordinate={{
-                  latitude: clinic.coordinates.lat,
-                  longitude: clinic.coordinates.lng,
-                }}
-                title={clinic.clinicName}
-                description={`${clinic.distance.toFixed(1)} km away`}
-                onPress={() => handleMarkerPress(clinic)}
-              >
-                <View style={styles.markerContainer}>
-                  <View style={styles.markerPin}>
-                    <Ionicons name="medical" size={20} color={colors.textWhite} />
-                  </View>
-                  <View style={styles.markerDot} />
-                </View>
-              </Marker>
-            ))}
-          </MapView>
+          />
         ) : (
           <View style={styles.mapPlaceholder}>
             <ActivityIndicator size="large" color={colors.primary} />
-            <Text style={styles.mapPlaceholderText}>Loading map...</Text>
+            <Text style={styles.mapPlaceholderText}>Getting your location...</Text>
           </View>
         )}
 
@@ -293,13 +471,12 @@ const MapViewScreen = () => {
           <TouchableOpacity
             style={styles.controlButton}
             onPress={() => {
-              if (userLocation && mapRef.current) {
-                mapRef.current.animateToRegion({
-                  latitude: userLocation.lat,
-                  longitude: userLocation.lng,
-                  latitudeDelta: 0.1,
-                  longitudeDelta: 0.1,
-                }, 1000);
+              if (userLocation && webViewRef.current) {
+                webViewRef.current.postMessage(JSON.stringify({
+                  type: 'updateLocation',
+                  lat: userLocation.lat,
+                  lng: userLocation.lng
+                }));
               }
             }}
             activeOpacity={0.7}

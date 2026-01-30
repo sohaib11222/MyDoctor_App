@@ -17,7 +17,7 @@ export interface RegisterData {
   password: string;
   phone?: string;
   gender?: 'MALE' | 'FEMALE' | 'OTHER';
-  role?: 'DOCTOR' | 'PATIENT';
+  role?: 'DOCTOR' | 'PATIENT' | 'PHARMACY';
 }
 
 export interface AuthResponse {
@@ -35,13 +35,13 @@ export interface AuthResponse {
  * @returns {Promise<AuthResponse>} User data and token
  */
 export const login = async (credentials: LoginCredentials): Promise<AuthResponse> => {
-  const response = await api.post<AuthResponse>('/auth/login', credentials);
+  const response: AuthResponse = await api.post('/auth/login', credentials);
   
   // Store token and user
-  if (response.data?.token) {
+  if (response?.data?.token) {
     await AsyncStorage.setItem(STORAGE_KEYS.TOKEN, response.data.token);
   }
-  if (response.data?.user) {
+  if (response?.data?.user) {
     await AsyncStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(response.data.user));
   }
   
@@ -56,12 +56,13 @@ export const login = async (credentials: LoginCredentials): Promise<AuthResponse
  */
 export const register = async (
   data: RegisterData,
-  userType: 'patient' | 'doctor' = 'patient'
+  userType: 'patient' | 'doctor' | 'pharmacy' = 'patient'
 ): Promise<AuthResponse> => {
   // Map userType to backend role
-  const roleMap: Record<string, 'DOCTOR' | 'PATIENT'> = {
+  const roleMap: Record<string, 'DOCTOR' | 'PATIENT' | 'PHARMACY'> = {
     patient: 'PATIENT',
     doctor: 'DOCTOR',
+    pharmacy: 'PHARMACY',
   };
 
   const registrationData: RegisterData = {
@@ -69,13 +70,13 @@ export const register = async (
     role: data.role || roleMap[userType] || 'PATIENT',
   };
 
-  const response = await api.post<AuthResponse>('/auth/register', registrationData);
+  const response: AuthResponse = await api.post('/auth/register', registrationData);
   
   // Store token and user (only if registration is complete)
-  if (response.data?.token) {
+  if (response?.data?.token) {
     await AsyncStorage.setItem(STORAGE_KEYS.TOKEN, response.data.token);
   }
-  if (response.data?.user) {
+  if (response?.data?.user) {
     await AsyncStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(response.data.user));
   }
   
@@ -147,10 +148,10 @@ export const changePassword = async (
  * @returns {Promise<string>} New token
  */
 export const refreshToken = async (refreshToken: string): Promise<string> => {
-  const response = await api.post('/auth/refresh-token', {
+  const response: { success: boolean; message: string; data: { token: string } } = await api.post('/auth/refresh-token', {
     refreshToken,
   });
-  const newToken = response.data?.token || response.token || response;
+  const newToken = response?.data?.token;
   if (newToken) {
     await AsyncStorage.setItem(STORAGE_KEYS.TOKEN, newToken);
   }

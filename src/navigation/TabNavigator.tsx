@@ -1,6 +1,6 @@
 import React from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { getFocusedRouteNameFromRoute, NavigationContainerRef } from '@react-navigation/native';
+import { getFocusedRouteNameFromRoute, NavigationContainerRef, CommonActions, StackActions } from '@react-navigation/native';
 import { Feather } from '@expo/vector-icons';
 import { TabParamList } from './types';
 import { HomeStack } from './stacks/HomeStack';
@@ -140,10 +140,11 @@ export const TabNavigator = () => {
           }}
           listeners={({ navigation, route }) => ({
             tabPress: (e) => {
+              // Always prevent default to handle navigation manually
+              e.preventDefault();
+              
               // Get the current navigation state
               const state = navigation.getState();
-              const currentRoute = state.routes[state.index];
-              const routeName = getFocusedRouteNameFromRoute(route) ?? tab.name;
               
               // Define root screens for each tab
               const rootScreens: Record<string, string> = {
@@ -159,36 +160,35 @@ export const TabNavigator = () => {
               
               const rootScreen = rootScreens[tab.name];
               
-              // Check if we're switching tabs or if we're on a nested screen within the same tab
-              const isSwitchingTabs = currentRoute.name !== tab.name;
-              const isOnNestedScreen = routeName !== tab.name && routeName !== rootScreen;
+              // Find the target tab's route
+              const targetRoute = state.routes.find((r) => r.name === tab.name);
+              const targetTabIndex = state.routes.findIndex((r) => r.name === tab.name);
               
-              // Always reset to root screen when clicking a tab (unless already on root)
-              if (isSwitchingTabs || isOnNestedScreen) {
-                // Reset to root screen of the target tab
-                e.preventDefault();
-                
-                // Get the target tab's route state
-                const targetRoute = state.routes.find((r) => r.name === tab.name);
-                
-                // If target route exists and has nested screens, reset to root
-                if (targetRoute && targetRoute.state && targetRoute.state.index > 0) {
-                  // Pop all screens in the stack to get back to root
-                  const targetState = targetRoute.state;
-                  const targetNavigator = navigation.getParent();
-                  
-                  // Navigate to the tab with root screen explicitly
-                  (navigation as any).navigate({
-                    name: tab.name,
-                    params: {
-                      screen: rootScreen,
-                    },
-                    merge: false, // Don't merge, replace the state
-                  });
-                } else {
-                  // Simple navigation to tab root
-                  navigation.navigate(tab.name as never);
-                }
+              // Always reset the target tab's stack to root screen
+              if (targetRoute) {
+                // Reset the target tab's stack to root screen
+                navigation.dispatch(
+                  CommonActions.reset({
+                    index: targetTabIndex,
+                    routes: state.routes.map((r) => {
+                      if (r.name === tab.name) {
+                        // Always reset this tab's stack to root screen
+                        return {
+                          ...r,
+                          state: {
+                            routes: [{ name: rootScreen }],
+                            index: 0,
+                          },
+                        };
+                      }
+                      // Keep other tabs as they are
+                      return r;
+                    }),
+                  })
+                );
+              } else {
+                // Tab doesn't exist in state, navigate to it
+                navigation.navigate(tab.name as never);
               }
             },
           })}

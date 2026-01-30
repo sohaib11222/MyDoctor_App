@@ -21,6 +21,7 @@ import { colors } from '../../constants/colors';
 import { Ionicons } from '@expo/vector-icons';
 import * as appointmentApi from '../../services/appointment';
 import * as reviewApi from '../../services/review';
+import * as rescheduleApi from '../../services/rescheduleRequest';
 import Toast from 'react-native-toast-message';
 import { API_BASE_URL } from '../../config/api';
 
@@ -137,6 +138,54 @@ const AppointmentDetailsScreen = () => {
   });
 
   const existingReview = existingReviewData;
+
+  // Check if appointment is eligible for reschedule (patient only, CONFIRMED, ONLINE, time passed)
+  const [canReschedule, setCanReschedule] = useState(false);
+  const { data: eligibleAppointmentsData } = useQuery({
+    queryKey: ['eligibleRescheduleAppointments'],
+    queryFn: () => rescheduleApi.getEligibleAppointments(),
+    enabled: !!user && !isDoctor && !!appointment && appointment.status === 'CONFIRMED' && appointment.bookingType === 'ONLINE',
+    retry: 1,
+  });
+
+  // Check if this appointment is eligible for reschedule
+  useEffect(() => {
+    if (appointment && !isDoctor && appointment.status === 'CONFIRMED' && appointment.bookingType === 'ONLINE') {
+      if (eligibleAppointmentsData && eligibleAppointmentsData.length > 0) {
+        const isEligible = eligibleAppointmentsData.some((apt: rescheduleApi.EligibleAppointment) => apt._id === appointment._id);
+        
+        // Also check if appointment time has passed
+        if (isEligible && appointment.appointmentDate && appointment.appointmentTime) {
+          const now = new Date();
+          const appointmentDateTime = new Date(appointment.appointmentDate);
+          const [hours, minutes] = appointment.appointmentTime.split(':').map(Number);
+          appointmentDateTime.setHours(hours, minutes, 0, 0);
+          
+          if (now > appointmentDateTime) {
+            setCanReschedule(true);
+          } else {
+            setCanReschedule(false);
+          }
+        } else {
+          setCanReschedule(false);
+        }
+      } else if (appointment.appointmentDate && appointment.appointmentTime) {
+        // Basic check if API fails
+        const now = new Date();
+        const appointmentDateTime = new Date(appointment.appointmentDate);
+        const [hours, minutes] = appointment.appointmentTime.split(':').map(Number);
+        appointmentDateTime.setHours(hours, minutes, 0, 0);
+        
+        if (now > appointmentDateTime) {
+          setCanReschedule(true);
+        } else {
+          setCanReschedule(false);
+        }
+      }
+    } else {
+      setCanReschedule(false);
+    }
+  }, [appointment, eligibleAppointmentsData, isDoctor]);
 
   // Create review mutation
   const createReviewMutation = useMutation({
@@ -686,6 +735,31 @@ const AppointmentDetailsScreen = () => {
             </TouchableOpacity>
           )}
 
+          {/* Reschedule button for eligible appointments (patient only) */}
+          {!isDoctor && appointment?.status === 'CONFIRMED' && appointment?.bookingType === 'ONLINE' && canReschedule && (
+            <View style={styles.rescheduleWarningContainer}>
+              <View style={styles.rescheduleWarning}>
+                <Ionicons name="warning-outline" size={20} color={colors.warning} />
+                <View style={styles.rescheduleWarningContent}>
+                  <Text style={styles.rescheduleWarningTitle}>Missed Appointment?</Text>
+                  <Text style={styles.rescheduleWarningText}>
+                    If you were unable to join the video call, you can request to reschedule.
+                  </Text>
+                </View>
+              </View>
+              <TouchableOpacity
+                style={styles.rescheduleRequestBtn}
+                activeOpacity={0.8}
+                onPress={() => {
+                  navigation.navigate('RequestReschedule', { appointmentId: appointmentId });
+                }}
+              >
+                <Ionicons name="calendar-outline" size={18} color={colors.textWhite} />
+                <Text style={styles.rescheduleRequestBtnText}>Request Reschedule</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
           {status === 'completed' && (
             <View style={styles.completedActions}>
               <TouchableOpacity style={styles.downloadBtn} activeOpacity={0.8}>
@@ -1027,6 +1101,47 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: colors.text,
     marginLeft: 6,
+  },
+  rescheduleWarningContainer: {
+    marginTop: 16,
+    marginBottom: 16,
+  },
+  rescheduleWarning: {
+    flexDirection: 'row',
+    backgroundColor: colors.warningLight || '#FFF3CD',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 12,
+    alignItems: 'flex-start',
+    gap: 12,
+  },
+  rescheduleWarningContent: {
+    flex: 1,
+  },
+  rescheduleWarningTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.text,
+    marginBottom: 4,
+  },
+  rescheduleWarningText: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    lineHeight: 20,
+  },
+  rescheduleRequestBtn: {
+    backgroundColor: colors.warning || '#FFC107',
+    borderRadius: 8,
+    padding: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  rescheduleRequestBtnText: {
+    color: colors.textWhite,
+    fontSize: 15,
+    fontWeight: '600',
   },
   rescheduleBtn: {
     backgroundColor: colors.primary,

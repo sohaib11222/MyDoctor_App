@@ -3,7 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import Toast from 'react-native-toast-message';
 import * as authApi from '../services/auth';
 
-export type UserRole = 'patient' | 'doctor';
+export type UserRole = 'patient' | 'doctor' | 'pharmacy' | 'admin';
 
 export interface User {
   _id?: string;
@@ -28,7 +28,7 @@ interface AuthContextType {
   isLoading: boolean;
   login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
-  register: (data: RegisterData, role: UserRole) => Promise<void>;
+  register: (data: RegisterData, role: Exclude<UserRole, 'admin'>) => Promise<void>;
   updateUser: (userData: Partial<User> | User) => Promise<void>;
 }
 
@@ -110,6 +110,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const roleMap: Record<string, UserRole> = {
       PATIENT: 'patient',
       DOCTOR: 'doctor',
+      PHARMACY: 'pharmacy',
+      ADMIN: 'admin',
     };
     return roleMap[backendRole] || 'patient';
   };
@@ -160,6 +162,12 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             text1: 'Verification Required',
             text2: 'Please complete verification to continue',
           });
+        } else if (mappedUser.role === 'pharmacy' && mappedUser.status === 'PENDING') {
+          Toast.show({
+            type: 'info',
+            text1: 'Pending Approval',
+            text2: 'Your pharmacy account is pending admin approval',
+          });
         } else {
           Toast.show({
             type: 'success',
@@ -182,7 +190,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   };
 
-  const register = async (data: RegisterData, role: UserRole) => {
+  const register = async (data: RegisterData, role: Exclude<UserRole, 'admin'>) => {
     try {
       const response = await authApi.register(data, role);
       
@@ -222,6 +230,19 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           return;
         }
 
+        if (role === 'pharmacy' && mappedUser.status === 'PENDING') {
+          setUser(mappedUser);
+          await AsyncStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(mappedUser));
+
+          Toast.show({
+            type: 'success',
+            text1: 'Registration Successful',
+            text2: 'Your account is pending admin approval',
+          });
+
+          return;
+        }
+
         // For patients or approved doctors, log them in
         setUser(mappedUser);
         await AsyncStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(mappedUser));
@@ -250,6 +271,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     try {
       await authApi.logout();
       setUser(null);
+      // Clear documents submitted flag on logout
+      await AsyncStorage.removeItem('doctor_documents_submitted');
       Toast.show({
         type: 'success',
         text1: 'Logged Out',
@@ -259,6 +282,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       console.error('Logout error:', error);
       // Even if API call fails, clear local storage
       await AsyncStorage.multiRemove([STORAGE_KEYS.USER, STORAGE_KEYS.TOKEN]);
+      await AsyncStorage.removeItem('doctor_documents_submitted');
       setUser(null);
     }
   };

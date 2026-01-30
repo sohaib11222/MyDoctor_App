@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -6,8 +6,11 @@ import { useQuery } from '@tanstack/react-query';
 import { MoreStackParamList } from '../../navigation/types';
 import { useAuth } from '../../contexts/AuthContext';
 import { colors } from '../../constants/colors';
-import { Feather } from '@expo/vector-icons';
+import { Feather, Ionicons } from '@expo/vector-icons';
 import * as notificationApi from '../../services/notification';
+import * as profileApi from '../../services/profile';
+import * as subscriptionApi from '../../services/subscription';
+import * as weeklyScheduleApi from '../../services/weeklySchedule';
 
 type MoreScreenNavigationProp = NativeStackNavigationProp<MoreStackParamList>;
 
@@ -22,11 +25,60 @@ export const MoreScreen = () => {
     refetchInterval: 30000, // Refetch every 30 seconds
   });
 
+  // Fetch weekly schedule to check if timings are set (for doctors)
+  const { data: weeklySchedule } = useQuery({
+    queryKey: ['weeklySchedule'],
+    queryFn: async () => {
+      const response = await weeklyScheduleApi.getWeeklySchedule();
+      return response.data || response;
+    },
+    enabled: user?.role === 'doctor' && !!user,
+    retry: 1,
+  });
+
+  // Fetch subscription to check if active subscription exists (for doctors)
+  const { data: mySubscription } = useQuery({
+    queryKey: ['mySubscription'],
+    queryFn: async () => {
+      const response = await subscriptionApi.getMySubscription();
+      return response.data || response;
+    },
+    enabled: user?.role === 'doctor' && !!user,
+    retry: 1,
+  });
+
+  // Check if timings are set
+  const hasTimings = useMemo(() => {
+    if (!weeklySchedule) return false;
+    const schedule = (weeklySchedule as any)?.data || weeklySchedule;
+    return schedule && schedule.days && schedule.days.some((day: any) => 
+      day.timeSlots && day.timeSlots.length > 0
+    );
+  }, [weeklySchedule]);
+
+  // Check if subscription is active
+  const hasActiveSubscription = useMemo(() => {
+    if (!mySubscription) return false;
+    const subscription = (mySubscription as any)?.data || mySubscription;
+    return subscription?.hasActiveSubscription === true || 
+      (subscription?.subscriptionPlan && subscription?.subscriptionExpiresAt && 
+       new Date(subscription.subscriptionExpiresAt) > new Date());
+  }, [mySubscription]);
+
   const getMenuItems = () => {
     if ((user as any)?.role === 'ADMIN' || (user as any)?.role === 'admin') {
       return [
         { id: 1, title: 'All Orders', icon: 'shopping-bag', screen: 'AdminOrders' as keyof MoreStackParamList },
         { id: 2, title: 'Profile', icon: 'user', screen: 'Profile' as keyof MoreStackParamList },
+        { id: 3, title: 'Change Password', icon: 'lock', screen: 'ChangePassword' as keyof MoreStackParamList },
+        { id: 4, title: 'Notifications', icon: 'bell', screen: 'Notifications' as keyof MoreStackParamList },
+      ];
+    }
+
+    if (user?.role === 'pharmacy') {
+      return [
+        { id: 1, title: 'Profile', icon: 'user', screen: 'PharmacyProfile' as keyof MoreStackParamList },
+        { id: 2, title: 'Payout Settings', icon: 'dollar-sign', screen: 'PayoutSettings' as keyof MoreStackParamList },
         { id: 3, title: 'Change Password', icon: 'lock', screen: 'ChangePassword' as keyof MoreStackParamList },
         { id: 4, title: 'Notifications', icon: 'bell', screen: 'Notifications' as keyof MoreStackParamList },
       ];
@@ -37,31 +89,35 @@ export const MoreScreen = () => {
         { id: 1, title: 'Dashboard', icon: 'grid', screen: 'DoctorDashboard' as keyof MoreStackParamList },
         { id: 2, title: 'My Patients', icon: 'users', screen: 'MyPatients' as keyof MoreStackParamList },
         { id: 3, title: 'Reviews', icon: 'star', screen: 'Reviews' as keyof MoreStackParamList },
-        { id: 4, title: 'Invoices', icon: 'file-text', screen: 'Invoices' as keyof MoreStackParamList },
-        { id: 5, title: 'Subscription', icon: 'credit-card', screen: 'Subscription' as keyof MoreStackParamList },
-        { id: 6, title: 'Announcements', icon: 'bell', screen: 'Announcements' as keyof MoreStackParamList },
-        { id: 7, title: 'Pharmacy Management', icon: 'business', screen: 'PharmacyManagement' as keyof MoreStackParamList },
-        { id: 8, title: 'Orders', icon: 'shopping-bag', screen: 'PharmacyOrders' as keyof MoreStackParamList },
-        { id: 9, title: 'Profile', icon: 'user', screen: 'Profile' as keyof MoreStackParamList },
-        { id: 10, title: 'Profile Settings', icon: 'edit', screen: 'ProfileSettings' as keyof MoreStackParamList },
-        // { id: 11, title: 'Social Media Links', icon: 'share-2', screen: 'SocialLinks' as keyof MoreStackParamList },
-        // { id: 12, title: 'Settings', icon: 'settings', screen: 'Settings' as keyof MoreStackParamList },
-        { id: 13, title: 'Change Password', icon: 'lock-closed', screen: 'ChangePassword' as keyof MoreStackParamList },
-        { id: 14, title: 'Notifications', icon: 'bell', screen: 'Notifications' as keyof MoreStackParamList },
+        { id: 4, title: 'Reschedule Requests', icon: 'calendar', screen: 'DoctorRescheduleRequests' as keyof MoreStackParamList },
+        { id: 5, title: 'Invoices', icon: 'file-text', screen: 'Invoices' as keyof MoreStackParamList },
+        { id: 6, title: 'Subscription', icon: 'credit-card', screen: 'Subscription' as keyof MoreStackParamList, showDanger: true },
+        { id: 6.5, title: 'Payout Settings', icon: 'dollar-sign', screen: 'PayoutSettings' as keyof MoreStackParamList },
+        { id: 7, title: 'Available Timings', icon: 'clock', screen: 'AvailableTimings' as any, showDanger: true, isAppointmentsStack: true },
+        { id: 8, title: 'Announcements', icon: 'bell', screen: 'Announcements' as keyof MoreStackParamList },
+        { id: 9, title: 'Pharmacy Management', icon: 'package', screen: 'PharmacyManagement' as keyof MoreStackParamList },
+        { id: 10, title: 'Orders', icon: 'shopping-bag', screen: 'PharmacyOrders' as keyof MoreStackParamList },
+        { id: 11, title: 'Profile', icon: 'user', screen: 'Profile' as keyof MoreStackParamList },
+        { id: 12, title: 'Profile Settings', icon: 'edit', screen: 'ProfileSettings' as keyof MoreStackParamList },
+        // { id: 12, title: 'Social Media Links', icon: 'share-2', screen: 'SocialLinks' as keyof MoreStackParamList },
+        // { id: 13, title: 'Settings', icon: 'settings', screen: 'Settings' as keyof MoreStackParamList },
+        { id: 14, title: 'Change Password', icon: 'lock', screen: 'ChangePassword' as keyof MoreStackParamList },
+        { id: 15, title: 'Notifications', icon: 'bell', screen: 'Notifications' as keyof MoreStackParamList },
       ];
     } else {
       return [
         { id: 1, title: 'Dashboard', icon: 'grid', screen: 'PatientDashboard' as keyof MoreStackParamList },
-        { id: 2, title: 'Profile', icon: 'user', screen: 'Profile' as keyof MoreStackParamList },
+        // { id: 2, title: 'Profile', icon: 'user', screen: 'Profile' as keyof MoreStackParamList },
         { id: 3, title: 'Profile Settings', icon: 'edit', screen: 'PatientProfileSettings' as keyof MoreStackParamList },
         // { id: 4, title: 'Settings', icon: 'settings', screen: 'Settings' as keyof MoreStackParamList },
         { id: 5, title: 'Change Password', icon: 'lock', screen: 'ChangePassword' as keyof MoreStackParamList },
         { id: 6, title: 'Medical Records', icon: 'file-text', screen: 'MedicalRecords' as keyof MoreStackParamList },
         // { id: 7, title: 'Dependents', icon: 'users', screen: 'Dependents' as keyof MoreStackParamList },
         { id: 8, title: 'Favourites', icon: 'heart', screen: 'Favourites' as keyof MoreStackParamList },
-        { id: 9, title: 'Order History', icon: 'shopping-bag', screen: 'OrderHistory' as keyof MoreStackParamList },
-        { id: 10, title: 'Notifications', icon: 'bell', screen: 'Notifications' as keyof MoreStackParamList },
-        { id: 11, title: 'Invoices', icon: 'file-text', screen: 'Invoices' as keyof MoreStackParamList },
+        { id: 9, title: 'Reschedule Requests', icon: 'calendar', screen: 'PatientRescheduleRequests' as keyof MoreStackParamList },
+        { id: 10, title: 'Order History', icon: 'shopping-bag', screen: 'OrderHistory' as keyof MoreStackParamList },
+        { id: 11, title: 'Notifications', icon: 'bell', screen: 'Notifications' as keyof MoreStackParamList },
+        { id: 12, title: 'Invoices', icon: 'file-text', screen: 'Invoices' as keyof MoreStackParamList },
         // { id: 11, title: 'Documents', icon: 'folder', screen: 'Documents' as keyof MoreStackParamList },
       ];
     }
@@ -86,11 +142,42 @@ export const MoreScreen = () => {
       </View>
 
       <View style={styles.menuSection}>
-        {menuItems.map((item) => (
+        {menuItems.map((item: any) => (
           <TouchableOpacity
             key={item.id}
             style={styles.menuItem}
-            onPress={() => navigation.navigate(item.screen as any)}
+            onPress={() => {
+              // Handle AvailableTimings navigation (it's in Appointments stack)
+              if ((item as any).isAppointmentsStack) {
+                try {
+                  // Get the parent tab navigator
+                  const parent = navigation.getParent();
+                  if (parent) {
+                    // Navigate to Appointments tab and then to the specific screen
+                    (parent as any).navigate('Appointments', {
+                      screen: item.screen,
+                      params: undefined,
+                    });
+                  } else {
+                    // Fallback: navigate to Appointments tab
+                    (navigation as any).navigate('Appointments' as any);
+                  }
+                } catch (error) {
+                  // Fallback: try direct navigation to Appointments tab
+                  console.warn('Navigation error:', error);
+                  try {
+                    (navigation as any).navigate('Appointments' as any);
+                  } catch (e) {
+                    console.error('Failed to navigate:', e);
+                  }
+                }
+              } else if (item.screen === 'PatientRescheduleRequests' || item.screen === 'DoctorRescheduleRequests') {
+                // Navigate to reschedule requests screens in More stack
+                navigation.navigate(item.screen as any);
+              } else {
+                navigation.navigate(item.screen as any);
+              }
+            }}
           >
             <Feather name={item.icon as any} size={24} color={colors.primary} />
             <Text style={styles.menuItemText}>{item.title}</Text>
@@ -99,6 +186,14 @@ export const MoreScreen = () => {
                 <View style={styles.badge}>
                   <Text style={styles.badgeText}>{unreadCount > 99 ? '99+' : unreadCount}</Text>
                 </View>
+              )}
+              {/* Danger sign for Subscription if no active subscription */}
+              {item.screen === 'Subscription' && user?.role === 'doctor' && !hasActiveSubscription && (
+                <Ionicons name="warning" size={18} color={colors.error} style={{ marginRight: 4 }} />
+              )}
+              {/* Danger sign for Available Timings if no timings set */}
+              {item.screen === 'AvailableTimings' && user?.role === 'doctor' && !hasTimings && (
+                <Ionicons name="warning" size={18} color={colors.error} style={{ marginRight: 4 }} />
               )}
               <Feather name="chevron-right" size={20} color={colors.textLight} />
             </View>

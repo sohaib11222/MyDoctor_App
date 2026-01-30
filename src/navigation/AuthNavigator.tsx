@@ -1,5 +1,6 @@
 import React from 'react';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { AuthStackParamList } from './types';
 import { LoginScreen } from '../screens/auth/LoginScreen';
 import { RegisterScreen } from '../screens/auth/RegisterScreen';
@@ -12,21 +13,40 @@ import { useAuth } from '../contexts/AuthContext';
 
 const Stack = createNativeStackNavigator<AuthStackParamList>();
 
+const DOCUMENTS_SUBMITTED_KEY = 'doctor_documents_submitted';
+
 export const AuthNavigator = () => {
   const { user } = useAuth();
+  const [initialRoute, setInitialRoute] = React.useState<keyof AuthStackParamList>('Login');
+  const [isReady, setIsReady] = React.useState(false);
 
   // Determine initial route based on user state
-  // If pending doctor, start at verification upload screen
-  const getInitialRouteName = (): keyof AuthStackParamList => {
-    if (user && user.role === 'doctor' && user.verificationStatus === 'pending') {
-      return 'DoctorVerificationUpload';
-    }
-    return 'Login';
-  };
+  React.useEffect(() => {
+    const determineInitialRoute = async () => {
+      if (user && user.role === 'doctor' && user.verificationStatus === 'pending') {
+        // Check if documents have been submitted
+        const documentsSubmitted = await AsyncStorage.getItem(DOCUMENTS_SUBMITTED_KEY);
+        if (documentsSubmitted === 'true') {
+          setInitialRoute('PendingApproval');
+        } else {
+          setInitialRoute('DoctorVerificationUpload');
+        }
+      } else {
+        setInitialRoute('Login');
+      }
+      setIsReady(true);
+    };
+    determineInitialRoute();
+  }, [user]);
+
+  // Don't render navigator until we know the initial route
+  if (!isReady) {
+    return null;
+  }
 
   return (
     <Stack.Navigator
-      initialRouteName={getInitialRouteName()}
+      initialRouteName={initialRoute}
       screenOptions={{
         headerShown: false,
       }}

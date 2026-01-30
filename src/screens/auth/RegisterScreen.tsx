@@ -54,7 +54,7 @@ export const RegisterScreen = () => {
   const navigation = useNavigation<RegisterScreenNavigationProp>();
   const { register: registerUser } = useAuth();
   const [loading, setLoading] = useState(false);
-  const [registerAsPatient, setRegisterAsPatient] = useState(true);
+  const [selectedRole, setSelectedRole] = useState<UserRole>('patient');
 
   const {
     control,
@@ -75,7 +75,7 @@ export const RegisterScreen = () => {
   const onSubmit = async (data: RegisterFormData) => {
     setLoading(true);
     try {
-      const role: UserRole = registerAsPatient ? 'patient' : 'doctor';
+      const role: UserRole = selectedRole;
       await registerUser(
         {
           fullName: data.fullName,
@@ -188,7 +188,7 @@ export const RegisterScreen = () => {
           />
 
           <Button
-            title={loading ? 'Registering...' : registerAsPatient ? 'Register as Patient' : 'Register as Doctor'}
+            title={loading ? 'Registering...' : selectedRole === 'patient' ? 'Register as Patient' : selectedRole === 'doctor' ? 'Register as Doctor' : 'Register as Pharmacy'}
             onPress={handleSubmit(onSubmit)}
             loading={loading}
             style={styles.registerButton}
@@ -201,16 +201,29 @@ export const RegisterScreen = () => {
             <View style={styles.dividerLine} />
           </View>
 
-          {/* Toggle between Patient and Doctor */}
-          <TouchableOpacity
-            style={[styles.doctorButton, styles.doctorButtonOutline]}
-            onPress={() => setRegisterAsPatient(!registerAsPatient)}
-          >
-            <Feather name={registerAsPatient ? "briefcase" : "user"} size={20} color={colors.primary} />
-            <Text style={styles.doctorButtonText}>
-              {registerAsPatient ? 'Register as Doctor' : 'Register as Patient'}
-            </Text>
-          </TouchableOpacity>
+          <View style={styles.roleButtonsRow}>
+            <TouchableOpacity
+              style={[styles.roleButton, selectedRole === 'patient' && styles.roleButtonActive]}
+              onPress={() => setSelectedRole('patient')}
+            >
+              <Feather name="user" size={20} color={selectedRole === 'patient' ? colors.textWhite : colors.primary} />
+              <Text style={[styles.roleButtonText, selectedRole === 'patient' && styles.roleButtonTextActive]}>Patient</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.roleButton, selectedRole === 'doctor' && styles.roleButtonActive]}
+              onPress={() => setSelectedRole('doctor')}
+            >
+              <Feather name="briefcase" size={20} color={selectedRole === 'doctor' ? colors.textWhite : colors.primary} />
+              <Text style={[styles.roleButtonText, selectedRole === 'doctor' && styles.roleButtonTextActive]}>Doctor</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.roleButton, selectedRole === 'pharmacy' && styles.roleButtonActive]}
+              onPress={() => setSelectedRole('pharmacy')}
+            >
+              <Feather name="shopping-bag" size={20} color={selectedRole === 'pharmacy' ? colors.textWhite : colors.primary} />
+              <Text style={[styles.roleButtonText, selectedRole === 'pharmacy' && styles.roleButtonTextActive]}>Pharmacy</Text>
+            </TouchableOpacity>
+          </View>
 
           <View style={styles.loginContainer}>
             <Text style={styles.loginText}>Already have an account? </Text>
@@ -292,25 +305,35 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: colors.textSecondary,
   },
-  doctorButton: {
+  roleButtonsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 10,
+    marginBottom: 24,
+  },
+  roleButton: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 12,
-    paddingHorizontal: 16,
+    paddingHorizontal: 10,
     borderRadius: 8,
-    marginBottom: 24,
-    gap: 8,
-  },
-  doctorButtonOutline: {
     borderWidth: 1,
     borderColor: colors.primary,
     backgroundColor: colors.background,
+    gap: 8,
   },
-  doctorButtonText: {
-    fontSize: 16,
+  roleButtonActive: {
+    backgroundColor: colors.primary,
+  },
+  roleButtonText: {
+    fontSize: 14,
     fontWeight: '600',
     color: colors.primary,
+  },
+  roleButtonTextActive: {
+    color: colors.textWhite,
   },
   loginContainer: {
     flexDirection: 'row',

@@ -11,6 +11,9 @@ import { StartAppointmentScreen } from '../../screens/doctor/StartAppointmentScr
 import { AvailableTimingsScreen } from '../../screens/doctor/AvailableTimingsScreen';
 import { AppointmentRequestsScreen } from '../../screens/doctor/AppointmentRequestsScreen';
 import { MyPatientsScreen } from '../../screens/doctor/MyPatientsScreen';
+import RequestRescheduleScreen from '../../screens/patient/RequestRescheduleScreen';
+import PatientRescheduleRequestsScreen from '../../screens/patient/PatientRescheduleRequestsScreen';
+import DoctorRescheduleRequestsScreen from '../../screens/doctor/DoctorRescheduleRequestsScreen';
 import { CustomHeader } from '../../components/common/CustomHeader';
 import { useAuth } from '../../contexts/AuthContext';
 
@@ -88,6 +91,25 @@ export const AppointmentsStack = () => {
           animation: 'slide_from_bottom'
         }}
       />
+      <Stack.Screen 
+        name="RequestReschedule" 
+        component={RequestRescheduleScreen}
+        options={{ title: 'Request Reschedule' }}
+      />
+      {!isDoctor && (
+        <Stack.Screen 
+          name="PatientRescheduleRequests" 
+          component={PatientRescheduleRequestsScreen}
+          options={{ title: 'My Reschedule Requests' }}
+        />
+      )}
+      {isDoctor && (
+        <Stack.Screen 
+          name="DoctorRescheduleRequests" 
+          component={DoctorRescheduleRequestsScreen}
+          options={{ title: 'Reschedule Requests' }}
+        />
+      )}
     </Stack.Navigator>
   );
 };

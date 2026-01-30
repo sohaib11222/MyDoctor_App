@@ -156,22 +156,32 @@ export const startConversationWithAdmin = async (
  * @param patientId - Patient ID
  * @param appointmentId - Appointment ID (required)
  * @param message - Message text
- * @param attachments - Optional attachments array
+ * @param attachments - Optional attachments array (objects with type, url, name, size)
  */
 export const sendMessageToPatient = async (
   doctorId: string,
   patientId: string,
   appointmentId: string,
   message: string,
-  attachments?: string[]
+  attachments?: Array<{ type: string; url: string; name: string; size?: number }> | string[]
 ): Promise<any> => {
-  const response = await api.post('/chat/send', {
+  const requestBody: any = {
     doctorId,
     patientId,
     appointmentId,
-    message,
-    ...(attachments && { attachments }),
-  });
+  };
+  
+  // Only include message if it's not empty
+  if (message && message.trim().length > 0) {
+    requestBody.message = message.trim();
+  }
+  
+  // Include attachments if provided
+  if (attachments && attachments.length > 0) {
+    requestBody.attachments = attachments;
+  }
+  
+  const response = await api.post('/chat/send', requestBody);
   return response;
 };
 
@@ -180,20 +190,30 @@ export const sendMessageToPatient = async (
  * @param doctorId - Doctor ID
  * @param adminId - Admin ID
  * @param message - Message text
- * @param attachments - Optional attachments array
+ * @param attachments - Optional attachments array (objects with type, url, name, size)
  */
 export const sendMessageToAdmin = async (
   doctorId: string,
   adminId: string,
   message: string,
-  attachments?: string[]
+  attachments?: Array<{ type: string; url: string; name: string; size?: number }> | string[]
 ): Promise<any> => {
-  const response = await api.post('/chat/send', {
+  const requestBody: any = {
     doctorId,
     adminId,
-    message,
-    ...(attachments && { attachments }),
-  });
+  };
+  
+  // Only include message if it's not empty
+  if (message && message.trim().length > 0) {
+    requestBody.message = message.trim();
+  }
+  
+  // Include attachments if provided
+  if (attachments && attachments.length > 0) {
+    requestBody.attachments = attachments;
+  }
+  
+  const response = await api.post('/chat/send', requestBody);
   return response;
 };
 

@@ -338,6 +338,11 @@ const DoctorProfileScreen = () => {
     { id: 'review', label: 'Reviews' },
   ];
 
+  // Add insurance tab if doctor accepts insurance
+  if (doctor?.convenzionato === true && doctor?.insuranceCompanies && Array.isArray(doctor.insuranceCompanies) && doctor.insuranceCompanies.length > 0) {
+    tabs.push({ id: 'insurance', label: 'Insurance' });
+  }
+
   // Add products tab if doctor has products
   if (doctor?.products && Array.isArray(doctor.products) && doctor.products.length > 0) {
     tabs.push({ id: 'products', label: 'Products' });
@@ -575,6 +580,56 @@ const DoctorProfileScreen = () => {
               </View>
             ) : (
               <Text style={styles.emptyText}>No reviews yet. Be the first to review this doctor!</Text>
+            )}
+          </View>
+        );
+
+      case 'insurance':
+        return (
+          <View style={styles.tabContent}>
+            <Text style={styles.tabTitle}>Accepted Insurance Companies</Text>
+            {doctor?.convenzionato === true && doctor?.insuranceCompanies && Array.isArray(doctor.insuranceCompanies) && doctor.insuranceCompanies.length > 0 ? (
+              <View>
+                <View style={styles.insuranceHeader}>
+                  <Ionicons name="checkmark-circle" size={24} color={colors.success} />
+                  <Text style={styles.insuranceHeaderText}>This doctor accepts insurance</Text>
+                </View>
+                <Text style={styles.insuranceSubtitle}>
+                  The following insurance companies are accepted:
+                </Text>
+                <View style={styles.insuranceGrid}>
+                  {doctor.insuranceCompanies.map((insurance: any, index: number) => {
+                    const insuranceId = insurance._id || insurance.id || insurance;
+                    const insuranceName = typeof insurance === 'object' && insurance !== null
+                      ? (insurance.name || 'Insurance Company')
+                      : 'Insurance Company';
+                    const logoUrl = typeof insurance === 'object' && insurance !== null && insurance.logo
+                      ? normalizeImageUrl(insurance.logo)
+                      : null;
+
+                    return (
+                      <View key={insuranceId || index} style={styles.insuranceCard}>
+                        {logoUrl ? (
+                          <Image
+                            source={{ uri: logoUrl }}
+                            style={styles.insuranceLogo}
+                            resizeMode="contain"
+                          />
+                        ) : (
+                          <View style={styles.insurancePlaceholder}>
+                            <Ionicons name="shield" size={32} color={colors.textSecondary} />
+                          </View>
+                        )}
+                        <Text style={styles.insuranceName} numberOfLines={2}>
+                          {insuranceName}
+                        </Text>
+                      </View>
+                    );
+                  })}
+                </View>
+              </View>
+            ) : (
+              <Text style={styles.emptyText}>Insurance information not available.</Text>
             )}
           </View>
         );
@@ -1391,6 +1446,62 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     textDecorationLine: 'line-through',
     marginLeft: 8,
+  },
+  insuranceHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.successLight || colors.backgroundLight,
+    padding: 16,
+    borderRadius: 8,
+    marginBottom: 16,
+    gap: 12,
+  },
+  insuranceHeaderText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.success || colors.primary,
+    flex: 1,
+  },
+  insuranceSubtitle: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    marginBottom: 16,
+  },
+  insuranceGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+  },
+  insuranceCard: {
+    width: '48%',
+    backgroundColor: colors.backgroundLight,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: 16,
+    alignItems: 'center',
+    minHeight: 140,
+  },
+  insuranceLogo: {
+    width: 60,
+    height: 60,
+    marginBottom: 8,
+  },
+  insurancePlaceholder: {
+    width: 60,
+    height: 60,
+    borderRadius: 8,
+    backgroundColor: colors.background,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 8,
+  },
+  insuranceName: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.text,
+    textAlign: 'center',
+    minHeight: 36,
   },
 });
 

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -11,6 +11,7 @@ import {
   ActivityIndicator,
   Alert,
   Modal,
+  ViewStyle,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -26,6 +27,7 @@ import { API_BASE_URL } from '../../config/api';
 import Toast from 'react-native-toast-message';
 import { Button } from '../../components/common/Button';
 import { Input } from '../../components/common/Input';
+import { copyImageToCacheUri, deleteCacheFiles } from '../../utils/imageUpload';
 
 type PatientProfileSettingsScreenNavigationProp = NativeStackNavigationProp<MoreStackParamList>;
 
@@ -101,6 +103,8 @@ export const PatientProfileSettingsScreen = () => {
   const [profileImageFile, setProfileImageFile] = useState<any>(null);
   const [profileImagePreview, setProfileImagePreview] = useState<string>('');
   const [showGenderPicker, setShowGenderPicker] = useState(false);
+  // Selected image asset (not uploaded yet)
+  const [selectedImageAsset, setSelectedImageAsset] = useState<ImagePicker.ImagePickerAsset | null>(null);
 
   // Fetch user profile
   const { data: userProfileResponse, isLoading: userProfileLoading } = useQuery({
@@ -109,8 +113,19 @@ export const PatientProfileSettingsScreen = () => {
     enabled: !!user,
   });
 
-  // Extract user profile data
-  const userProfile = userProfileResponse?.data || userProfileResponse;
+  // Extract user profile data and ensure it's UserProfile type
+  const userProfile: profileApi.UserProfile | null = useMemo(() => {
+    if (!userProfileResponse) return null;
+    // ProfileResponse has structure: { success, message, data: UserProfile | DoctorProfile }
+    const response = userProfileResponse as profileApi.ProfileResponse;
+    const data = response?.data;
+    
+    // Type guard: check if it's UserProfile (has email and fullName, not doctor-specific fields like 'title')
+    if (data && typeof data === 'object' && 'email' in data && 'fullName' in data && '_id' in data && !('title' in data)) {
+      return data as unknown as profileApi.UserProfile;
+    }
+    return null;
+  }, [userProfileResponse]);
 
   // Populate form when profile loads
   useEffect(() => {
@@ -150,7 +165,7 @@ export const PatientProfileSettingsScreen = () => {
   const updateProfileMutation = useMutation({
     mutationFn: (data: any) => profileApi.updateUserProfile(data),
     onSuccess: () => {
-      queryClient.invalidateQueries(['userProfile', user?._id || user?.id]);
+      queryClient.invalidateQueries({ queryKey: ['userProfile', user?._id || user?.id] });
       Toast.show({
         type: 'success',
         text1: 'Success',
@@ -167,41 +182,36 @@ export const PatientProfileSettingsScreen = () => {
     },
   });
 
-  // Upload profile image mutation
-  const uploadImageMutation = useMutation({
-    mutationFn: async (file: any) => {
-      const formData = new FormData();
-      formData.append('file', {
-        uri: file.uri,
-        type: file.type || 'image/jpeg',
-        name: file.name || `profile_${Date.now()}.jpg`,
-      } as any);
-      const response = await uploadApi.uploadProfileImage(formData);
-      return response;
-    },
-    onSuccess: (response: any) => {
+  // Upload profile image function (called on save, not on selection)
+  const uploadProfileImage = async (asset: ImagePicker.ImagePickerAsset): Promise<string> => {
+    let tempFileUri: string | null = null;
+    try {
+      // Get MIME type and filename
+      const getMimeAndName = (asset: ImagePicker.ImagePickerAsset) => {
+        const fileName = asset.fileName || `profile-${Date.now()}.jpg`;
+        const ext = fileName.split('.').pop()?.toLowerCase() || 'jpg';
+        const mime =
+          ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : 'image/jpeg';
+        const name = fileName.includes('.') ? fileName : `profile-${Date.now()}.${ext}`;
+        return { mime, name };
+      };
+
+      const { mime, name } = getMimeAndName(asset);
+      tempFileUri = await copyImageToCacheUri(asset.uri, 0, mime);
+      const response = await uploadApi.uploadProfileImage({ uri: tempFileUri, mime, name });
+      
       const responseData = response?.data || response;
-      const relativeUrl = responseData?.url || responseData?.data?.url;
+      const relativeUrl = responseData?.url || responseData?.data?.url || response?.url;
       const baseUrl = API_BASE_URL.replace('/api', '');
       const imageUrl = relativeUrl?.startsWith('http') ? relativeUrl : `${baseUrl}${relativeUrl}`;
-      setFormData((prev) => ({ ...prev, profileImage: imageUrl }));
-      const normalizedUrl = normalizeImageUrl(imageUrl);
-      setProfileImagePreview(normalizedUrl || '');
-      Toast.show({
-        type: 'success',
-        text1: 'Success',
-        text2: 'Image uploaded successfully!',
-      });
-    },
-    onError: (error: any) => {
-      const errorMessage = error.response?.data?.message || error.message || 'Failed to upload image';
-      Toast.show({
-        type: 'error',
-        text1: 'Error',
-        text2: errorMessage,
-      });
-    },
-  });
+      
+      return imageUrl;
+    } finally {
+      if (tempFileUri) {
+        await deleteCacheFiles([tempFileUri]);
+      }
+    }
+  };
 
   // Handle profile image change
   const handleImageChange = async () => {
@@ -238,17 +248,9 @@ export const PatientProfileSettingsScreen = () => {
                   });
                   return;
                 }
-                setProfileImageFile({
-                  uri: asset.uri,
-                  type: 'image/jpeg',
-                  name: `profile_${Date.now()}.jpg`,
-                });
+                // Store asset locally and show preview (don't upload yet)
+                setSelectedImageAsset(asset);
                 setProfileImagePreview(asset.uri);
-                uploadImageMutation.mutate({
-                  uri: asset.uri,
-                  type: 'image/jpeg',
-                  name: `profile_${Date.now()}.jpg`,
-                });
               }
             },
           },
@@ -272,17 +274,9 @@ export const PatientProfileSettingsScreen = () => {
                   });
                   return;
                 }
-                setProfileImageFile({
-                  uri: asset.uri,
-                  type: asset.type || 'image/jpeg',
-                  name: asset.fileName || `profile_${Date.now()}.jpg`,
-                });
+                // Store asset locally and show preview (don't upload yet)
+                setSelectedImageAsset(asset);
                 setProfileImagePreview(asset.uri);
-                uploadImageMutation.mutate({
-                  uri: asset.uri,
-                  type: asset.type || 'image/jpeg',
-                  name: asset.fileName || `profile_${Date.now()}.jpg`,
-                });
               }
             },
           },
@@ -301,6 +295,7 @@ export const PatientProfileSettingsScreen = () => {
 
   // Handle remove image
   const handleRemoveImage = () => {
+    setSelectedImageAsset(null);
     setProfileImageFile(null);
     setProfileImagePreview('');
     setFormData((prev) => ({ ...prev, profileImage: '' }));
@@ -378,7 +373,7 @@ export const PatientProfileSettingsScreen = () => {
 
   const profileImageSource = profileImagePreview
     ? { uri: profileImagePreview }
-    : userProfile?.profileImage
+    : userProfile && userProfile.profileImage
     ? { uri: normalizeImageUrl(userProfile.profileImage) || '' }
     : defaultAvatar;
 
@@ -394,11 +389,11 @@ export const PatientProfileSettingsScreen = () => {
               <TouchableOpacity
                 style={styles.uploadButton}
                 onPress={handleImageChange}
-                disabled={uploadImageMutation.isLoading}
+                disabled={updateProfileMutation.isPending}
               >
                 <Ionicons name="camera-outline" size={18} color={colors.primary} />
                 <Text style={styles.uploadButtonText}>
-                  {uploadImageMutation.isLoading ? 'Uploading...' : 'Upload New'}
+                  {selectedImageAsset ? 'Change Image' : 'Select Image'}
                 </Text>
               </TouchableOpacity>
               {profileImagePreview && (
@@ -430,7 +425,7 @@ export const PatientProfileSettingsScreen = () => {
               placeholder="YYYY-MM-DD"
               value={formData.dob}
               onChangeText={(text) => handleChange('dob', text)}
-              containerStyle={[styles.input, styles.halfInput]}
+              containerStyle={styles.inputHalf}
             />
             <View style={styles.inputSpacer} />
             <View style={styles.selectContainer}>
@@ -454,16 +449,16 @@ export const PatientProfileSettingsScreen = () => {
               value={formData.phone}
               onChangeText={(text) => handleChange('phone', text)}
               keyboardType="phone-pad"
-              containerStyle={[styles.input, styles.halfInput]}
+              containerStyle={styles.inputHalf}
             />
             <View style={styles.inputSpacer} />
-            <Input
-              label="Email Address"
-              placeholder="Email"
-              value={userProfile?.email || ''}
-              editable={false}
-              containerStyle={[styles.input, styles.halfInput, styles.disabledInput]}
-            />
+              <Input
+                label="Email Address"
+                placeholder="Email"
+                value={userProfile ? userProfile.email || '' : ''}
+                editable={false}
+                containerStyle={styles.inputHalfDisabled}
+              />
           </View>
           <View style={styles.formRow}>
             <Input
@@ -499,7 +494,7 @@ export const PatientProfileSettingsScreen = () => {
               placeholder="Enter city"
               value={formData.address.city}
               onChangeText={(text) => handleChange('address.city', text)}
-              containerStyle={[styles.input, styles.halfInput]}
+              containerStyle={styles.inputHalf}
             />
             <View style={styles.inputSpacer} />
             <Input
@@ -507,7 +502,7 @@ export const PatientProfileSettingsScreen = () => {
               placeholder="Enter state"
               value={formData.address.state}
               onChangeText={(text) => handleChange('address.state', text)}
-              containerStyle={[styles.input, styles.halfInput]}
+              containerStyle={styles.inputHalf}
             />
           </View>
           <View style={styles.formRow}>
@@ -516,7 +511,7 @@ export const PatientProfileSettingsScreen = () => {
               placeholder="Enter country"
               value={formData.address.country}
               onChangeText={(text) => handleChange('address.country', text)}
-              containerStyle={[styles.input, styles.halfInput]}
+              containerStyle={styles.inputHalf}
             />
             <View style={styles.inputSpacer} />
             <Input
@@ -525,7 +520,7 @@ export const PatientProfileSettingsScreen = () => {
               value={formData.address.zip}
               onChangeText={(text) => handleChange('address.zip', text)}
               keyboardType="numeric"
-              containerStyle={[styles.input, styles.halfInput]}
+              containerStyle={styles.inputHalf}
             />
           </View>
         </View>
@@ -547,7 +542,7 @@ export const PatientProfileSettingsScreen = () => {
               value={formData.emergencyContact.phone}
               onChangeText={(text) => handleChange('emergencyContact.phone', text)}
               keyboardType="phone-pad"
-              containerStyle={[styles.input, styles.halfInput]}
+              containerStyle={styles.inputHalf}
             />
             <View style={styles.inputSpacer} />
             <Input
@@ -555,7 +550,7 @@ export const PatientProfileSettingsScreen = () => {
               placeholder="e.g., Spouse, Parent"
               value={formData.emergencyContact.relation}
               onChangeText={(text) => handleChange('emergencyContact.relation', text)}
-              containerStyle={[styles.input, styles.halfInput]}
+              containerStyle={styles.inputHalf}
             />
           </View>
         </View>
@@ -570,10 +565,10 @@ export const PatientProfileSettingsScreen = () => {
             variant="secondary"
           />
           <Button
-            title={updateProfileMutation.isLoading ? 'Saving...' : 'Save Changes'}
+            title={updateProfileMutation.isPending ? 'Saving...' : 'Save Changes'}
             onPress={handleSubmit}
             style={styles.saveButton}
-            disabled={updateProfileMutation.isLoading}
+            disabled={updateProfileMutation.isPending}
           />
         </View>
       </ScrollView>
@@ -730,6 +725,15 @@ const styles = StyleSheet.create({
     width: 12,
   },
   disabledInput: {
+    opacity: 0.6,
+  },
+  inputHalf: {
+    marginBottom: 16,
+    flex: 1,
+  },
+  inputHalfDisabled: {
+    marginBottom: 16,
+    flex: 1,
     opacity: 0.6,
   },
   inputLabel: {

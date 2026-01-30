@@ -17,7 +17,7 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { CompositeNavigationProp } from '@react-navigation/native';
 import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import { TabParamList, MoreStackParamList } from '../../navigation/types';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { PharmacyStackParamList } from '../../navigation/types';
 import { colors } from '../../constants/colors';
 import { Ionicons } from '@expo/vector-icons';
@@ -100,6 +100,7 @@ export const OrderHistoryScreen = () => {
   const [statusFilter, setStatusFilter] = useState('');
   const [page, setPage] = useState(1);
   const [refreshing, setRefreshing] = useState(false);
+  const [payingOrderId, setPayingOrderId] = useState<string | null>(null);
   const limit = 10;
 
   const {
@@ -161,6 +162,48 @@ export const OrderHistoryScreen = () => {
     setRefreshing(false);
   }, [refetch]);
 
+  // Payment mutation
+  const payMutation = useMutation({
+    mutationFn: ({ orderId, paymentMethod }: { orderId: string; paymentMethod: string }) =>
+      orderApi.payForOrder(orderId, paymentMethod),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['patientOrders'] });
+      queryClient.invalidateQueries({ queryKey: ['order'] });
+      setPayingOrderId(null);
+      Toast.show({
+        type: 'success',
+        text1: 'Payment Successful',
+        text2: 'Your order payment has been processed!',
+      });
+      refetch();
+    },
+    onError: (err: any) => {
+      setPayingOrderId(null);
+      Toast.show({
+        type: 'error',
+        text1: 'Payment Failed',
+        text2: err.response?.data?.message || err.message || 'Please try again.',
+      });
+    },
+  });
+
+  const handlePay = useCallback((order: orderApi.Order) => {
+    Alert.alert(
+      'Confirm Payment',
+      `Pay ${formatCurrency(order.total)} for order #${order.orderNumber}?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Pay',
+          onPress: () => {
+            setPayingOrderId(order._id);
+            payMutation.mutate({ orderId: order._id, paymentMethod: 'DUMMY' });
+          },
+        },
+      ]
+    );
+  }, [payMutation]);
+
   const renderOrderCard = ({ item: order }: { item: orderApi.Order }) => {
     const pharmacy = typeof order.pharmacyId === 'object' ? order.pharmacyId : null;
     const pharmacyName = pharmacy?.name || 'Pharmacy';
@@ -210,11 +253,30 @@ export const OrderHistoryScreen = () => {
           >
             <Text style={styles.actionButtonText}>View Details</Text>
           </TouchableOpacity>
-          {/* Orders are paid immediately, so cancellation is not available */}
-          {/* Payment is now processed during checkout, so no Pay Now button */}
+          {/* Show Pay Now button if payment is pending and shipping fee is set */}
+          {order.paymentStatus === 'PENDING' && 
+           order.finalShipping !== null && 
+           order.finalShipping !== undefined && (
+            <TouchableOpacity
+              style={[styles.actionButton, styles.payButton]}
+              onPress={() => handlePay(order)}
+              disabled={payMutation.isPending}
+            >
+              {payMutation.isPending && payingOrderId === order._id ? (
+                <ActivityIndicator size="small" color={colors.textWhite} />
+              ) : (
+                <>
+                  <Ionicons name="card-outline" size={16} color={colors.textWhite} style={{ marginRight: 4 }} />
+                  <Text style={[styles.actionButtonText, styles.payButtonText]}>Pay Now</Text>
+                </>
+              )}
+            </TouchableOpacity>
+          )}
+          {/* Show Paid button when order is paid */}
           {order.paymentStatus === 'PAID' && (
-            <View style={[styles.actionButton, styles.processingButton]}>
-              <Text style={[styles.actionButtonText, styles.processingButtonText]}>Paid</Text>
+            <View style={[styles.actionButton, styles.paidButton]}>
+              <Ionicons name="checkmark-circle" size={16} color={colors.success} style={{ marginRight: 4 }} />
+              <Text style={[styles.actionButtonText, styles.paidButtonText]}>Paid</Text>
             </View>
           )}
         </View>
@@ -525,10 +587,25 @@ const styles = StyleSheet.create({
     color: colors.error,
   },
   payButton: {
-    backgroundColor: colors.successLight || colors.primaryLight,
+    backgroundColor: colors.primary,
   },
   payButtonText: {
-    color: colors.success || colors.primary,
+    color: colors.textWhite,
+  },
+  paidButton: {
+    backgroundColor: colors.success + '20',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  paidButtonText: {
+    color: colors.success,
+  },
+  processingButton: {
+    backgroundColor: colors.success + '20',
+  },
+  processingButtonText: {
+    color: colors.success,
   },
   emptyContainer: {
     flex: 1,

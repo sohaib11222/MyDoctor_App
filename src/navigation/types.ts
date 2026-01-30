@@ -47,6 +47,9 @@ export type AppointmentsStackParamList = {
   DoctorAppointmentsGrid: undefined;
   MyPatients: undefined;
   VideoCall: { appointmentId: string };
+  RequestReschedule: { appointmentId: string };
+  PatientRescheduleRequests: undefined;
+  DoctorRescheduleRequests: undefined;
 };
 
 export type ChatStackParamList = {
@@ -117,6 +120,7 @@ export type MoreStackParamList = {
   Invoices: undefined;
   Documents?: undefined;
   Subscription?: undefined;
+  PayoutSettings?: undefined;
   Announcements?: undefined;
   ChangePassword: undefined;
   TwoFactorAuth?: undefined;
@@ -124,5 +128,7 @@ export type MoreStackParamList = {
   OrderHistory?: undefined;
   OrderDetails?: { orderId: string };
   AdminOrders?: undefined;
+  PatientRescheduleRequests?: undefined;
+  DoctorRescheduleRequests?: undefined;
 };
 

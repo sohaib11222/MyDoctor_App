@@ -14,6 +14,7 @@ import {
   Dimensions,
   ActivityIndicator,
   RefreshControl,
+  Modal,
 } from 'react-native';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
@@ -25,6 +26,10 @@ import { useAuth } from '../../contexts/AuthContext';
 import * as chatApi from '../../services/chat';
 import { API_BASE_URL } from '../../config/api';
 import Toast from 'react-native-toast-message';
+import * as ImagePicker from 'expo-image-picker';
+import * as DocumentPicker from 'expo-document-picker';
+import * as uploadApi from '../../services/upload';
+import { copyImageToCacheUri, deleteCacheFiles } from '../../utils/imageUpload';
 
 const { width } = Dimensions.get('window');
 
@@ -171,6 +176,16 @@ export const AdminChatScreen = () => {
   const [selectedAdmin, setSelectedAdmin] = useState<Admin | null>(null);
   const [newMessage, setNewMessage] = useState('');
   const [refreshing, setRefreshing] = useState(false);
+  const [uploadingFiles, setUploadingFiles] = useState(false);
+  const [imagePreview, setImagePreview] = useState<{
+    visible: boolean;
+    images: string[];
+    currentIndex: number;
+  }>({
+    visible: false,
+    images: [],
+    currentIndex: 0,
+  });
   const flatListRef = useRef<FlatList>(null);
 
   // Fetch all conversations to get admin-doctor conversations
@@ -239,12 +254,70 @@ export const AdminChatScreen = () => {
     
     return messagesResponse.data.messages.map((msg: chatApi.ChatMessage): Message => {
       const isDoctor = msg.senderId._id === user?.id;
+      
+      // Determine message type based on attachments
+      let messageType: 'text' | 'audio' | 'image' | 'file' | 'location' | 'video' = 'text';
+      let images: string[] | undefined;
+      let fileInfo: { name: string; type: string } | undefined;
+      
+      if (msg.attachments && msg.attachments.length > 0) {
+        // Handle both string URLs and object attachments
+        const firstAttachment = msg.attachments[0];
+        const isObjectAttachment = typeof firstAttachment === 'object' && firstAttachment !== null;
+        
+        if (isObjectAttachment) {
+          // New format: attachment is an object { type, url, name, size }
+          const attObj = firstAttachment as any;
+          const attType = attObj.type || 'file';
+          const attUrl = attObj.url || '';
+          
+          if (attType === 'image') {
+            messageType = 'image';
+            images = msg.attachments.map((att: any) => {
+              const url = typeof att === 'object' ? att.url : att;
+              return normalizeImageUrl(url) || url;
+            }).filter(Boolean) as string[];
+          } else {
+            messageType = 'file';
+            fileInfo = {
+              name: attObj.name || 'file',
+              type: (attObj.name || '').split('.').pop()?.toLowerCase() || 'file',
+            };
+          }
+        } else {
+          // Old format: attachment is a string URL
+          const imageExtensions = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'svg'];
+          const attachmentUrl = String(firstAttachment);
+          const fileExtension = attachmentUrl.split('.').pop()?.toLowerCase() || '';
+          const isImage = imageExtensions.includes(fileExtension);
+          
+          if (isImage) {
+            messageType = 'image';
+            images = msg.attachments.map((att: any) => {
+              const url = typeof att === 'object' ? att.url : String(att);
+              return normalizeImageUrl(url) || url;
+            }).filter(Boolean) as string[];
+          } else {
+            messageType = 'file';
+            // Extract filename from URL
+            const fileName = attachmentUrl.split('/').pop() || 'file';
+            fileInfo = {
+              name: fileName,
+              type: fileExtension,
+            };
+          }
+        }
+      }
+      
       return {
         id: msg._id,
         sender: isDoctor ? 'doctor' : 'admin',
         message: msg.message || '',
         time: formatTime(msg.createdAt),
         date: new Date(msg.createdAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }),
+        type: messageType,
+        images,
+        fileInfo,
       };
     });
   }, [messagesResponse, user?.id]);
@@ -368,8 +441,216 @@ export const AdminChatScreen = () => {
     }
   }, [messages.length]);
 
+  // Handle image picker
+  const handleImagePicker = async () => {
+    const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permissionResult.granted) {
+      Toast.show({
+        type: 'error',
+        text1: 'Permission Required',
+        text2: 'Please grant permission to access your photos.',
+      });
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsMultipleSelection: true,
+      quality: 0.8,
+    });
+
+    if (!result.canceled && result.assets.length > 0) {
+      const maxSize = 50 * 1024 * 1024; // 50MB
+      const oversizedFiles = result.assets.filter(asset => asset.fileSize && asset.fileSize > maxSize);
+      
+      if (oversizedFiles.length > 0) {
+        Toast.show({
+          type: 'error',
+          text1: 'File Too Large',
+          text2: 'Some files are too large. Maximum size is 50MB.',
+        });
+        return;
+      }
+
+        setUploadingFiles(true);
+        const uploadedAttachments: Array<{ type: string; url: string; name: string; size?: number }> = [];
+
+        try {
+          for (const asset of result.assets) {
+            const fileName = asset.fileName || `image-${Date.now()}.jpg`;
+            const ext = fileName.split('.').pop()?.toLowerCase() || 'jpg';
+            const mime = ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : 'image/jpeg';
+            const name = fileName.includes('.') ? fileName : `image-${Date.now()}.${ext}`;
+            
+            let tempFileUri: string | null = null;
+            try {
+              tempFileUri = await copyImageToCacheUri(asset.uri, 0, mime);
+              const uploadResponse = await uploadApi.uploadChatFile({ uri: tempFileUri, mime, name });
+              const fileUrl = uploadResponse?.data?.url || uploadResponse?.url;
+              
+              if (fileUrl) {
+                const baseUrl = API_BASE_URL.replace('/api', '');
+                const normalizedUrl = fileUrl.startsWith('http') ? fileUrl : `${baseUrl}${fileUrl.startsWith('/') ? fileUrl : `/${fileUrl}`}`;
+                uploadedAttachments.push({
+                  type: 'image',
+                  url: normalizedUrl,
+                  name,
+                  size: asset.fileSize,
+                });
+              }
+            } catch (uploadError: any) {
+              console.error('Error uploading image:', uploadError);
+              Toast.show({
+                type: 'error',
+                text1: 'Upload Failed',
+                text2: `Failed to upload ${fileName}`,
+              });
+            } finally {
+              if (tempFileUri) {
+                await deleteCacheFiles([tempFileUri]);
+              }
+            }
+          }
+
+          if (uploadedAttachments.length > 0) {
+            await sendMessageWithAttachments(newMessage.trim() || null, uploadedAttachments);
+            setNewMessage('');
+          }
+      } catch (error: any) {
+        console.error('Error handling images:', error);
+        Toast.show({
+          type: 'error',
+          text1: 'Error',
+          text2: 'Failed to upload files',
+        });
+      } finally {
+        setUploadingFiles(false);
+      }
+    }
+  };
+
+  // Handle document picker
+  const handleDocumentPicker = async () => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: '*/*',
+        multiple: true,
+        copyToCacheDirectory: true,
+      });
+
+      if (!result.canceled && result.assets.length > 0) {
+        const maxSize = 50 * 1024 * 1024; // 50MB
+        const oversizedFiles = result.assets.filter(asset => asset.size && asset.size > maxSize);
+        
+        if (oversizedFiles.length > 0) {
+          Toast.show({
+            type: 'error',
+            text1: 'File Too Large',
+            text2: 'Some files are too large. Maximum size is 50MB.',
+          });
+          return;
+        }
+
+        setUploadingFiles(true);
+        const uploadedAttachments: Array<{ type: string; url: string; name: string; size?: number }> = [];
+
+        try {
+          for (const asset of result.assets) {
+            try {
+              const fileName = asset.name || `file-${Date.now()}`;
+              const mime = asset.mimeType || 'application/octet-stream';
+              const ext = fileName.split('.').pop()?.toLowerCase() || '';
+              const isImage = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'svg'].includes(ext);
+              
+              const uploadResponse = await uploadApi.uploadChatFile({ 
+                uri: asset.uri, 
+                mime, 
+                name: fileName 
+              });
+              const fileUrl = uploadResponse?.data?.url || uploadResponse?.url;
+              
+              if (fileUrl) {
+                const baseUrl = API_BASE_URL.replace('/api', '');
+                const normalizedUrl = fileUrl.startsWith('http') ? fileUrl : `${baseUrl}${fileUrl.startsWith('/') ? fileUrl : `/${fileUrl}`}`;
+                uploadedAttachments.push({
+                  type: isImage ? 'image' : 'file',
+                  url: normalizedUrl,
+                  name: fileName,
+                  size: asset.size,
+                });
+              }
+            } catch (uploadError: any) {
+              console.error('Error uploading file:', uploadError);
+              Toast.show({
+                type: 'error',
+                text1: 'Upload Failed',
+                text2: `Failed to upload ${asset.name}`,
+              });
+            }
+          }
+
+          if (uploadedAttachments.length > 0) {
+            await sendMessageWithAttachments(newMessage.trim() || null, uploadedAttachments);
+            setNewMessage('');
+          }
+        } catch (error: any) {
+          console.error('Error handling files:', error);
+          Toast.show({
+            type: 'error',
+            text1: 'Error',
+            text2: 'Failed to upload files',
+          });
+        } finally {
+          setUploadingFiles(false);
+        }
+      }
+    } catch (error: any) {
+      console.error('Error picking document:', error);
+      Toast.show({
+        type: 'error',
+        text1: 'Error',
+        text2: 'Failed to pick document',
+      });
+    }
+  };
+
+  // Send message with attachments
+  const sendMessageWithAttachments = async (
+    messageText: string | null, 
+    attachments: Array<{ type: string; url: string; name: string; size?: number }>
+  ) => {
+    if (!user || !selectedAdmin) throw new Error('User or admin not found');
+    
+    const adminId = selectedAdmin.adminId || routeAdminId;
+    if (!adminId) throw new Error('Admin ID not found');
+
+    try {
+      await chatApi.sendMessageToAdmin(
+        user.id || '',
+        adminId,
+        messageText || '',
+        attachments
+      );
+
+      await queryClient.invalidateQueries({ queryKey: ['adminConversationMessages', selectedAdmin.conversationId] });
+      await queryClient.invalidateQueries({ queryKey: ['conversations'] });
+      await queryClient.invalidateQueries({ queryKey: ['unreadCount'] });
+      setTimeout(() => {
+        flatListRef.current?.scrollToEnd({ animated: true });
+      }, 100);
+    } catch (error: any) {
+      const errorMessage = (error as any)?.response?.data?.message || (error as any)?.message || 'Failed to send message';
+      Toast.show({
+        type: 'error',
+        text1: 'Error',
+        text2: errorMessage,
+      });
+      throw error;
+    }
+  };
+
   const handleSendMessage = () => {
-    if (newMessage.trim() && selectedAdmin && !sendMessageMutation.isPending) {
+    if (newMessage.trim() && selectedAdmin && !sendMessageMutation.isPending && !uploadingFiles) {
       sendMessageMutation.mutate(newMessage.trim());
     }
   };
@@ -413,9 +694,80 @@ export const AdminChatScreen = () => {
     return (
       <View style={[styles.messageContainer, isDoctor ? styles.sentMessage : styles.receivedMessage]}>
         <View style={[styles.messageBubble, isDoctor ? styles.sentBubble : styles.receivedBubble]}>
-          <Text style={[styles.messageText, isDoctor && styles.sentMessageText]}>
-            {item.message}
-          </Text>
+          {item.type === 'text' && item.message && (
+            <Text style={[styles.messageText, isDoctor && styles.sentMessageText]}>
+              {item.message}
+            </Text>
+          )}
+          {item.type === 'image' && item.images && item.images.length > 0 && (
+            <View style={styles.imageContainer}>
+              {item.images.slice(0, 3).map((img, idx) => {
+                const imageUrl = normalizeImageUrl(img);
+                return imageUrl ? (
+                  <TouchableOpacity
+                    key={idx}
+                    activeOpacity={0.9}
+                    onPress={() => {
+                      setImagePreview({
+                        visible: true,
+                        images: item.images || [],
+                        currentIndex: idx,
+                      });
+                    }}
+                  >
+                    <Image source={{ uri: imageUrl }} style={styles.messageImage} />
+                  </TouchableOpacity>
+                ) : null;
+              })}
+              {item.images.length > 3 && (
+                <TouchableOpacity
+                  activeOpacity={0.9}
+                  onPress={() => {
+                    setImagePreview({
+                      visible: true,
+                      images: item.images || [],
+                      currentIndex: 3,
+                    });
+                  }}
+                >
+                  <View style={[styles.messageImage, styles.moreImagesOverlay]}>
+                    <Text style={styles.moreImagesText}>+{item.images.length - 3}</Text>
+                  </View>
+                </TouchableOpacity>
+              )}
+            </View>
+          )}
+            {item.type === 'file' && item.fileInfo && (
+              <TouchableOpacity 
+                style={styles.fileMessage}
+                activeOpacity={0.7}
+                onPress={() => {
+                  // Open file URL
+                  const attachment = messagesResponse?.data?.messages?.find(m => m._id === item.id)?.attachments?.[0];
+                  if (attachment) {
+                    // Handle both string URL and object format
+                    const fileUrl = typeof attachment === 'object' && attachment !== null 
+                      ? (attachment as any).url 
+                      : String(attachment);
+                    const normalizedUrl = normalizeImageUrl(fileUrl);
+                    if (normalizedUrl) {
+                      console.log('Open file:', normalizedUrl);
+                    }
+                  }
+                }}
+              >
+                <Ionicons name="document-text-outline" size={24} color={isDoctor ? colors.textWhite : colors.primary} />
+                <View style={styles.fileInfo}>
+                  <Text style={[styles.fileName, isDoctor && styles.sentMessageText]} numberOfLines={1}>
+                    {item.fileInfo.name}
+                  </Text>
+                  <Text style={[styles.fileType, isDoctor && styles.sentMessageTime]}>
+                    {item.fileInfo.type.toUpperCase()}
+                  </Text>
+                </View>
+                <Ionicons name="download-outline" size={20} color={isDoctor ? colors.textWhite : colors.primary} />
+              </TouchableOpacity>
+            )}
           <Text style={[styles.messageTime, isDoctor && styles.sentMessageTime]}>
             {item.time}
           </Text>
@@ -467,7 +819,11 @@ export const AdminChatScreen = () => {
         {/* Chat Area */}
         <View style={styles.chatArea}>
           {selectedAdmin ? (
-            <>
+            <KeyboardAvoidingView
+              style={styles.keyboardView}
+              behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+              keyboardVerticalOffset={Platform.OS === 'ios' ? 100 : 20}
+            >
               {/* Chat Header */}
               <View style={styles.chatHeader}>
                 <View style={styles.chatHeaderInfo}>
@@ -485,36 +841,52 @@ export const AdminChatScreen = () => {
               </View>
 
               {/* Messages List */}
-              {messagesLoading ? (
-                <View style={styles.loadingContainer}>
-                  <ActivityIndicator size="large" color={colors.primary} />
-                  <Text style={styles.loadingText}>Loading messages...</Text>
-                </View>
-              ) : (
-                <FlatList
-                  ref={flatListRef}
-                  data={messages}
-                  renderItem={renderMessage}
-                  keyExtractor={(item) => item.id}
-                  contentContainerStyle={styles.messagesList}
-                  showsVerticalScrollIndicator={false}
-                  keyboardShouldPersistTaps="handled"
-                  refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />}
-                  ListEmptyComponent={
-                    <View style={styles.emptyContainer}>
-                      <Text style={styles.emptyText}>No messages yet</Text>
-                      <Text style={styles.emptySubtext}>Start the conversation</Text>
-                    </View>
-                  }
-                />
-              )}
+              <View style={styles.messagesContainer}>
+                {messagesLoading ? (
+                  <View style={styles.loadingContainer}>
+                    <ActivityIndicator size="large" color={colors.primary} />
+                    <Text style={styles.loadingText}>Loading messages...</Text>
+                  </View>
+                ) : (
+                  <FlatList
+                    ref={flatListRef}
+                    data={messages}
+                    renderItem={renderMessage}
+                    keyExtractor={(item) => item.id}
+                    contentContainerStyle={styles.messagesList}
+                    showsVerticalScrollIndicator={false}
+                    keyboardShouldPersistTaps="handled"
+                    keyboardDismissMode="interactive"
+                    refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />}
+                    ListEmptyComponent={
+                      <View style={styles.emptyContainer}>
+                        <Text style={styles.emptyText}>No messages yet</Text>
+                        <Text style={styles.emptySubtext}>Start the conversation</Text>
+                      </View>
+                    }
+                  />
+                )}
+              </View>
 
               {/* Message Input */}
-              <KeyboardAvoidingView
-                behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-                keyboardVerticalOffset={Platform.OS === 'ios' ? 100 : 0}
-              >
+              <View style={styles.inputWrapper}>
                 <View style={styles.inputContainer}>
+                  <TouchableOpacity 
+                    style={[styles.inputIcon, uploadingFiles && styles.inputIconDisabled]} 
+                    activeOpacity={0.7}
+                    onPress={handleImagePicker}
+                    disabled={uploadingFiles}
+                  >
+                    <Ionicons name="image-outline" size={20} color={uploadingFiles ? colors.textLight : colors.textSecondary} />
+                  </TouchableOpacity>
+                  <TouchableOpacity 
+                    style={[styles.inputIcon, uploadingFiles && styles.inputIconDisabled]} 
+                    activeOpacity={0.7}
+                    onPress={handleDocumentPicker}
+                    disabled={uploadingFiles}
+                  >
+                    <Ionicons name="attach-outline" size={20} color={uploadingFiles ? colors.textLight : colors.textSecondary} />
+                  </TouchableOpacity>
                   <TextInput
                     style={styles.input}
                     placeholder="Type your message..."
@@ -522,14 +894,15 @@ export const AdminChatScreen = () => {
                     value={newMessage}
                     onChangeText={setNewMessage}
                     multiline
+                    editable={!uploadingFiles}
                   />
                   <TouchableOpacity
-                    style={[styles.sendButton, (!newMessage.trim() || sendMessageMutation.isPending) && styles.sendButtonDisabled]}
+                    style={[styles.sendButton, ((!newMessage.trim()) || sendMessageMutation.isPending || uploadingFiles) && styles.sendButtonDisabled]}
                     onPress={handleSendMessage}
-                    disabled={!newMessage.trim() || sendMessageMutation.isPending}
+                    disabled={!newMessage.trim() || sendMessageMutation.isPending || uploadingFiles}
                     activeOpacity={0.7}
                   >
-                    {sendMessageMutation.isPending ? (
+                    {(sendMessageMutation.isPending || uploadingFiles) ? (
                       <ActivityIndicator size="small" color={colors.textWhite} />
                     ) : (
                       <Ionicons
@@ -540,8 +913,8 @@ export const AdminChatScreen = () => {
                     )}
                   </TouchableOpacity>
                 </View>
-              </KeyboardAvoidingView>
-            </>
+              </View>
+            </KeyboardAvoidingView>
           ) : (
             <View style={styles.placeholder}>
               <Ionicons name="chatbubbles-outline" size={64} color={colors.textLight} />
@@ -553,6 +926,57 @@ export const AdminChatScreen = () => {
           )}
         </View>
       </View>
+
+      {/* Image Preview Modal */}
+      <Modal
+        visible={imagePreview.visible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setImagePreview({ visible: false, images: [], currentIndex: 0 })}
+      >
+        <View style={styles.imagePreviewContainer}>
+          <TouchableOpacity
+            style={styles.imagePreviewCloseButton}
+            onPress={() => setImagePreview({ visible: false, images: [], currentIndex: 0 })}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="close" size={28} color={colors.textWhite} />
+          </TouchableOpacity>
+          
+          <ScrollView
+            horizontal
+            pagingEnabled
+            showsHorizontalScrollIndicator={false}
+            contentOffset={{ x: imagePreview.currentIndex * width, y: 0 }}
+            style={styles.imagePreviewScrollView}
+            onMomentumScrollEnd={(event) => {
+              const newIndex = Math.round(event.nativeEvent.contentOffset.x / width);
+              setImagePreview(prev => ({ ...prev, currentIndex: newIndex }));
+            }}
+          >
+            {imagePreview.images.map((img, idx) => {
+              const imageUrl = normalizeImageUrl(img);
+              return imageUrl ? (
+                <View key={idx} style={styles.imagePreviewItem}>
+                  <Image
+                    source={{ uri: imageUrl }}
+                    style={styles.imagePreviewImage}
+                    resizeMode="contain"
+                  />
+                </View>
+              ) : null;
+            })}
+          </ScrollView>
+
+          {imagePreview.images.length > 1 && (
+            <View style={styles.imagePreviewIndicator}>
+              <Text style={styles.imagePreviewIndicatorText}>
+                {imagePreview.currentIndex + 1} / {imagePreview.images.length}
+              </Text>
+            </View>
+          )}
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 };
@@ -676,6 +1100,12 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.backgroundLight,
   },
+  keyboardView: {
+    flex: 1,
+  },
+  messagesContainer: {
+    flex: 1,
+  },
   chatHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -759,13 +1189,22 @@ const styles = StyleSheet.create({
   sentMessageTime: {
     color: 'rgba(255, 255, 255, 0.7)',
   },
+  inputWrapper: {
+    backgroundColor: colors.background,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     padding: 16,
-    backgroundColor: colors.background,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
+  },
+  inputIcon: {
+    padding: 8,
+    marginRight: 4,
+  },
+  inputIconDisabled: {
+    opacity: 0.5,
   },
   input: {
     flex: 1,
@@ -777,6 +1216,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: colors.text,
     maxHeight: 100,
+    marginHorizontal: 4,
   },
   sendButton: {
     width: 40,
@@ -789,6 +1229,47 @@ const styles = StyleSheet.create({
   },
   sendButtonDisabled: {
     backgroundColor: colors.backgroundLight,
+  },
+  imageContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 4,
+    marginBottom: 4,
+  },
+  messageImage: {
+    width: 80,
+    height: 80,
+    borderRadius: 8,
+  },
+  moreImagesOverlay: {
+    backgroundColor: colors.textSecondary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  moreImagesText: {
+    color: colors.textWhite,
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  fileMessage: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 4,
+  },
+  fileInfo: {
+    flex: 1,
+  },
+  fileName: {
+    fontSize: 14,
+    color: colors.text,
+    fontWeight: '500',
+    marginBottom: 2,
+  },
+  fileType: {
+    fontSize: 11,
+    color: colors.textSecondary,
+    textTransform: 'uppercase',
   },
   placeholder: {
     flex: 1,
@@ -835,6 +1316,51 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: colors.textSecondary,
     textAlign: 'center',
+  },
+  imagePreviewContainer: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.95)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  imagePreviewCloseButton: {
+    position: 'absolute',
+    top: Platform.OS === 'ios' ? 50 : 40,
+    right: 20,
+    zIndex: 10,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  imagePreviewScrollView: {
+    flex: 1,
+  },
+  imagePreviewItem: {
+    width: width,
+    height: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  imagePreviewImage: {
+    width: width,
+    height: '100%',
+  },
+  imagePreviewIndicator: {
+    position: 'absolute',
+    bottom: Platform.OS === 'ios' ? 50 : 30,
+    alignSelf: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+  },
+  imagePreviewIndicatorText: {
+    color: colors.textWhite,
+    fontSize: 14,
+    fontWeight: '500',
   },
 });
 

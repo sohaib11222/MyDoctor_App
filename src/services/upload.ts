@@ -1,5 +1,6 @@
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as FileSystem from 'expo-file-system/legacy';
 import { API_BASE_URL } from '../config/api';
 import api from './api';
 
@@ -8,67 +9,180 @@ const STORAGE_KEYS = {
   USER: 'user',
 };
 
+export interface ProductImageFile {
+  uri: string;
+  mime: string;
+  name: string;
+}
+
+export const uploadPharmacyLogo = async (file: ProductImageFile): Promise<any> => {
+  try {
+    const token = await AsyncStorage.getItem(STORAGE_KEYS.TOKEN);
+
+    if (!API_BASE_URL) {
+      throw new Error('API_BASE_URL is not defined. Please check config/api.ts');
+    }
+
+    const url = `${API_BASE_URL}/upload/pharmacy`;
+    if (__DEV__) {
+      console.log('🔗 Pharmacy Logo Upload (XMLHttpRequest):', url);
+    }
+
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', url);
+      xhr.timeout = 60000;
+
+      if (token) {
+        xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+      }
+
+      xhr.onload = () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          try {
+            const bodyData = JSON.parse(xhr.responseText);
+            resolve(bodyData);
+          } catch (e) {
+            reject(new Error(`Failed to parse response: ${xhr.responseText}`));
+          }
+        } else {
+          let errData: any = { message: `Upload failed: HTTP ${xhr.status}` };
+          try {
+            const parsed = JSON.parse(xhr.responseText);
+            if (parsed?.message) errData = parsed;
+          } catch {
+            if (xhr.responseText) errData = { message: xhr.responseText };
+          }
+          const err = new Error(errData?.message || `Upload failed: HTTP ${xhr.status}`) as any;
+          err.response = { status: xhr.status, data: errData };
+          reject(err);
+        }
+      };
+
+      xhr.onerror = () => {
+        const err = new Error('Network error during upload') as any;
+        err.code = 'ERR_NETWORK';
+        reject(err);
+      };
+
+      xhr.ontimeout = () => {
+        reject(new Error('Upload timeout after 60 seconds'));
+      };
+
+      const formData = new FormData();
+      formData.append('file', {
+        uri: file.uri,
+        type: file.mime,
+        name: file.name,
+      } as any);
+
+      xhr.send(formData as any);
+    });
+  } catch (error: any) {
+    if (__DEV__) {
+      console.error('❌ Pharmacy logo upload error:', {
+        message: error?.message,
+        code: error?.code,
+        response: error?.response?.data,
+        status: error?.response?.status,
+      });
+    }
+    throw error;
+  }
+};
+
 /**
  * Upload doctor verification documents
  * @param {FormData} formData - FormData containing files (field name should be 'files')
  * @returns {Promise<any>} Upload response with file URLs
  */
-export const uploadDoctorDocs = async (formData: FormData): Promise<any> => {
+/**
+ * Upload doctor verification documents using XMLHttpRequest.
+ * Works with Expo without requiring native modules.
+ * Uses file:// URIs from copyImageToCacheUri (already copied from content://).
+ *
+ * @param files - Array of { uri, mime, name } (use file:// URIs from copyImageToCacheUri)
+ * @returns {Promise<any>} Upload response
+ */
+export const uploadDoctorDocs = async (files: ProductImageFile[]): Promise<any> => {
   try {
-    // Get token for authentication
     const token = await AsyncStorage.getItem(STORAGE_KEYS.TOKEN);
-    
-    // Ensure API_BASE_URL is defined
+
     if (!API_BASE_URL) {
       throw new Error('API_BASE_URL is not defined. Please check config/api.ts');
     }
-    
-    // Log API_BASE_URL for debugging
+
+    const url = `${API_BASE_URL}/upload/doctor-docs`;
     if (__DEV__) {
-      console.log('🔗 API_BASE_URL:', API_BASE_URL);
-      console.log('🔗 Full upload URL:', `${API_BASE_URL}/upload/doctor-docs`);
-      console.log('🔗 API_BASE_URL type:', typeof API_BASE_URL);
-    }
-    
-    // Use raw axios instance with baseURL set correctly
-    // React Native FormData needs special handling
-    const response = await axios.post(
-      '/upload/doctor-docs', // Relative URL - baseURL will be prepended
-      formData,
-      {
-        baseURL: API_BASE_URL, // Set baseURL explicitly - ensure it's a string
-        headers: {
-          'Authorization': token ? `Bearer ${token}` : '',
-          // DO NOT set Content-Type - let axios set it with boundary automatically
-          // This is critical for React Native FormData
-        },
-        timeout: 60000, // 60 seconds for file uploads
-        // React Native FormData requires transformRequest to be undefined or return data as-is
-        transformRequest: (data) => {
-          // Return FormData as-is - don't transform it
-          return data;
-        },
+      console.log('🔗 Doctor Docs Upload (XMLHttpRequest):', url);
+      console.log('🔗 Files count:', files.length);
+      try {
+        const pre = await fetch(`${API_BASE_URL}/health`);
+        console.log('🔗 Preflight GET /health:', pre.ok ? 'OK' : pre.status);
+      } catch (e: any) {
+        console.warn('🔗 Preflight GET /health failed:', e?.message);
       }
-    );
-    
-    // Return response.data (not using interceptor, so we need to extract manually)
-    return response.data || response;
+    }
+
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', url);
+      xhr.timeout = 60000;
+
+      if (token) {
+        xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+      }
+
+      xhr.onload = () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          try {
+            const bodyData = JSON.parse(xhr.responseText);
+            resolve(bodyData);
+          } catch (e) {
+            reject(new Error(`Failed to parse response: ${xhr.responseText}`));
+          }
+        } else {
+          let errData: any = { message: `Upload failed: HTTP ${xhr.status}` };
+          try {
+            const parsed = JSON.parse(xhr.responseText);
+            if (parsed?.message) errData = parsed;
+          } catch {
+            if (xhr.responseText) errData = { message: xhr.responseText };
+          }
+          const err = new Error(errData?.message || `Upload failed: HTTP ${xhr.status}`) as any;
+          err.response = { status: xhr.status, data: errData };
+          reject(err);
+        }
+      };
+
+      xhr.onerror = () => {
+        const err = new Error('Network error during upload') as any;
+        err.code = 'ERR_NETWORK';
+        reject(err);
+      };
+
+      xhr.ontimeout = () => {
+        reject(new Error('Upload timeout after 60 seconds'));
+      };
+
+      const formData = new FormData();
+      files.forEach((f) => {
+        formData.append('files', {
+          uri: f.uri,
+          type: f.mime,
+          name: f.name,
+        } as any);
+      });
+
+      xhr.send(formData as any);
+    });
   } catch (error: any) {
-    // Log detailed error for debugging
     if (__DEV__) {
-      console.error('❌ Upload error details:', {
+      console.error('❌ Doctor docs upload error:', {
         message: error?.message,
         code: error?.code,
         response: error?.response?.data,
         status: error?.response?.status,
-        statusText: error?.response?.statusText,
-        config: {
-          url: error?.config?.url,
-          method: error?.config?.method,
-          baseURL: error?.config?.baseURL,
-          timeout: error?.config?.timeout,
-          headers: error?.config?.headers,
-        },
       });
     }
     throw error;
@@ -81,31 +195,82 @@ export const uploadDoctorDocs = async (formData: FormData): Promise<any> => {
  * @returns {Promise<any>} Upload response with file URL
  */
 /**
- * Upload profile image
- * Uses the api service which handles authentication and FormData automatically
- * @param {FormData} formData - FormData containing file (field name should be 'file')
+ * Upload profile image using XMLHttpRequest.
+ * Works with Expo without requiring native modules.
+ * Uses file:// URI from copyImageToCacheUri (already copied from content://).
+ *
+ * @param file - { uri, mime, name } (use file:// URI from copyImageToCacheUri)
  * @returns {Promise<any>} Upload response with file URL
  */
-export const uploadProfileImage = async (formData: FormData): Promise<any> => {
+export const uploadProfileImage = async (file: ProductImageFile): Promise<any> => {
   try {
-    // Ensure API_BASE_URL is defined
+    const token = await AsyncStorage.getItem(STORAGE_KEYS.TOKEN);
+
     if (!API_BASE_URL) {
       throw new Error('API_BASE_URL is not defined. Please check config/api.ts');
     }
-    
-    // Log API_BASE_URL for debugging
+
+    const url = `${API_BASE_URL}/upload/profile`;
     if (__DEV__) {
-      console.log('🔗 Profile Image Upload - API_BASE_URL:', API_BASE_URL);
-      console.log('🔗 Full upload URL:', `${API_BASE_URL}/upload/profile`);
+      console.log('🔗 Profile Image Upload (XMLHttpRequest):', url);
+      try {
+        const pre = await fetch(`${API_BASE_URL}/health`);
+        console.log('🔗 Preflight GET /health:', pre.ok ? 'OK' : pre.status);
+      } catch (e: any) {
+        console.warn('🔗 Preflight GET /health failed:', e?.message);
+      }
     }
-    
-    // Use the api service which handles authentication automatically
-    // The api service already has interceptors for token management
-    // For FormData, the api service will handle Content-Type automatically (removes it to let axios set boundary)
-    const response = await api.post('/upload/profile', formData);
-    
-    // The api interceptor returns response.data, so we get the data directly
-    return response;
+
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', url);
+      xhr.timeout = 60000;
+
+      if (token) {
+        xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+      }
+
+      xhr.onload = () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          try {
+            const bodyData = JSON.parse(xhr.responseText);
+            resolve(bodyData);
+          } catch (e) {
+            reject(new Error(`Failed to parse response: ${xhr.responseText}`));
+          }
+        } else {
+          let errData: any = { message: `Upload failed: HTTP ${xhr.status}` };
+          try {
+            const parsed = JSON.parse(xhr.responseText);
+            if (parsed?.message) errData = parsed;
+          } catch {
+            if (xhr.responseText) errData = { message: xhr.responseText };
+          }
+          const err = new Error(errData?.message || `Upload failed: HTTP ${xhr.status}`) as any;
+          err.response = { status: xhr.status, data: errData };
+          reject(err);
+        }
+      };
+
+      xhr.onerror = () => {
+        const err = new Error('Network error during upload') as any;
+        err.code = 'ERR_NETWORK';
+        reject(err);
+      };
+
+      xhr.ontimeout = () => {
+        reject(new Error('Upload timeout after 60 seconds'));
+      };
+
+      const formData = new FormData();
+      formData.append('file', {
+        uri: file.uri,
+        type: file.mime,
+        name: file.name,
+      } as any);
+
+      xhr.send(formData as any);
+    });
   } catch (error: any) {
     if (__DEV__) {
       console.error('❌ Profile image upload error:', {
@@ -113,7 +278,6 @@ export const uploadProfileImage = async (formData: FormData): Promise<any> => {
         code: error?.code,
         response: error?.response?.data,
         status: error?.response?.status,
-        statusText: error?.response?.statusText,
       });
     }
     throw error;
@@ -121,49 +285,182 @@ export const uploadProfileImage = async (formData: FormData): Promise<any> => {
 };
 
 /**
- * Upload product images (multiple files)
- * @param {FormData} formData - FormData containing files (field name should be 'files')
+ * Upload product images (multiple files) using XMLHttpRequest.
+ * Works with Expo without requiring native modules.
+ * Uses file:// URIs from copyImageToCacheUri (already copied from content://).
+ *
+ * @param files - Array of { uri, mime, name } (use file:// URIs from copyImageToCacheUri)
  * @returns {Promise<string[]>} Array of uploaded image URLs
  */
-export const uploadProductImages = async (formData: FormData): Promise<string[]> => {
+export const uploadProductImages = async (files: ProductImageFile[]): Promise<string[]> => {
   try {
-    // Ensure API_BASE_URL is defined
+    const token = await AsyncStorage.getItem(STORAGE_KEYS.TOKEN);
+
     if (!API_BASE_URL) {
       throw new Error('API_BASE_URL is not defined. Please check config/api.ts');
     }
-    
-    // Log API_BASE_URL for debugging
+
+    const url = `${API_BASE_URL}/upload/product`;
     if (__DEV__) {
-      console.log('🔗 Product Images Upload - API_BASE_URL:', API_BASE_URL);
-      console.log('🔗 Full upload URL:', `${API_BASE_URL}/upload/product`);
+      console.log('🔗 Product Images Upload (XMLHttpRequest):', url);
+      console.log('🔗 Files count:', files.length);
+      try {
+        const pre = await fetch(`${API_BASE_URL}/health`);
+        console.log('🔗 Preflight GET /health:', pre.ok ? 'OK' : pre.status);
+      } catch (e: any) {
+        console.warn('🔗 Preflight GET /health failed:', e?.message, '- device may not reach API.');
+      }
     }
-    
-    // Use the api service which handles authentication automatically
-    const response = await api.post('/upload/product', formData);
-    
-    // The api interceptor returns response.data
-    // Response structure: { success: true, data: { urls: [...] } } or { success: true, data: { url: "..." } }
-    const responseData = response?.data || response;
-    
-    // Handle multiple URLs
-    if (responseData?.urls && Array.isArray(responseData.urls)) {
-      return responseData.urls;
-    }
-    
-    // Fallback: if single url returned
-    if (responseData?.url) {
-      return [responseData.url];
-    }
-    
-    // If response.data is an array directly
-    if (Array.isArray(responseData)) {
-      return responseData;
-    }
-    
-    return [];
+
+    // Use XMLHttpRequest for multipart upload (more reliable than fetch/axios in RN)
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', url);
+      xhr.timeout = 60000;
+
+      if (token) {
+        xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+      }
+
+      xhr.onload = () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          try {
+            const bodyData = JSON.parse(xhr.responseText);
+            const data = bodyData?.data ?? bodyData;
+
+            if (data?.urls && Array.isArray(data.urls)) {
+              resolve(data.urls);
+            } else if (data?.url) {
+              resolve([data.url]);
+            } else if (Array.isArray(data)) {
+              resolve(data);
+            } else {
+              resolve([]);
+            }
+          } catch (e) {
+            reject(new Error(`Failed to parse response: ${xhr.responseText}`));
+          }
+        } else {
+          let errData: any = { message: `Upload failed: HTTP ${xhr.status}` };
+          try {
+            const parsed = JSON.parse(xhr.responseText);
+            if (parsed?.message) errData = parsed;
+          } catch {
+            if (xhr.responseText) errData = { message: xhr.responseText };
+          }
+          const err = new Error(errData?.message || `Upload failed: HTTP ${xhr.status}`) as any;
+          err.response = { status: xhr.status, data: errData };
+          reject(err);
+        }
+      };
+
+      xhr.onerror = () => {
+        const err = new Error('Network error during upload') as any;
+        err.code = 'ERR_NETWORK';
+        reject(err);
+      };
+
+      xhr.ontimeout = () => {
+        reject(new Error('Upload timeout after 60 seconds'));
+      };
+
+      // Build FormData with file:// URIs
+      const formData = new FormData();
+      files.forEach((f) => {
+        // Use file:// URI directly - XMLHttpRequest handles it better than axios
+        formData.append('files', {
+          uri: f.uri,
+          type: f.mime,
+          name: f.name,
+        } as any);
+      });
+
+      xhr.send(formData as any);
+    });
   } catch (error: any) {
     if (__DEV__) {
       console.error('❌ Product images upload error:', {
+        message: error?.message,
+        code: error?.code,
+        response: error?.response?.data,
+        status: error?.response?.status,
+      });
+    }
+    throw error;
+  }
+};
+
+/**
+ * Upload chat file (supports all file types including images)
+ * @param file - { uri, mime, name } (use file:// URI from copyImageToCacheUri)
+ * @returns {Promise<any>} Upload response with file URL
+ */
+export const uploadChatFile = async (file: ProductImageFile): Promise<any> => {
+  try {
+    const token = await AsyncStorage.getItem(STORAGE_KEYS.TOKEN);
+
+    if (!API_BASE_URL) {
+      throw new Error('API_BASE_URL is not defined. Please check config/api.ts');
+    }
+
+    const url = `${API_BASE_URL}/upload/chat`;
+    if (__DEV__) {
+      console.log('🔗 Chat File Upload (XMLHttpRequest):', url);
+    }
+
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', url);
+      xhr.timeout = 60000;
+
+      if (token) {
+        xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+      }
+
+      xhr.onload = () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          try {
+            const bodyData = JSON.parse(xhr.responseText);
+            resolve(bodyData);
+          } catch (e) {
+            reject(new Error(`Failed to parse response: ${xhr.responseText}`));
+          }
+        } else {
+          let errData: any = { message: `Upload failed: HTTP ${xhr.status}` };
+          try {
+            const parsed = JSON.parse(xhr.responseText);
+            if (parsed?.message) errData = parsed;
+          } catch {
+            if (xhr.responseText) errData = { message: xhr.responseText };
+          }
+          const err = new Error(errData?.message || `Upload failed: HTTP ${xhr.status}`) as any;
+          err.response = { status: xhr.status, data: errData };
+          reject(err);
+        }
+      };
+
+      xhr.onerror = () => {
+        const err = new Error('Network error during upload') as any;
+        err.code = 'ERR_NETWORK';
+        reject(err);
+      };
+
+      xhr.ontimeout = () => {
+        reject(new Error('Upload timeout after 60 seconds'));
+      };
+
+      const formData = new FormData();
+      formData.append('file', {
+        uri: file.uri,
+        type: file.mime,
+        name: file.name,
+      } as any);
+
+      xhr.send(formData as any);
+    });
+  } catch (error: any) {
+    if (__DEV__) {
+      console.error('❌ Chat file upload error:', {
         message: error?.message,
         code: error?.code,
         response: error?.response?.data,

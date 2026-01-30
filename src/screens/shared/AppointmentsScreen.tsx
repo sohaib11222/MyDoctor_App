@@ -566,16 +566,12 @@ const AppointmentsScreen = () => {
           style={styles.attendBtn} 
           activeOpacity={0.8}
           onPress={() => {
-            if (isDoctor) {
-              navigation.navigate('StartAppointment', { appointmentId: item.appointmentId });
-            } else {
-              // Patient action - navigate to details
-              navigation.navigate('AppointmentDetails', { appointmentId: item.appointmentId });
-            }
+            // Both doctor and patient navigate to appointment details
+            navigation.navigate('AppointmentDetails', { appointmentId: item.appointmentId });
           }}
         >
-          <Ionicons name={isDoctor ? "play-outline" : "calendar-outline"} size={16} color={colors.textWhite} />
-          <Text style={styles.attendBtnText}>{isDoctor ? 'Start Session' : 'Attend'}</Text>
+          <Ionicons name="eye-outline" size={16} color={colors.textWhite} />
+          <Text style={styles.attendBtnText}>View Details</Text>
         </TouchableOpacity>
       )}
       </TouchableOpacity>

@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
+import { useQuery } from '@tanstack/react-query';
 import { AppointmentsStackParamList } from '../../navigation/types';
 import { useAuth } from '../../contexts/AuthContext';
 import { useVideoCall } from '../../hooks/useVideoCall';
@@ -18,6 +19,7 @@ import { colors } from '../../constants/colors';
 import { Ionicons } from '@expo/vector-icons';
 import Toast from 'react-native-toast-message';
 import * as videoApi from '../../services/video';
+import * as appointmentApi from '../../services/appointment';
 import {
   StreamVideo,
   StreamCall,
@@ -34,10 +36,90 @@ const VideoCallScreen = () => {
   const { user } = useAuth();
   const { appointmentId } = route.params;
   
+  // Fetch appointment details to check time window
+  const { data: appointmentData, isLoading: appointmentLoading } = useQuery({
+    queryKey: ['appointment', appointmentId],
+    queryFn: () => appointmentApi.getAppointmentById(appointmentId),
+    enabled: !!appointmentId,
+  });
+
+  const appointment = appointmentData?.data || appointmentData;
+  
   const { client, call, loading, error, startCall, endCall } = useVideoCall(appointmentId);
   const [callStarted, setCallStarted] = useState(false);
   const startCallRef = useRef(false);
   const [isCallActive, setIsCallActive] = useState(false);
+  const [timeValidationError, setTimeValidationError] = useState<string | null>(null);
+  const errorShownRef = useRef(false); // Track if error has been shown
+
+  // Check appointment time window before starting call
+  const checkAppointmentTime = () => {
+    if (!appointment) return { isValid: false, message: 'Appointment not found' };
+
+    const now = new Date();
+    const appointmentStartDateTime = new Date(appointment.appointmentDate);
+    const [startHours, startMinutes] = appointment.appointmentTime.split(':').map(Number);
+    appointmentStartDateTime.setHours(startHours, startMinutes, 0, 0);
+    
+    // Calculate end time
+    const duration = appointment.appointmentDuration || 30;
+    let appointmentEndDateTime: Date;
+    if (appointment.appointmentEndTime) {
+      const [endHours, endMinutes] = appointment.appointmentEndTime.split(':').map(Number);
+      appointmentEndDateTime = new Date(appointment.appointmentDate);
+      appointmentEndDateTime.setHours(endHours, endMinutes, 0, 0);
+    } else {
+      appointmentEndDateTime = new Date(appointmentStartDateTime.getTime() + duration * 60 * 1000);
+    }
+
+    if (now < appointmentStartDateTime) {
+      return {
+        isValid: false,
+        message: `Video call is only available during the scheduled appointment time. Your appointment starts at ${appointmentStartDateTime.toLocaleString()}.`,
+        startTime: appointmentStartDateTime,
+        endTime: appointmentEndDateTime
+      };
+    }
+
+    if (now > appointmentEndDateTime) {
+      return {
+        isValid: false,
+        message: `The appointment time has passed. The appointment window was from ${appointmentStartDateTime.toLocaleString()} to ${appointmentEndDateTime.toLocaleString()}. Video call is no longer available.`,
+        startTime: appointmentStartDateTime,
+        endTime: appointmentEndDateTime
+      };
+    }
+
+    return {
+      isValid: true,
+      message: null,
+      startTime: appointmentStartDateTime,
+      endTime: appointmentEndDateTime
+    };
+  };
+
+  // Check appointment time and show error only once (as Alert, not toast)
+  useEffect(() => {
+    if (!appointment || appointmentLoading || errorShownRef.current) return;
+
+    const timeCheck = checkAppointmentTime();
+    if (!timeCheck.isValid) {
+      errorShownRef.current = true;
+      setTimeValidationError(timeCheck.message);
+      // Show single Alert instead of toast
+      Alert.alert(
+        'Appointment Time Issue',
+        timeCheck.message,
+        [
+          {
+            text: 'OK',
+            onPress: () => navigation.goBack(),
+          },
+        ],
+        { cancelable: false }
+      );
+    }
+  }, [appointment, appointmentLoading, navigation]);
 
   useEffect(() => {
     console.log('🔍 [VideoCallScreen] useEffect triggered:', {
@@ -48,10 +130,39 @@ const VideoCallScreen = () => {
       hasClient: !!client,
       hasCall: !!call,
       startCallRef: startCallRef.current,
+      timeValidationError,
+      appointmentLoading,
     });
 
+    // Don't start call if time validation failed
+    if (timeValidationError) {
+      return;
+    }
+
     // Start call immediately when component mounts (if not already started)
-    if (appointmentId && user && !startCallRef.current && !loading) {
+    if (appointmentId && user && !startCallRef.current && !loading && !appointmentLoading) {
+      // Check appointment time before starting
+      const timeCheck = checkAppointmentTime();
+      if (!timeCheck.isValid) {
+        if (!errorShownRef.current) {
+          errorShownRef.current = true;
+          setTimeValidationError(timeCheck.message);
+          // Show single Alert instead of toast
+          Alert.alert(
+            'Appointment Time Issue',
+            timeCheck.message,
+            [
+              {
+                text: 'OK',
+                onPress: () => navigation.goBack(),
+              },
+            ],
+            { cancelable: false }
+          );
+        }
+        return;
+      }
+
       console.log('🚀 [VideoCallScreen] Starting video call...');
       startCallRef.current = true;
       setCallStarted(true);
@@ -71,8 +182,26 @@ const VideoCallScreen = () => {
           
           let errorMessage = err.response?.data?.message || err.message || 'Failed to start video call';
           
-          // Check if it's a permission error
-          if (err.message?.includes('permission') || err.message?.includes('Permission')) {
+          // Check if it's a time-related error - show as Alert only, not toast
+          if (errorMessage.includes('appointment time') || errorMessage.includes('time has passed') || errorMessage.includes('not arrived yet') || errorMessage.includes('time window')) {
+            if (!errorShownRef.current) {
+              errorShownRef.current = true;
+              setTimeValidationError(errorMessage);
+              // Show single Alert instead of toast
+              Alert.alert(
+                'Appointment Time Issue',
+                errorMessage,
+                [
+                  {
+                    text: 'OK',
+                    onPress: () => navigation.goBack(),
+                  },
+                ],
+                { cancelable: false }
+              );
+            }
+          } else if (err.message?.includes('permission') || err.message?.includes('Permission')) {
+            // Check if it's a permission error
             errorMessage = err.message;
             Toast.show({
               type: 'error',
@@ -92,7 +221,7 @@ const VideoCallScreen = () => {
           setCallStarted(false);
         });
     }
-  }, [appointmentId, user, loading, startCall]);
+  }, [appointmentId, user, loading, startCall, appointment, appointmentLoading, timeValidationError, navigation]);
 
   const handleEndCall = async () => {
     try {
@@ -157,12 +286,32 @@ const VideoCallScreen = () => {
     }
   }, [isCallActive, call]);
 
-  if (loading || !client || !call) {
+  // Show error alert if time validation failed
+  if (timeValidationError) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.errorContainer}>
+          <Ionicons name="alert-circle" size={64} color={colors.error} />
+          <Text style={styles.errorTitle}>Appointment Time Issue</Text>
+          <Text style={styles.errorText}>{timeValidationError}</Text>
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => navigation.goBack()}
+          >
+            <Text style={styles.backButtonText}>Back to Appointments</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (loading || appointmentLoading || !client || !call) {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={colors.primary} />
           <Text style={styles.loadingText}>Initializing video call...</Text>
+          {appointmentLoading && <Text style={styles.loadingSubtext}>Loading appointment details...</Text>}
           {!client && <Text style={styles.loadingSubtext}>Connecting to server...</Text>}
           {!call && <Text style={styles.loadingSubtext}>Creating call session...</Text>}
         </View>

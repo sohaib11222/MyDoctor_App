@@ -16,6 +16,7 @@ import { colors } from '../../constants/colors';
 import { Ionicons } from '@expo/vector-icons';
 import * as userApi from '../../services/user';
 import Toast from 'react-native-toast-message';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 type PendingApprovalScreenNavigationProp = NativeStackNavigationProp<AuthStackParamList>;
 
@@ -24,6 +25,28 @@ export const PendingApprovalScreen = () => {
   const { user, logout, updateUser } = useAuth();
   const [checkingStatus, setCheckingStatus] = useState(true);
   const [currentStatus, setCurrentStatus] = useState<string | null>(null);
+
+  // Prevent going back to verification upload if documents are submitted
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('beforeRemove', async (e) => {
+      // Check if documents have been submitted
+      const documentsSubmitted = await AsyncStorage.getItem('doctor_documents_submitted');
+      
+      // Allow navigation if user is going to update documents (explicit navigation)
+      if (e.data.action.type === 'NAVIGATE' && e.data.action.payload?.name === 'DoctorVerificationUpload') {
+        return; // Allow navigation to upload screen
+      }
+      // Allow navigation to login (logout)
+      if (e.data.action.type === 'NAVIGATE' && e.data.action.payload?.name === 'Login') {
+        return; // Allow navigation to login (logout)
+      }
+      // Prevent going back (POP/GO_BACK) if documents are submitted
+      if (documentsSubmitted === 'true' && (e.data.action.type === 'POP' || e.data.action.type === 'GO_BACK')) {
+        e.preventDefault();
+      }
+    });
+    return unsubscribe;
+  }, [navigation]);
 
   useEffect(() => {
     const checkApprovalStatus = async () => {
@@ -34,6 +57,8 @@ export const PendingApprovalScreen = () => {
           setCurrentStatus(status || 'PENDING');
 
           if (status === 'APPROVED') {
+            // Clear documents submitted flag since user is approved
+            await AsyncStorage.removeItem('doctor_documents_submitted');
             // Doctor is approved, redirect to dashboard
             Toast.show({
               type: 'success',
@@ -80,6 +105,8 @@ export const PendingApprovalScreen = () => {
               });
 
               if (userStatus === 'APPROVED') {
+                // Clear documents submitted flag since user is approved
+                await AsyncStorage.removeItem('doctor_documents_submitted');
                 Toast.show({
                   type: 'success',
                   text1: 'Account Approved',
@@ -155,6 +182,8 @@ export const PendingApprovalScreen = () => {
           });
 
           if (userStatus === 'APPROVED') {
+            // Clear documents submitted flag since user is approved
+            await AsyncStorage.removeItem('doctor_documents_submitted');
             Toast.show({
               type: 'success',
               text1: 'Account Approved',
@@ -202,7 +231,9 @@ export const PendingApprovalScreen = () => {
     }
   };
 
-  const handleUpdateDocuments = () => {
+  const handleUpdateDocuments = async () => {
+    // Clear the flag so user can upload new documents
+    await AsyncStorage.removeItem('doctor_documents_submitted');
     navigation.navigate('DoctorVerificationUpload');
   };
 

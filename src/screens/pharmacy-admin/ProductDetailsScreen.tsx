@@ -89,12 +89,13 @@ export const ProductDetailsScreen = () => {
   });
 
   // Extract product data
-  const product = productResponse?.data || productResponse?.data?.data || null;
+  const product: productApi.Product | null = productResponse?.data || null;
 
   // Delete product mutation
   const deleteProductMutation = useMutation({
     mutationFn: (id: string) => productApi.deleteProduct(id),
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['pharmacy-products'] });
       queryClient.invalidateQueries({ queryKey: ['doctor-products'] });
       queryClient.invalidateQueries({ queryKey: ['product', productId] });
       Toast.show({
@@ -137,8 +138,8 @@ export const ProductDetailsScreen = () => {
 
   // Normalize product images
   const productImages = product?.images
-    ?.map((url) => normalizeImageUrl(url))
-    .filter((url): url is string => url !== null) || [];
+    ?.map((url: string) => normalizeImageUrl(url))
+    .filter((url: string | null): url is string => url !== null) || [];
 
   // Loading state
   if (isLoading) {
@@ -299,7 +300,7 @@ export const ProductDetailsScreen = () => {
             <View style={styles.tagsSection}>
               <Text style={styles.sectionTitle}>Tags</Text>
               <View style={styles.tagsContainer}>
-                {product.tags.map((tag, index) => (
+                {product.tags.map((tag: string, index: number) => (
                   <View key={index} style={styles.tag}>
                     <Text style={styles.tagText}>{tag}</Text>
                   </View>

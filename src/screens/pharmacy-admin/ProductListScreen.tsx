@@ -49,23 +49,33 @@ export const ProductListScreen = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
   const [refreshing, setRefreshing] = useState(false);
+  const isPharmacyUser = user?.role === 'pharmacy' || (user as any)?.role === 'PHARMACY';
 
   // Get user ID (support both _id and id)
   const userId = user?._id || user?.id;
 
-  // Fetch doctor's pharmacy (if exists)
   const { data: doctorPharmacyResponse } = useQuery({
     queryKey: ['doctor-pharmacy', userId],
     queryFn: () => pharmacyApi.listPharmacies({ ownerId: userId!, limit: 1 }),
-    enabled: !!userId,
+    enabled: !!userId && !isPharmacyUser,
   });
 
-  const doctorPharmacy = useMemo(() => {
+  const { data: myPharmacyResponse } = useQuery({
+    queryKey: ['my-pharmacy', userId],
+    queryFn: () => pharmacyApi.getMyPharmacy(),
+    enabled: !!userId && isPharmacyUser,
+  });
+
+  const myPharmacy = useMemo(() => {
+    if (isPharmacyUser) {
+      const responseData = (myPharmacyResponse as any)?.data || myPharmacyResponse;
+      return responseData?.data || responseData || null;
+    }
     if (!doctorPharmacyResponse) return null;
     const responseData = doctorPharmacyResponse.data || doctorPharmacyResponse;
     const pharmacies = Array.isArray(responseData) ? responseData : (responseData.pharmacies || []);
     return pharmacies.length > 0 ? pharmacies[0] : null;
-  }, [doctorPharmacyResponse]);
+  }, [doctorPharmacyResponse, myPharmacyResponse, isPharmacyUser]);
 
   // Build query params - show only this doctor's products
   const queryParams = useMemo(() => {
@@ -80,7 +90,7 @@ export const ProductListScreen = () => {
 
   // Fetch products for this doctor
   const { data: productsResponse, isLoading, error, refetch } = useQuery({
-    queryKey: ['doctor-products', queryParams],
+    queryKey: ['pharmacy-products', queryParams],
     queryFn: () => productApi.listProducts(queryParams),
     enabled: !!userId,
   });
@@ -103,6 +113,7 @@ export const ProductListScreen = () => {
   const deleteProductMutation = useMutation({
     mutationFn: (productId: string) => productApi.deleteProduct(productId),
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['pharmacy-products'] });
       queryClient.invalidateQueries({ queryKey: ['doctor-products'] });
       Toast.show({
         type: 'success',
@@ -122,15 +133,15 @@ export const ProductListScreen = () => {
 
   const handleAddProduct = () => {
     // Check if doctor has a pharmacy
-    if (!doctorPharmacy) {
+    if (!myPharmacy) {
       // Navigate to PharmacyManagementScreen in MoreStack
       // Use parent navigator to navigate across tabs
       const parentNavigation = navigation.getParent();
       if (parentNavigation) {
-        parentNavigation.navigate('More', { screen: 'PharmacyManagement' });
+        parentNavigation.navigate('More', { screen: isPharmacyUser ? 'PharmacyProfile' : 'PharmacyManagement' });
       } else {
         // Fallback: try direct navigation
-        (navigation as any).navigate('More', { screen: 'PharmacyManagement' });
+        (navigation as any).navigate('More', { screen: isPharmacyUser ? 'PharmacyProfile' : 'PharmacyManagement' });
       }
       Toast.show({
         type: 'info',
@@ -280,13 +291,13 @@ export const ProductListScreen = () => {
   return (
     <SafeAreaView style={styles.container}>
       {/* Pharmacy Info Banner */}
-      {doctorPharmacy ? (
+      {myPharmacy ? (
         <View style={styles.pharmacyBanner}>
           <Ionicons name="storefront" size={20} color={colors.success} />
           <View style={styles.pharmacyInfo}>
-            <Text style={styles.pharmacyName}>Your Pharmacy: {doctorPharmacy.name}</Text>
-            {doctorPharmacy.address?.city && (
-              <Text style={styles.pharmacyLocation}>{doctorPharmacy.address.city}</Text>
+            <Text style={styles.pharmacyName}>Your Pharmacy: {myPharmacy.name}</Text>
+            {(myPharmacy as any).address?.city && (
+              <Text style={styles.pharmacyLocation}>{(myPharmacy as any).address.city}</Text>
             )}
           </View>
         </View>
@@ -339,7 +350,7 @@ export const ProductListScreen = () => {
           style={[styles.addButton, { backgroundColor: colors.primary }]}
           onPress={handleAddProduct}
           activeOpacity={0.7}
-          disabled={!doctorPharmacy}
+          disabled={!myPharmacy}
         >
           <Ionicons name="add" size={20} color={colors.textWhite} />
           <Text style={styles.addButtonText}>Add Product</Text>

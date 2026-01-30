@@ -24,6 +24,7 @@ export const colors = {
   warning: '#F59E0B',
   warningLight: '#FEF3C7',
   info: '#3B82F6',
+  infoLight: '#DBEAFE',
   
   // Border colors
   border: '#E5E7EB',

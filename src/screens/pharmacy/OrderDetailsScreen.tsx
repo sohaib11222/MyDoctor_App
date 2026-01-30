@@ -179,8 +179,16 @@ export const OrderDetailsScreen = () => {
   const pharmacy = typeof order.pharmacyId === 'object' ? order.pharmacyId : null;
   const pharmacyName = pharmacy?.name || 'Pharmacy';
   const shippingAddress = order.shippingAddress;
-  // Payment is now processed during checkout, so no payment button needed
-  const showPaymentButton = false;
+  
+  // Show payment button if order is pending and shipping fee is set
+  const showPaymentButton = order.paymentStatus === 'PENDING' && 
+                            order.finalShipping !== null && 
+                            order.finalShipping !== undefined;
+  
+  // Calculate amount to pay
+  const amountToPay = order.requiresPaymentUpdate && order.initialTotal
+    ? order.total - order.initialTotal
+    : order.total;
 
   return (
     <SafeAreaView style={styles.container}>
@@ -340,17 +348,17 @@ export const OrderDetailsScreen = () => {
         {/* Payment Button */}
         {showPaymentButton && (
           <View style={styles.paymentSection}>
-            <Text style={styles.paymentSectionTitle}>Payment Method</Text>
-            <View style={styles.paymentMethods}>
-              <TouchableOpacity
-                style={[styles.paymentMethod, paymentMethod === 'DUMMY' && styles.paymentMethodActive]}
-                onPress={() => setPaymentMethod('DUMMY')}
-              >
-                <Text style={styles.paymentMethodText}>Test Payment</Text>
-              </TouchableOpacity>
+            <View style={styles.paymentInfoContainer}>
+              <Text style={styles.paymentInfoTitle}>Total Amount to Pay</Text>
+              <Text style={styles.paymentInfoAmount}>{formatCurrency(order.total)}</Text>
+              {order.initialTotal && order.initialTotal !== order.total && (
+                <Text style={styles.paymentInfoNote}>
+                  Updated from initial estimate of {formatCurrency(order.initialTotal)}
+                </Text>
+              )}
             </View>
             <Button
-              title={payMutation.isLoading ? 'Processing...' : `Pay ${formatCurrency(amountToPay)}`}
+              title={payMutation.isLoading ? 'Processing Payment...' : `Pay Now - ${formatCurrency(order.total)}`}
               onPress={handlePay}
               disabled={payMutation.isLoading}
               loading={payMutation.isLoading}
@@ -596,33 +604,33 @@ const styles = StyleSheet.create({
     marginTop: 8,
     marginBottom: 16,
   },
-  paymentSectionTitle: {
-    fontSize: 18,
+  paymentInfoContainer: {
+    backgroundColor: colors.primaryLight || colors.backgroundLight,
+    padding: 16,
+    borderRadius: 8,
+    marginBottom: 16,
+    alignItems: 'center',
+  },
+  paymentInfoTitle: {
+    fontSize: 14,
     fontWeight: '600',
     color: colors.text,
-    marginBottom: 12,
-  },
-  paymentMethods: {
-    marginBottom: 16,
-  },
-  paymentMethod: {
-    padding: 12,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: colors.border,
     marginBottom: 8,
   },
-  paymentMethodActive: {
-    borderColor: colors.primary,
-    backgroundColor: colors.primaryLight,
+  paymentInfoAmount: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: colors.primary,
+    marginBottom: 4,
   },
-  paymentMethodText: {
-    fontSize: 14,
-    color: colors.text,
-    fontWeight: '500',
+  paymentInfoNote: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    marginTop: 4,
+    textAlign: 'center',
   },
   payButton: {
-    marginTop: 8,
+    width: '100%',
   },
 });
 

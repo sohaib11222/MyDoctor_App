@@ -96,7 +96,8 @@ export const SubscriptionPlansScreen = () => {
   const currentPlanId = useMemo(() => {
     if (!currentSubscriptionData) return null;
     const plan = currentSubscriptionData.subscriptionPlan;
-    return typeof plan === 'object' ? plan._id : plan;
+    if (!plan) return null;
+    return typeof plan === 'object' && plan !== null ? plan._id : plan;
   }, [currentSubscriptionData]);
 
   // Check if plan is current

@@ -201,7 +201,53 @@ export const PharmacyOrdersScreen = () => {
     },
   });
 
-  // Shipping fee update removed - payment is processed during checkout
+  // Shipping fee update mutation
+  const [showShippingModal, setShowShippingModal] = useState(false);
+  const [shippingFee, setShippingFee] = useState('');
+  const [selectedOrderForShipping, setSelectedOrderForShipping] = useState<orderApi.Order | null>(null);
+
+  const updateShippingFeeMutation = useMutation({
+    mutationFn: ({ orderId, shippingFee }: { orderId: string; shippingFee: number }) =>
+      orderApi.updateShippingFee(orderId, shippingFee),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['pharmacyOrders'] });
+      queryClient.invalidateQueries({ queryKey: ['order'] });
+      setShowShippingModal(false);
+      setShippingFee('');
+      setSelectedOrderForShipping(null);
+      Toast.show({
+        type: 'success',
+        text1: 'Shipping fee updated successfully!',
+      });
+    },
+    onError: (err: any) => {
+      Toast.show({
+        type: 'error',
+        text1: 'Failed to update shipping fee',
+        text2: err.message || 'Please try again.',
+      });
+    },
+  });
+
+  const handleOpenShippingModal = useCallback((order: orderApi.Order) => {
+    setSelectedOrderForShipping(order);
+    setShippingFee((order.shipping?.toString() || order.initialShipping?.toString() || '0'));
+    setShowShippingModal(true);
+  }, []);
+
+  const handleUpdateShippingFee = useCallback(() => {
+    if (!selectedOrderForShipping) return;
+    const fee = parseFloat(shippingFee);
+    if (isNaN(fee) || fee < 0) {
+      Toast.show({
+        type: 'error',
+        text1: 'Invalid shipping fee',
+        text2: 'Please enter a valid non-negative number',
+      });
+      return;
+    }
+    updateShippingFeeMutation.mutate({ orderId: selectedOrderForShipping._id, shippingFee: fee });
+  }, [selectedOrderForShipping, shippingFee, updateShippingFeeMutation]);
 
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -256,6 +302,18 @@ export const PharmacyOrdersScreen = () => {
           </View>
           <Text style={styles.orderTotal}>{formatCurrency(order.total)}</Text>
         </View>
+        {/* Shipping Fee Status Alert */}
+        {order.paymentStatus === 'PENDING' && (
+          <View style={styles.shippingAlert}>
+            <Ionicons name="information-circle-outline" size={16} color={colors.warning} />
+            <Text style={styles.shippingAlertText}>
+              {order.finalShipping !== null && order.finalShipping !== undefined
+                ? 'Shipping fee set. Waiting for patient payment.'
+                : 'Please set shipping fee for this order.'}
+            </Text>
+          </View>
+        )}
+
         <View style={styles.orderFooter}>
           <TouchableOpacity
             style={styles.actionButton}
@@ -266,6 +324,20 @@ export const PharmacyOrdersScreen = () => {
           >
             <Text style={styles.actionButtonText}>View Details</Text>
           </TouchableOpacity>
+          {/* Allow setting shipping fee if order is not paid yet */}
+          {order.paymentStatus === 'PENDING' && (
+            <TouchableOpacity
+              style={[styles.actionButton, styles.shippingButton]}
+              onPress={() => handleOpenShippingModal(order)}
+              disabled={updateShippingFeeMutation.isPending}
+            >
+              <Text style={[styles.actionButtonText, styles.shippingButtonText]}>
+                {order.finalShipping !== null && order.finalShipping !== undefined
+                  ? 'Update Shipping'
+                  : 'Set Shipping Fee'}
+              </Text>
+            </TouchableOpacity>
+          )}
           {/* Only allow updating status if order is paid */}
           {order.paymentStatus === 'PAID' && 
            ['PENDING', 'CONFIRMED', 'PROCESSING', 'SHIPPED'].includes(order.status) && (
@@ -440,7 +512,106 @@ export const PharmacyOrdersScreen = () => {
         </View>
       </Modal>
 
-      {/* Shipping fee modal removed - payment is processed during checkout */}
+      {/* Shipping Fee Update Modal */}
+      <Modal
+        visible={showShippingModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => {
+          setShowShippingModal(false);
+          setShippingFee('');
+          setSelectedOrderForShipping(null);
+        }}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Set Shipping Fee</Text>
+              <TouchableOpacity
+                onPress={() => {
+                  setShowShippingModal(false);
+                  setShippingFee('');
+                  setSelectedOrderForShipping(null);
+                }}
+              >
+                <Ionicons name="close" size={24} color={colors.text} />
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={styles.modalBody}>
+              {selectedOrderForShipping && (
+                <>
+                  <Text style={styles.modalOrderNumber}>
+                    Order #{selectedOrderForShipping.orderNumber}
+                  </Text>
+                  <Text style={styles.modalLabel}>Set the final shipping fee:</Text>
+                  
+                  <View style={styles.shippingInfoContainer}>
+                    <Text style={styles.shippingInfoLabel}>Current Shipping Fee:</Text>
+                    <Text style={styles.shippingInfoValue}>
+                      {formatCurrency(selectedOrderForShipping.shipping || selectedOrderForShipping.initialShipping || 0)}
+                    </Text>
+                    {selectedOrderForShipping.initialShipping != null && 
+                     selectedOrderForShipping.initialShipping !== selectedOrderForShipping.shipping && (
+                      <Text style={styles.shippingInfoNote}>
+                        Initial estimate: {formatCurrency(selectedOrderForShipping.initialShipping)}
+                      </Text>
+                    )}
+                  </View>
+
+                  <View style={styles.shippingInputContainer}>
+                    <Text style={styles.modalLabel}>New Shipping Fee:</Text>
+                    <TextInput
+                      style={styles.shippingInput}
+                      placeholder="Enter shipping fee"
+                      placeholderTextColor={colors.textLight}
+                      value={shippingFee}
+                      onChangeText={setShippingFee}
+                      keyboardType="decimal-pad"
+                    />
+                    <Text style={styles.modalNote}>
+                      Subtotal: {formatCurrency(selectedOrderForShipping.subtotal || 0)}{' '}
+                      + Tax: {formatCurrency(selectedOrderForShipping.tax || 0)}{' '}
+                      + Shipping = New Total
+                    </Text>
+                  </View>
+
+                  {shippingFee && !isNaN(parseFloat(shippingFee)) && selectedOrderForShipping && (
+                    <View style={styles.newTotalContainer}>
+                      <Text style={styles.newTotalLabel}>New Total:</Text>
+                      <Text style={styles.newTotalValue}>
+                        {formatCurrency((selectedOrderForShipping.subtotal || 0) + (selectedOrderForShipping.tax || 0) + parseFloat(shippingFee))}
+                      </Text>
+                    </View>
+                  )}
+                </>
+              )}
+            </ScrollView>
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.modalButtonCancel]}
+                onPress={() => {
+                  setShowShippingModal(false);
+                  setShippingFee('');
+                  setSelectedOrderForShipping(null);
+                }}
+              >
+                <Text style={styles.modalButtonTextCancel}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.modalButtonConfirm]}
+                onPress={handleUpdateShippingFee}
+                disabled={updateShippingFeeMutation.isPending || !shippingFee || isNaN(parseFloat(shippingFee))}
+              >
+                {updateShippingFeeMutation.isPending ? (
+                  <ActivityIndicator size="small" color={colors.textWhite} />
+                ) : (
+                  <Text style={styles.modalButtonTextConfirm}>Update Shipping Fee</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 };
@@ -720,10 +891,24 @@ const styles = StyleSheet.create({
     color: colors.text,
   },
   shippingButton: {
-    backgroundColor: colors.primaryLight,
+    backgroundColor: colors.warning + '20',
   },
   shippingButtonText: {
-    color: colors.primary,
+    color: colors.warning,
+  },
+  shippingAlert: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.warning + '15',
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 12,
+    gap: 8,
+  },
+  shippingAlertText: {
+    flex: 1,
+    fontSize: 12,
+    color: colors.warning,
   },
   shippingInputContainer: {
     marginTop: 16,
@@ -737,6 +922,48 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
     marginTop: 8,
+  },
+  shippingInfoContainer: {
+    backgroundColor: colors.backgroundLight,
+    padding: 12,
+    borderRadius: 8,
+    marginTop: 12,
+    marginBottom: 8,
+  },
+  shippingInfoLabel: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    marginBottom: 4,
+  },
+  shippingInfoValue: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: colors.text,
+  },
+  shippingInfoNote: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    marginTop: 4,
+    fontStyle: 'italic',
+  },
+  newTotalContainer: {
+    backgroundColor: colors.primaryLight,
+    padding: 12,
+    borderRadius: 8,
+    marginTop: 16,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  newTotalLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.text,
+  },
+  newTotalValue: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: colors.primary,
   },
   modalNote: {
     fontSize: 12,

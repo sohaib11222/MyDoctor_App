@@ -120,13 +120,19 @@ export const ReviewsScreen = () => {
 
   // Extract reviews and pagination
   const reviews = useMemo(() => {
-    if (!reviewsData?.data) return [];
-    return reviewsData.data.reviews || [];
+    if (!reviewsData) return [];
+    // Handle different response structures
+    const data = reviewsData.data || reviewsData;
+    if (!data) return [];
+    return data.reviews || data.data?.reviews || [];
   }, [reviewsData]);
 
   const pagination = useMemo(() => {
-    if (!reviewsData?.data) return { page: 1, limit: 10, total: 0, pages: 1 };
-    return reviewsData.data.pagination || { page: 1, limit: 10, total: 0, pages: 1 };
+    if (!reviewsData) return { page: 1, limit: 10, total: 0, pages: 1 };
+    // Handle different response structures
+    const data = reviewsData.data || reviewsData;
+    if (!data) return { page: 1, limit: 10, total: 0, pages: 1 };
+    return data.pagination || data.data?.pagination || { page: 1, limit: 10, total: 0, pages: 1 };
   }, [reviewsData]);
 
   // Calculate overall rating from reviews
@@ -136,7 +142,17 @@ export const ReviewsScreen = () => {
     return sum / reviews.length;
   }, [reviews]);
 
-  const ratingCount = pagination.total || reviews.length;
+  // Get rating count - prioritize pagination.total, but ensure it's a valid number
+  const ratingCount = useMemo(() => {
+    const total = pagination.total;
+    // If total is a valid number > 0, use it; otherwise use reviews.length
+    if (total && typeof total === 'number' && total > 0) {
+      return total;
+    }
+    // Fallback to reviews.length, but this is only for current page
+    // If we have reviews but total is 0, there might be an issue with the API response
+    return reviews.length;
+  }, [pagination.total, reviews.length]);
 
   const handleRefresh = async () => {
     setRefreshing(true);

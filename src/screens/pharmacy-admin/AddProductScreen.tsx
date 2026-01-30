@@ -27,6 +27,7 @@ import * as pharmacyApi from '../../services/pharmacy';
 import * as uploadApi from '../../services/upload';
 import Toast from 'react-native-toast-message';
 import { API_BASE_URL } from '../../config/api';
+import { copyImageToCacheUri, deleteCacheFiles } from '../../utils/imageUpload';
 
 type AddProductScreenNavigationProp = NativeStackNavigationProp<ProductsStackParamList>;
 
@@ -47,6 +48,7 @@ export const AddProductScreen = () => {
   const navigation = useNavigation<AddProductScreenNavigationProp>();
   const { user } = useAuth();
   const queryClient = useQueryClient();
+  const isPharmacyUser = user?.role === 'pharmacy' || (user as any)?.role === 'PHARMACY';
   const [productName, setProductName] = useState('');
   const [category, setCategory] = useState('');
   const [subCategory, setSubCategory] = useState('');
@@ -81,24 +83,35 @@ export const AddProductScreen = () => {
   // Get user ID
   const userId = user?._id || user?.id;
 
-  // Fetch doctor's pharmacy (if exists)
-  const { data: doctorPharmacyResponse, refetch: refetchPharmacy } = useQuery({
+  const { data: pharmacyListResponse, refetch: refetchPharmacy } = useQuery({
     queryKey: ['doctor-pharmacy', userId],
     queryFn: () => pharmacyApi.listPharmacies({ ownerId: userId!, limit: 1 }),
-    enabled: !!userId,
+    enabled: !!userId && !isPharmacyUser,
   });
 
-  const doctorPharmacy = useMemo(() => {
-    if (!doctorPharmacyResponse) return null;
-    const responseData = doctorPharmacyResponse.data || doctorPharmacyResponse;
-    const pharmacies = Array.isArray(responseData) ? responseData : (responseData.pharmacies || []);
+  const { data: myPharmacyResponse, refetch: refetchMyPharmacy } = useQuery({
+    queryKey: ['my-pharmacy', userId],
+    queryFn: () => pharmacyApi.getMyPharmacy(),
+    enabled: !!userId && isPharmacyUser,
+  });
+
+  const myPharmacy = useMemo(() => {
+    if (isPharmacyUser) {
+      const responseData = (myPharmacyResponse as any)?.data || myPharmacyResponse;
+      return responseData?.data || responseData || null;
+    }
+
+    if (!pharmacyListResponse) return null;
+    const responseData = (pharmacyListResponse as any).data || pharmacyListResponse;
+    const pharmacies = Array.isArray(responseData) ? responseData : responseData.pharmacies || [];
     return pharmacies.length > 0 ? pharmacies[0] : null;
-  }, [doctorPharmacyResponse]);
+  }, [pharmacyListResponse, myPharmacyResponse, isPharmacyUser]);
 
   // Create product mutation
   const createProductMutation = useMutation({
     mutationFn: (data: productApi.CreateProductData) => productApi.createProduct(data),
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['pharmacy-products'] });
       queryClient.invalidateQueries({ queryKey: ['doctor-products'] });
       Toast.show({
         type: 'success',
@@ -137,6 +150,7 @@ export const AddProductScreen = () => {
     mutationFn: (data: pharmacyApi.CreatePharmacyData) => pharmacyApi.createPharmacy(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['doctor-pharmacy'] });
+      queryClient.invalidateQueries({ queryKey: ['my-pharmacy'] });
       Toast.show({
         type: 'success',
         text1: 'Success',
@@ -159,7 +173,11 @@ export const AddProductScreen = () => {
           lng: '',
         },
       });
-      refetchPharmacy();
+      if (isPharmacyUser) {
+        refetchMyPharmacy();
+      } else {
+        refetchPharmacy();
+      }
     },
     onError: (error: any) => {
       const errorMessage = error?.response?.data?.message || error?.message || 'Failed to create pharmacy';
@@ -170,6 +188,18 @@ export const AddProductScreen = () => {
       });
     },
   });
+
+  /**
+   * Derive MIME type and filename for FormData.
+   * Expo returns type as 'image'|'video', but backend expects image/jpeg, image/png, etc.
+   */
+  const getMimeAndName = (asset: ImagePicker.ImagePickerAsset, index: number) => {
+    const baseName = asset.fileName?.trim() || `product-${Date.now()}-${index}`;
+    const hasExt = /\.(jpe?g|png|webp)$/i.test(baseName);
+    const name = hasExt ? baseName : `${baseName.replace(/\.[^/.]+$/, '')}.jpg`;
+    const mime = /\.png$/i.test(name) ? 'image/png' : /\.webp$/i.test(name) ? 'image/webp' : 'image/jpeg';
+    return { mime, name };
+  };
 
   const pickImage = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -248,14 +278,18 @@ export const AddProductScreen = () => {
 
   const handleSubmit = async () => {
     // Check if doctor has a pharmacy
-    if (!doctorPharmacy) {
-      // Navigate to PharmacyManagementScreen in MoreStack
-      const parentNavigation = navigation.getParent();
-      if (parentNavigation) {
-        parentNavigation.navigate('More', { screen: 'PharmacyManagement' });
+    if (!myPharmacy) {
+      if (isPharmacyUser) {
+        setShowPharmacyModal(true);
       } else {
-        // Fallback: try direct navigation
-        (navigation as any).navigate('More', { screen: 'PharmacyManagement' });
+        // Navigate to PharmacyManagementScreen in MoreStack
+        const parentNavigation = navigation.getParent();
+        if (parentNavigation) {
+          parentNavigation.navigate('More', { screen: 'PharmacyManagement' });
+        } else {
+          // Fallback: try direct navigation
+          (navigation as any).navigate('More', { screen: 'PharmacyManagement' });
+        }
       }
       Toast.show({
         type: 'info',
@@ -328,21 +362,24 @@ export const AddProductScreen = () => {
       }
     }
 
+    let tempFileUris: string[] = [];
+
     try {
       let imageUrls = [...productImages];
 
       // Upload new images if files selected
       if (imageFiles.length > 0) {
-        const formData = new FormData();
-        imageFiles.forEach((asset) => {
-          formData.append('files', {
-            uri: asset.uri,
-            type: asset.type || 'image/jpeg',
-            name: asset.fileName || `product-${Date.now()}.jpg`,
-          } as any);
-        });
+        // Copy each image to cache (file://). Android cannot read content://; axios FormData → ERR_NETWORK.
+        const copied = await Promise.all(
+          imageFiles.map(async (asset, index) => {
+            const { mime, name } = getMimeAndName(asset, index);
+            const fileUri = await copyImageToCacheUri(asset.uri, index, mime);
+            tempFileUris.push(fileUri);
+            return { uri: fileUri, mime, name };
+          })
+        );
 
-        const uploadedUrls = await uploadApi.uploadProductImages(formData);
+        const uploadedUrls = await uploadApi.uploadProductImages(copied);
         imageUrls = [...imageUrls, ...uploadedUrls];
       }
 
@@ -395,11 +432,26 @@ export const AddProductScreen = () => {
 
       createProductMutation.mutate(productData);
     } catch (error: any) {
+      if (__DEV__) {
+        console.error('❌ Add product error:', {
+          message: error?.message,
+          code: error?.code,
+          response: error?.response?.data,
+          status: error?.response?.status,
+        });
+      }
+      const isNetworkError = error?.code === 'ERR_NETWORK' || !error?.response;
       Toast.show({
         type: 'error',
         text1: 'Error',
-        text2: error?.message || 'Failed to upload images',
+        text2: isNetworkError
+          ? 'Image upload failed. Check your connection and try again.'
+          : error?.response?.data?.message || error?.message || 'Failed to upload images',
       });
+    } finally {
+      if (tempFileUris.length > 0) {
+        deleteCacheFiles(tempFileUris).catch(() => {});
+      }
     }
   };
 
@@ -407,13 +459,13 @@ export const AddProductScreen = () => {
     <SafeAreaView style={styles.container}>
       <ScrollView showsVerticalScrollIndicator={false}>
         {/* Pharmacy Info Banner */}
-        {doctorPharmacy ? (
+        {myPharmacy ? (
           <View style={styles.pharmacyBanner}>
             <Ionicons name="storefront" size={20} color={colors.success} />
             <View style={styles.pharmacyInfo}>
-              <Text style={styles.pharmacyName}>Your Pharmacy: {doctorPharmacy.name}</Text>
-              {doctorPharmacy.address?.city && (
-                <Text style={styles.pharmacyLocation}>{doctorPharmacy.address.city}</Text>
+              <Text style={styles.pharmacyName}>Your Pharmacy: {myPharmacy.name}</Text>
+              {(myPharmacy as any).address?.city && (
+                <Text style={styles.pharmacyLocation}>{(myPharmacy as any).address.city}</Text>
               )}
             </View>
           </View>
@@ -428,6 +480,11 @@ export const AddProductScreen = () => {
               <TouchableOpacity
                 style={styles.createPharmacyButton}
                 onPress={() => {
+                  if (isPharmacyUser) {
+                    setShowPharmacyModal(true);
+                    return;
+                  }
+
                   // Navigate to PharmacyManagementScreen in MoreStack
                   const parentNavigation = navigation.getParent();
                   if (parentNavigation) {
@@ -595,7 +652,7 @@ export const AddProductScreen = () => {
           title={createProductMutation.isPending ? 'Creating...' : 'Create Product'}
           onPress={handleSubmit}
           loading={createProductMutation.isPending}
-          disabled={!doctorPharmacy || createProductMutation.isPending}
+          disabled={!myPharmacy || createProductMutation.isPending}
         />
       </View>
 

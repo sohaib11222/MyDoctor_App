@@ -78,6 +78,13 @@ export interface DoctorProfile {
     twitter?: string;
     website?: string;
   };
+  convenzionato?: boolean;
+  insuranceCompanies?: Array<string | {
+    _id: string;
+    id?: string;
+    name: string;
+    logo?: string;
+  }>;
   ratingAvg?: number;
   ratingCount?: number;
   isVerified?: boolean;
@@ -182,6 +189,8 @@ export const updateDoctorProfile = async (data: {
     twitter?: string;
     website?: string;
   };
+  convenzionato?: boolean;
+  insuranceCompanies?: string[];
 }): Promise<ProfileResponse> => {
   const response = await api.put('/doctor/profile', data);
   return response;

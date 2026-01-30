@@ -25,6 +25,7 @@ import * as productApi from '../../services/product';
 import * as uploadApi from '../../services/upload';
 import Toast from 'react-native-toast-message';
 import { API_BASE_URL } from '../../config/api';
+import { copyImageToCacheUri, deleteCacheFiles } from '../../utils/imageUpload';
 
 type EditProductScreenNavigationProp = NativeStackNavigationProp<ProductsStackParamList, 'EditProduct'>;
 type EditProductRouteProp = RouteProp<ProductsStackParamList, 'EditProduct'>;
@@ -74,6 +75,7 @@ export const EditProductScreen = () => {
     mutationFn: (data: productApi.UpdateProductData) => productApi.updateProduct(productId, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['product', productId] });
+      queryClient.invalidateQueries({ queryKey: ['pharmacy-products'] });
       queryClient.invalidateQueries({ queryKey: ['doctor-products'] });
       Toast.show({
         type: 'success',
@@ -122,6 +124,14 @@ export const EditProductScreen = () => {
     }
     const baseURL = API_BASE_URL?.replace('/api', '') || 'http://localhost:5000';
     return `${baseURL}${imageUri}`;
+  };
+
+  const getMimeAndName = (asset: ImagePicker.ImagePickerAsset, index: number) => {
+    const baseName = asset.fileName?.trim() || `product-${Date.now()}-${index}`;
+    const hasExt = /\.(jpe?g|png|webp)$/i.test(baseName);
+    const name = hasExt ? baseName : `${baseName.replace(/\.[^/.]+$/, '')}.jpg`;
+    const mime = /\.png$/i.test(name) ? 'image/png' : /\.webp$/i.test(name) ? 'image/webp' : 'image/jpeg';
+    return { mime, name };
   };
 
   const pickImage = async () => {
@@ -223,21 +233,24 @@ export const EditProductScreen = () => {
       }
     }
 
+    let tempFileUris: string[] = [];
+
     try {
       let imageUrls = [...productImages];
 
       // Upload new images if files selected
       if (imageFiles.length > 0) {
-        const formData = new FormData();
-        imageFiles.forEach((asset) => {
-          formData.append('files', {
-            uri: asset.uri,
-            type: asset.type || 'image/jpeg',
-            name: asset.fileName || `product-${Date.now()}.jpg`,
-          } as any);
-        });
+        // Copy each image to cache (file://). Android cannot read content://; axios FormData → ERR_NETWORK.
+        const copied = await Promise.all(
+          imageFiles.map(async (asset, index) => {
+            const { mime, name } = getMimeAndName(asset, index);
+            const fileUri = await copyImageToCacheUri(asset.uri, index, mime);
+            tempFileUris.push(fileUri);
+            return { uri: fileUri, mime, name };
+          })
+        );
 
-        const uploadedUrls = await uploadApi.uploadProductImages(formData);
+        const uploadedUrls = await uploadApi.uploadProductImages(copied);
         imageUrls = [...imageUrls, ...uploadedUrls];
       }
 
@@ -291,11 +304,26 @@ export const EditProductScreen = () => {
 
       updateProductMutation.mutate(productData);
     } catch (error: any) {
+      if (__DEV__) {
+        console.error('❌ Edit product (image upload) error:', {
+          message: error?.message,
+          code: error?.code,
+          response: error?.response?.data,
+          status: error?.response?.status,
+        });
+      }
+      const isNetworkError = error?.code === 'ERR_NETWORK' || !error?.response;
       Toast.show({
         type: 'error',
         text1: 'Error',
-        text2: error?.message || 'Failed to upload images',
+        text2: isNetworkError
+          ? 'Image upload failed. Check your connection and try again.'
+          : error?.response?.data?.message || error?.message || 'Failed to upload images',
       });
+    } finally {
+      if (tempFileUris.length > 0) {
+        deleteCacheFiles(tempFileUris).catch(() => {});
+      }
     }
   };
 
