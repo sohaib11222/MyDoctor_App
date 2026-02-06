@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   SafeAreaView,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -14,73 +15,190 @@ import { OrdersStackParamList } from '../../navigation/types';
 import { Button } from '../../components/common/Button';
 import { colors } from '../../constants/colors';
 import { Ionicons } from '@expo/vector-icons';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import * as orderApi from '../../services/order';
+import { useAuth } from '../../contexts/AuthContext';
+import Toast from 'react-native-toast-message';
+import * as pharmacySubscriptionApi from '../../services/pharmacySubscription';
 
 type OrderStatusScreenNavigationProp = NativeStackNavigationProp<OrdersStackParamList, 'OrderStatus'>;
 type OrderStatusRouteProp = RouteProp<OrdersStackParamList, 'OrderStatus'>;
 
-type OrderStatus = 'Pending' | 'Processing' | 'Shipped' | 'Delivered' | 'Cancelled';
-
-const statusOptions: { value: OrderStatus; label: string; icon: string; color: string }[] = [
-  { value: 'Pending', label: 'Pending', icon: 'time-outline', color: colors.warning },
-  { value: 'Processing', label: 'Processing', icon: 'sync-outline', color: colors.primary },
-  { value: 'Shipped', label: 'Shipped', icon: 'car-outline', color: colors.info },
-  { value: 'Delivered', label: 'Delivered', icon: 'checkmark-circle-outline', color: colors.success },
-  { value: 'Cancelled', label: 'Cancelled', icon: 'close-circle-outline', color: colors.error },
+const statusOptions: { value: orderApi.Order['status']; label: string; icon: string; color: string }[] = [
+  { value: 'PENDING', label: 'Pending', icon: 'time-outline', color: colors.warning },
+  { value: 'CONFIRMED', label: 'Confirmed', icon: 'checkmark-outline', color: colors.primary },
+  { value: 'PROCESSING', label: 'Processing', icon: 'sync-outline', color: colors.primary },
+  { value: 'SHIPPED', label: 'Shipped', icon: 'car-outline', color: colors.info },
+  { value: 'DELIVERED', label: 'Delivered', icon: 'checkmark-circle-outline', color: colors.success },
+  { value: 'CANCELLED', label: 'Cancelled', icon: 'close-circle-outline', color: colors.error },
+  { value: 'REFUNDED', label: 'Refunded', icon: 'cash-outline', color: colors.error },
 ];
 
 export const OrderStatusScreen = () => {
   const navigation = useNavigation<OrderStatusScreenNavigationProp>();
   const route = useRoute<OrderStatusRouteProp>();
   const { orderId } = route.params;
-  const [selectedStatus, setSelectedStatus] = useState<OrderStatus>('Pending');
-  const [loading, setLoading] = useState(false);
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
+  const isPharmacy = user?.role === 'pharmacy' || (user as any)?.role === 'PHARMACY';
+  const isParapharmacy = user?.role === 'parapharmacy' || (user as any)?.role === 'PARAPHARMACY';
+  const isPharmacyUser = isPharmacy || isParapharmacy;
+  const userId = user?._id || user?.id;
 
-  // Mock order data - in real app, fetch based on orderId
-  const order = {
-    id: orderId,
-    orderNumber: 'ORD-2024-001',
-    currentStatus: 'Pending' as OrderStatus,
+  const requiresSubscription = isPharmacy;
+
+  const { data: subscriptionResponse, isLoading: subscriptionLoading } = useQuery({
+    queryKey: ['my-pharmacy-subscription', userId],
+    queryFn: () => pharmacySubscriptionApi.getMyPharmacySubscription(),
+    enabled: !!userId && requiresSubscription,
+    retry: 1,
+  });
+
+  const subscriptionData = React.useMemo(() => {
+    if (!subscriptionResponse) return null;
+    const r: any = subscriptionResponse as any;
+    const data = r?.data ?? r;
+    return data?.data ?? data;
+  }, [subscriptionResponse]);
+
+  const hasActiveSubscription = React.useMemo(() => {
+    if (!requiresSubscription) return true;
+    if (!subscriptionData) return false;
+    if (subscriptionData?.hasActiveSubscription === true) return true;
+    if (subscriptionData?.subscriptionExpiresAt) return new Date(subscriptionData.subscriptionExpiresAt) > new Date();
+    return false;
+  }, [subscriptionData]);
+
+  const goToSubscription = () => {
+    const parent = (navigation as any).getParent?.();
+    if (parent) {
+      parent.navigate('More', { screen: 'PharmacySubscription' });
+    } else {
+      (navigation as any).navigate('More', { screen: 'PharmacySubscription' });
+    }
   };
 
+  const { data: orderResponse, isLoading, error } = useQuery({
+    queryKey: ['order', orderId],
+    queryFn: () => orderApi.getOrderById(orderId),
+    enabled: !!orderId && isPharmacyUser,
+    retry: 1,
+  });
+
+  const order = orderResponse?.data;
+  const [selectedStatus, setSelectedStatus] = useState<orderApi.Order['status']>('PENDING');
+
+  React.useEffect(() => {
+    if (order?.status) {
+      setSelectedStatus(order.status);
+    }
+  }, [order?.status]);
+
+  const updateStatusMutation = useMutation({
+    mutationFn: (status: orderApi.Order['status']) => orderApi.updateOrderStatus(orderId, status),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['order', orderId] });
+      queryClient.invalidateQueries({ queryKey: ['pharmacyOrders'] });
+      Toast.show({ type: 'success', text1: 'Order status updated' });
+      navigation.goBack();
+    },
+    onError: (err: any) => {
+      Toast.show({
+        type: 'error',
+        text1: 'Failed to update status',
+        text2: err?.response?.data?.message || err?.message || 'Please try again',
+      });
+    },
+  });
+
   const handleUpdateStatus = () => {
-    if (selectedStatus === order.currentStatus) {
+    if (!order) return;
+    if (selectedStatus === order.status) {
       Alert.alert('No Change', 'Please select a different status.');
       return;
     }
 
-    setLoading(true);
-    // TODO: Update order status via API
-    setTimeout(() => {
-      setLoading(false);
-      Alert.alert(
-        'Success',
-        `Order status updated to ${selectedStatus}`,
-        [
-          {
-            text: 'OK',
-            onPress: () => navigation.goBack(),
-          },
-        ]
-      );
-    }, 2000);
+    updateStatusMutation.mutate(selectedStatus);
   };
 
-  const getStatusDescription = (status: OrderStatus) => {
+  const getStatusDescription = (status: orderApi.Order['status']) => {
     switch (status) {
-      case 'Pending':
+      case 'PENDING':
         return 'Order has been placed and is awaiting processing.';
-      case 'Processing':
+      case 'CONFIRMED':
+        return 'Order has been confirmed and will be processed.';
+      case 'PROCESSING':
         return 'Order is being prepared and will be shipped soon.';
-      case 'Shipped':
+      case 'SHIPPED':
         return 'Order has been shipped and is on its way to the customer.';
-      case 'Delivered':
+      case 'DELIVERED':
         return 'Order has been successfully delivered to the customer.';
-      case 'Cancelled':
+      case 'CANCELLED':
         return 'Order has been cancelled.';
+      case 'REFUNDED':
+        return 'Order has been refunded.';
       default:
         return '';
     }
   };
+
+  if (!isPharmacyUser) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.loadingContainer}>
+          <Ionicons name="alert-circle-outline" size={48} color={colors.error} />
+          <Text style={styles.loadingText}>This screen is available for pharmacy accounts only.</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (subscriptionLoading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={colors.primary} />
+          <Text style={styles.loadingText}>Loading subscription...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (!hasActiveSubscription) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.loadingContainer}>
+          <Ionicons name="card-outline" size={48} color={colors.warning} />
+          <Text style={styles.loadingText}>Subscription required to update order status.</Text>
+          <View style={{ width: '100%', paddingHorizontal: 24, marginTop: 16 }}>
+            <Button title="View Subscription Plans" onPress={goToSubscription} />
+          </View>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (isLoading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={colors.primary} />
+          <Text style={styles.loadingText}>Loading order...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (error || !order) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.loadingContainer}>
+          <Ionicons name="alert-circle-outline" size={48} color={colors.error} />
+          <Text style={styles.loadingText}>{(error as any)?.message || 'Failed to load order'}</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container}>
@@ -94,17 +212,17 @@ export const OrderStatusScreen = () => {
               style={[
                 styles.currentStatusBadge,
                 {
-                  backgroundColor: `${statusOptions.find((s) => s.value === order.currentStatus)?.color}20`,
+                  backgroundColor: `${statusOptions.find((s) => s.value === order.status)?.color}20`,
                 },
               ]}
             >
               <Text
                 style={[
                   styles.currentStatusText,
-                  { color: statusOptions.find((s) => s.value === order.currentStatus)?.color },
+                  { color: statusOptions.find((s) => s.value === order.status)?.color },
                 ]}
               >
-                {order.currentStatus}
+                {order.status}
               </Text>
             </View>
           </View>
@@ -158,7 +276,7 @@ export const OrderStatusScreen = () => {
         </View>
 
         {/* Warning for Cancelled */}
-        {selectedStatus === 'Cancelled' && (
+        {selectedStatus === 'CANCELLED' && (
           <View style={styles.warningContainer}>
             <Ionicons name="warning-outline" size={24} color={colors.error} />
             <Text style={styles.warningText}>
@@ -173,8 +291,8 @@ export const OrderStatusScreen = () => {
         <Button
           title="Update Status"
           onPress={handleUpdateStatus}
-          loading={loading}
-          disabled={selectedStatus === order.currentStatus}
+          loading={updateStatusMutation.isPending}
+          disabled={selectedStatus === order.status || updateStatusMutation.isPending}
           style={styles.updateButton}
         />
       </View>
@@ -186,6 +304,18 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.backgroundLight,
+  },
+  loadingContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 24,
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 14,
+    color: colors.textSecondary,
+    textAlign: 'center',
   },
   header: {
     backgroundColor: colors.background,

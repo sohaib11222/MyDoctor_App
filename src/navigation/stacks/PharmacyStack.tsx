@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, StyleSheet, TouchableOpacity, Text } from 'react-native';
-import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import { createNativeStackNavigator, NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { PharmacyStackParamList } from '../types';
@@ -23,14 +23,14 @@ const Stack = createNativeStackNavigator<PharmacyStackParamList>();
 export const PharmacyStack = () => {
   // Cart icon component for header - defined inside to access context
   const CartIconHeader = () => {
-    const navigation = useNavigation();
+    const navigation = useNavigation<NativeStackNavigationProp<PharmacyStackParamList>>();
     const { getCartItemCount } = useCart();
     const cartCount = getCartItemCount();
 
     return (
       <TouchableOpacity
         style={styles.cartIconContainer}
-        onPress={() => navigation.navigate('Cart' as never)}
+        onPress={() => navigation.navigate('Cart')}
         activeOpacity={0.7}
       >
         <Ionicons name="cart-outline" size={24} color={colors.textWhite} />

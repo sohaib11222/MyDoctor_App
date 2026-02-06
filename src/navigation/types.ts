@@ -9,6 +9,7 @@ export type AuthStackParamList = {
   ForgotPassword: undefined;
   DoctorRegister: undefined;
   DoctorVerificationUpload: undefined;
+  PharmacyVerificationUpload: undefined;
   PendingApproval: undefined;
 };
 
@@ -38,6 +39,7 @@ export type HomeStackParamList = {
 export type AppointmentsStackParamList = {
   AppointmentsScreen: undefined;
   AppointmentDetails: { appointmentId: string };
+  Prescription: { appointmentId: string };
   Booking: { doctorId: string };
   Checkout: undefined;
   BookingSuccess: undefined;
@@ -72,7 +74,7 @@ export type PharmacyStackParamList = {
   PharmacyHome: undefined;
   PharmacySearch: undefined;
   PharmacyDetails: { pharmacyId: string };
-  ProductCatalog: { sellerId?: string; sellerType?: 'DOCTOR' | 'PHARMACY' | 'ADMIN' } | undefined;
+  ProductCatalog: { sellerId?: string; sellerType?: 'DOCTOR' | 'PHARMACY' | 'PARAPHARMACY' | 'ADMIN' } | undefined;
   ProductDetails: { productId: string };
   Cart: undefined;
   Checkout: undefined;
@@ -102,16 +104,19 @@ export type MoreStackParamList = {
   MoreScreen: undefined;
   Profile: undefined;
   Settings: undefined;
+  Language: undefined;
   ProfileSettings?: undefined;
   PatientProfileSettings?: undefined;
   SocialLinks?: undefined;
   PharmacyProfile?: undefined;
   PharmacySettings?: undefined;
   PharmacyManagement?: undefined;
+  PharmacySubscription?: undefined;
   PatientDashboard?: undefined;
   DoctorDashboard?: undefined;
   PharmacyDashboard?: undefined;
   MedicalRecords?: undefined;
+  Prescription?: { appointmentId: string };
   Dependents?: undefined;
   MyPatients?: undefined;
   Reviews?: undefined;

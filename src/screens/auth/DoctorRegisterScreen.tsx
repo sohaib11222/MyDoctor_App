@@ -12,6 +12,7 @@ import {
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useForm, Controller } from 'react-hook-form';
+import type { Resolver } from 'react-hook-form';
 import { yupResolver } from '@hookform/resolvers/yup';
 import * as yup from 'yup';
 import { AuthStackParamList } from '../../navigation/types';
@@ -23,7 +24,15 @@ import { Feather } from '@expo/vector-icons';
 
 type DoctorRegisterScreenNavigationProp = NativeStackNavigationProp<AuthStackParamList>;
 
-const schema = yup.object({
+interface DoctorRegisterFormData {
+  fullName: string;
+  email: string;
+  phone: string;
+  password: string;
+  gender?: 'MALE' | 'FEMALE' | 'OTHER';
+}
+
+const schema: yup.ObjectSchema<DoctorRegisterFormData> = yup.object({
   fullName: yup
     .string()
     .min(2, 'Full name must be at least 2 characters')
@@ -40,18 +49,10 @@ const schema = yup.object({
     .min(6, 'Password must be at least 6 characters')
     .required('Password is required'),
   gender: yup
-    .string()
-    .oneOf(['MALE', 'FEMALE', 'OTHER'], 'Invalid gender')
+    .mixed<DoctorRegisterFormData['gender']>()
+    .oneOf(['MALE', 'FEMALE', 'OTHER'])
     .optional(),
 });
-
-interface DoctorRegisterFormData {
-  fullName: string;
-  email: string;
-  phone: string;
-  password: string;
-  gender?: 'MALE' | 'FEMALE' | 'OTHER';
-}
 
 export const DoctorRegisterScreen = () => {
   const navigation = useNavigation<DoctorRegisterScreenNavigationProp>();
@@ -76,7 +77,7 @@ export const DoctorRegisterScreen = () => {
     handleSubmit,
     formState: { errors },
   } = useForm<DoctorRegisterFormData>({
-    resolver: yupResolver(schema),
+    resolver: yupResolver(schema) as unknown as Resolver<DoctorRegisterFormData, any, DoctorRegisterFormData>,
     defaultValues: {
       fullName: '',
       email: '',
@@ -127,7 +128,7 @@ export const DoctorRegisterScreen = () => {
         <View style={styles.imageContainer}>
           <View style={styles.imagePlaceholder}>
             <Image
-              source={require('../../../assets/auth_image.png')}
+              source={require('../../../assets/doctor_final.png')}
               style={styles.headerImage}
               resizeMode="contain"
             />

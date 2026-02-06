@@ -263,7 +263,7 @@ export const MyPatientsScreen = () => {
   };
 
   const handlePatientPress = (patientId: string) => {
-    navigation.navigate('PatientProfile', { patientId });
+    return;
   };
 
   if (isLoading && !refreshing) {
@@ -362,6 +362,7 @@ export const MyPatientsScreen = () => {
                   key={patient._id}
                   style={styles.patientCard}
                   onPress={() => handlePatientPress(patient._id)}
+                  activeOpacity={1}
                 >
                   <View style={styles.patientHeader}>
                     <Image

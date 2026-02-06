@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -8,9 +8,11 @@ import {
   SafeAreaView,
   Image,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import * as ImagePicker from 'expo-image-picker';
 import { MoreStackParamList } from '../../navigation/types';
 import { Input } from '../../components/common/Input';
@@ -18,36 +20,120 @@ import { Button } from '../../components/common/Button';
 import { colors } from '../../constants/colors';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../contexts/AuthContext';
+import * as pharmacyApi from '../../services/pharmacy';
+import * as uploadApi from '../../services/upload';
+import { API_BASE_URL } from '../../config/api';
+import { copyImageToCacheUri, deleteCacheFiles } from '../../utils/imageUpload';
+import Toast from 'react-native-toast-message';
 
 type PharmacyProfileScreenNavigationProp = NativeStackNavigationProp<MoreStackParamList>;
 
 export const PharmacyProfileScreen = () => {
   const navigation = useNavigation<PharmacyProfileScreenNavigationProp>();
   const { user } = useAuth();
-  const [activeTab, setActiveTab] = useState<'about' | 'password'>('about');
-  const [profileImage, setProfileImage] = useState<any>(require('../../../assets/avatar.png'));
+  const queryClient = useQueryClient();
+  const isPharmacy = user?.role === 'pharmacy' || (user as any)?.role === 'PHARMACY';
+  const isParapharmacy = user?.role === 'parapharmacy' || (user as any)?.role === 'PARAPHARMACY';
+  const isPharmacyUser = isPharmacy || isParapharmacy;
+  const userId = user?._id || user?.id;
+
+  const [logoUri, setLogoUri] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  const [personalDetails, setPersonalDetails] = useState({
-    name: user?.name || 'Ryan Taylor',
-    email: user?.email || 'ryantaylor@admin.com',
-    dateOfBirth: '24 Jul 1983',
-    phone: '+1 305-310-5857',
-    address: '4663 Agriculture Lane',
-    city: 'Miami',
-    state: 'Florida',
-    country: 'United States',
-    zipCode: '33165',
-    about: 'Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.',
+  const { data: myPharmacyResponse, isLoading: pharmacyLoading, refetch: refetchMyPharmacy } = useQuery({
+    queryKey: ['my-pharmacy', userId],
+    queryFn: () => pharmacyApi.getMyPharmacy(),
+    enabled: !!userId && isPharmacyUser,
+    retry: 1,
   });
 
-  const [passwordData, setPasswordData] = useState({
-    oldPassword: '',
-    newPassword: '',
-    confirmPassword: '',
+  const pharmacy = myPharmacyResponse?.data;
+
+  const [form, setForm] = useState({
+    name: '',
+    phone: '',
+    addressLine1: '',
+    addressLine2: '',
+    city: '',
+    state: '',
+    country: '',
+    zip: '',
+    lat: '',
+    lng: '',
+  });
+
+  useEffect(() => {
+    if (!pharmacy) return;
+    setForm({
+      name: pharmacy.name || '',
+      phone: pharmacy.phone || '',
+      addressLine1: pharmacy.address?.line1 || '',
+      addressLine2: pharmacy.address?.line2 || '',
+      city: pharmacy.address?.city || '',
+      state: pharmacy.address?.state || '',
+      country: pharmacy.address?.country || '',
+      zip: pharmacy.address?.zip || '',
+      lat: pharmacy.location?.lat !== undefined && pharmacy.location?.lat !== null ? String(pharmacy.location.lat) : '',
+      lng: pharmacy.location?.lng !== undefined && pharmacy.location?.lng !== null ? String(pharmacy.location.lng) : '',
+    });
+    setLogoUri(pharmacy.logo || null);
+  }, [pharmacy]);
+
+  const normalizedLogoUrl = useMemo(() => {
+    if (!logoUri || typeof logoUri !== 'string') return null;
+    const trimmed = logoUri.trim();
+    if (!trimmed) return null;
+    const apiBase = API_BASE_URL || '';
+    const baseUrl = apiBase ? apiBase.replace('/api', '') : 'http://localhost:5000';
+    const match = baseUrl.match(/https?:\/\/([^\/:]+)/);
+    const deviceHost = match ? match[1] : '192.168.0.114';
+    if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+      let normalized = trimmed;
+      if (normalized.includes('localhost')) normalized = normalized.replace('localhost', deviceHost);
+      if (normalized.includes('127.0.0.1')) normalized = normalized.replace('127.0.0.1', deviceHost);
+      return normalized;
+    }
+    const imagePath = trimmed.startsWith('/') ? trimmed : `/${trimmed}`;
+    return `${baseUrl}${imagePath}`;
+  }, [logoUri]);
+
+  const logoForSave = useMemo(() => {
+    if (!logoUri || typeof logoUri !== 'string') return undefined;
+    const trimmed = logoUri.trim();
+    if (!trimmed) return undefined;
+    if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) return trimmed;
+    return normalizedLogoUrl || undefined;
+  }, [logoUri, normalizedLogoUrl]);
+
+  const createPharmacyMutation = useMutation({
+    mutationFn: (data: pharmacyApi.CreatePharmacyData) => pharmacyApi.createPharmacy(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['my-pharmacy'] });
+      Toast.show({ type: 'success', text1: 'Success', text2: 'Pharmacy created successfully' });
+      refetchMyPharmacy();
+    },
+    onError: (error: any) => {
+      const errorMessage = error?.response?.data?.message || error?.message || 'Failed to save pharmacy';
+      Toast.show({ type: 'error', text1: 'Error', text2: errorMessage });
+    },
+  });
+
+  const updatePharmacyMutation = useMutation({
+    mutationFn: ({ id, data }: { id: string; data: Partial<pharmacyApi.CreatePharmacyData> }) =>
+      pharmacyApi.updatePharmacy(id, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['my-pharmacy'] });
+      Toast.show({ type: 'success', text1: 'Success', text2: 'Pharmacy updated successfully' });
+      refetchMyPharmacy();
+    },
+    onError: (error: any) => {
+      const errorMessage = error?.response?.data?.message || error?.message || 'Failed to save pharmacy';
+      Toast.show({ type: 'error', text1: 'Error', text2: errorMessage });
+    },
   });
 
   const pickImage = async () => {
+    if (!isPharmacyUser) return;
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') {
       Alert.alert('Permission Required', 'Please grant camera roll permissions.');
@@ -63,218 +149,230 @@ export const PharmacyProfileScreen = () => {
       });
 
       if (!result.canceled && result.assets[0]) {
-        setProfileImage({ uri: result.assets[0].uri });
+        const asset = result.assets[0];
+        const fileName = asset.fileName?.trim() || `pharmacy-logo-${Date.now()}.jpg`;
+        const mime = fileName.toLowerCase().endsWith('.png')
+          ? 'image/png'
+          : fileName.toLowerCase().endsWith('.webp')
+            ? 'image/webp'
+            : 'image/jpeg';
+
+        let tempFileUris: string[] = [];
+
+        try {
+          setLoading(true);
+          const fileUri = await copyImageToCacheUri(asset.uri, 0, mime);
+          tempFileUris.push(fileUri);
+
+          const uploadResult = await uploadApi.uploadPharmacyLogo({
+            uri: fileUri,
+            mime,
+            name: fileName,
+          });
+          const url = uploadResult?.data?.url || uploadResult?.url;
+
+          if (!url) {
+            throw new Error('Upload succeeded but no URL returned');
+          }
+
+          setLogoUri(url);
+
+          if (pharmacy?._id) {
+            updatePharmacyMutation.mutate({ id: pharmacy._id, data: { logo: logoForSave || url } as any });
+          }
+        } catch (e: any) {
+          Alert.alert('Error', e?.message || 'Failed to upload logo');
+        } finally {
+          setLoading(false);
+          if (tempFileUris.length > 0) {
+            deleteCacheFiles(tempFileUris).catch(() => {});
+          }
+        }
       }
     } catch (error) {
       Alert.alert('Error', 'Failed to pick image');
     }
   };
 
-  const handleSavePersonalDetails = () => {
-    setLoading(true);
-    // TODO: Save personal details via API
-    setTimeout(() => {
-      setLoading(false);
-      Alert.alert('Success', 'Personal details updated successfully');
-    }, 2000);
-  };
-
-  const handleChangePassword = () => {
-    if (!passwordData.oldPassword || !passwordData.newPassword || !passwordData.confirmPassword) {
-      Alert.alert('Required', 'Please fill all password fields');
-      return;
-    }
-    if (passwordData.newPassword !== passwordData.confirmPassword) {
-      Alert.alert('Error', 'New password and confirm password do not match');
-      return;
-    }
-    if (passwordData.newPassword.length < 6) {
-      Alert.alert('Error', 'Password must be at least 6 characters');
+  const handleSave = async () => {
+    if (!isPharmacyUser) return;
+    if (!form.name.trim()) {
+      Alert.alert('Required', 'Pharmacy name is required');
       return;
     }
 
-    setLoading(true);
-    // TODO: Change password via API
-    setTimeout(() => {
-      setLoading(false);
-      Alert.alert('Success', 'Password changed successfully');
-      setPasswordData({ oldPassword: '', newPassword: '', confirmPassword: '' });
-    }, 2000);
+    const data: pharmacyApi.CreatePharmacyData = {
+      name: form.name.trim(),
+    };
+
+    if (form.phone.trim()) data.phone = form.phone.trim();
+
+    const address: any = {};
+    if (form.addressLine1.trim()) address.line1 = form.addressLine1.trim();
+    if (form.addressLine2.trim()) address.line2 = form.addressLine2.trim();
+    if (form.city.trim()) address.city = form.city.trim();
+    if (form.state.trim()) address.state = form.state.trim();
+    if (form.country.trim()) address.country = form.country.trim();
+    if (form.zip.trim()) address.zip = form.zip.trim();
+    if (Object.keys(address).length > 0) data.address = address;
+
+    const lat = form.lat.trim() ? parseFloat(form.lat.trim()) : null;
+    const lng = form.lng.trim() ? parseFloat(form.lng.trim()) : null;
+    if (lat !== null && lng !== null && !isNaN(lat) && !isNaN(lng)) {
+      data.location = { lat, lng };
+    }
+
+    if (logoUri) {
+      (data as any).logo = logoForSave || logoUri;
+    }
+
+    if (pharmacy?._id) {
+      updatePharmacyMutation.mutate({ id: pharmacy._id, data: data as any });
+    } else {
+      createPharmacyMutation.mutate(data);
+    }
   };
+
+  if (!isPharmacyUser) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.loadingContainer}>
+          <Ionicons name="alert-circle-outline" size={48} color={colors.error} />
+          <Text style={styles.loadingText}>This section is available for pharmacy accounts only.</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (pharmacyLoading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={colors.primary} />
+          <Text style={styles.loadingText}>Loading profile...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container}>
       {/* Profile Header */}
       <View style={styles.profileHeader}>
         <TouchableOpacity onPress={pickImage} activeOpacity={0.7}>
-          <Image source={profileImage} style={styles.profileImage} />
+          <Image
+            source={normalizedLogoUrl ? { uri: normalizedLogoUrl } : require('../../../assets/avatar.png')}
+            style={styles.profileImage}
+            defaultSource={require('../../../assets/avatar.png')}
+          />
           <View style={styles.editImageButton}>
             <Ionicons name="camera" size={16} color={colors.textWhite} />
           </View>
         </TouchableOpacity>
         <View style={styles.profileInfo}>
-          <Text style={styles.profileName}>{personalDetails.name}</Text>
-          <Text style={styles.profileEmail}>{personalDetails.email}</Text>
+          <Text style={styles.profileName}>{form.name || pharmacy?.name || 'Pharmacy'}</Text>
+          <Text style={styles.profileEmail}>{user?.email || ''}</Text>
           <View style={styles.locationRow}>
             <Ionicons name="location-outline" size={14} color={colors.textSecondary} />
             <Text style={styles.locationText}>
-              {personalDetails.city}, {personalDetails.state}
+              {form.city || pharmacy?.address?.city || 'N/A'}{form.state || pharmacy?.address?.state ? `, ${form.state || pharmacy?.address?.state}` : ''}
             </Text>
           </View>
-          <Text style={styles.aboutText} numberOfLines={2}>
-            {personalDetails.about}
-          </Text>
+          {!!logoUri && <Text style={styles.aboutText} numberOfLines={2}>{logoUri}</Text>}
         </View>
       </View>
 
-      {/* Tabs */}
-      <View style={styles.tabsContainer}>
-        <TouchableOpacity
-          style={[styles.tab, activeTab === 'about' && styles.tabActive]}
-          onPress={() => setActiveTab('about')}
-          activeOpacity={0.7}
-        >
-          <Text style={[styles.tabText, activeTab === 'about' && styles.tabTextActive]}>
-            About
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.tab, activeTab === 'password' && styles.tabActive]}
-          onPress={() => setActiveTab('password')}
-          activeOpacity={0.7}
-        >
-          <Text style={[styles.tabText, activeTab === 'password' && styles.tabTextActive]}>
-            Password
-          </Text>
-        </TouchableOpacity>
-      </View>
-
       <ScrollView showsVerticalScrollIndicator={false}>
-        {activeTab === 'about' ? (
-          <View style={styles.tabContent}>
-            <View style={styles.section}>
-              <View style={styles.sectionHeader}>
-                <Text style={styles.sectionTitle}>Personal Details</Text>
-              </View>
+        <View style={styles.tabContent}>
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>Pharmacy Details</Text>
+            </View>
 
+            <Input
+              label="Pharmacy Name"
+              value={form.name}
+              onChangeText={(text) => setForm({ ...form, name: text })}
+              placeholder="Enter pharmacy name"
+            />
+            <Input
+              label="Phone"
+              value={form.phone}
+              onChangeText={(text) => setForm({ ...form, phone: text })}
+              placeholder="Enter phone number"
+              keyboardType="phone-pad"
+            />
+            <Input
+              label="Address Line 1"
+              value={form.addressLine1}
+              onChangeText={(text) => setForm({ ...form, addressLine1: text })}
+              placeholder="Street address"
+            />
+            <Input
+              label="Address Line 2"
+              value={form.addressLine2}
+              onChangeText={(text) => setForm({ ...form, addressLine2: text })}
+              placeholder="Apartment, suite, etc."
+            />
+            <View style={styles.row}>
               <Input
-                label="Name"
-                value={personalDetails.name}
-                onChangeText={(text) => setPersonalDetails({ ...personalDetails, name: text })}
-                placeholder="Enter name"
+                label="City"
+                value={form.city}
+                onChangeText={(text) => setForm({ ...form, city: text })}
+                placeholder="City"
+                style={styles.halfInput}
               />
               <Input
-                label="Date of Birth"
-                value={personalDetails.dateOfBirth}
-                onChangeText={(text) =>
-                  setPersonalDetails({ ...personalDetails, dateOfBirth: text })
-                }
-                placeholder="DD MMM YYYY"
-              />
-              <Input
-                label="Email ID"
-                value={personalDetails.email}
-                onChangeText={(text) => setPersonalDetails({ ...personalDetails, email: text })}
-                placeholder="Enter email"
-                keyboardType="email-address"
-              />
-              <Input
-                label="Mobile"
-                value={personalDetails.phone}
-                onChangeText={(text) => setPersonalDetails({ ...personalDetails, phone: text })}
-                placeholder="Enter phone number"
-                keyboardType="phone-pad"
-              />
-              <Input
-                label="Address"
-                value={personalDetails.address}
-                onChangeText={(text) => setPersonalDetails({ ...personalDetails, address: text })}
-                placeholder="Enter address"
-                multiline
-              />
-              <View style={styles.row}>
-                <Input
-                  label="City"
-                  value={personalDetails.city}
-                  onChangeText={(text) => setPersonalDetails({ ...personalDetails, city: text })}
-                  placeholder="Enter city"
-                  style={styles.halfInput}
-                />
-                <Input
-                  label="State"
-                  value={personalDetails.state}
-                  onChangeText={(text) => setPersonalDetails({ ...personalDetails, state: text })}
-                  placeholder="Enter state"
-                  style={styles.halfInput}
-                />
-              </View>
-              <View style={styles.row}>
-                <Input
-                  label="Zip Code"
-                  value={personalDetails.zipCode}
-                  onChangeText={(text) =>
-                    setPersonalDetails({ ...personalDetails, zipCode: text })
-                  }
-                  placeholder="Enter zip code"
-                  style={styles.halfInput}
-                />
-                <Input
-                  label="Country"
-                  value={personalDetails.country}
-                  onChangeText={(text) =>
-                    setPersonalDetails({ ...personalDetails, country: text })
-                  }
-                  placeholder="Enter country"
-                  style={styles.halfInput}
-                />
-              </View>
-
-              <Button
-                title="Save Changes"
-                onPress={handleSavePersonalDetails}
-                loading={loading}
-                style={styles.saveButton}
+                label="State"
+                value={form.state}
+                onChangeText={(text) => setForm({ ...form, state: text })}
+                placeholder="State"
+                style={styles.halfInput}
               />
             </View>
-          </View>
-        ) : (
-          <View style={styles.tabContent}>
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Change Password</Text>
-
+            <View style={styles.row}>
               <Input
-                label="Old Password"
-                value={passwordData.oldPassword}
-                onChangeText={(text) => setPasswordData({ ...passwordData, oldPassword: text })}
-                placeholder="Enter old password"
-                secureTextEntry
+                label="Zip Code"
+                value={form.zip}
+                onChangeText={(text) => setForm({ ...form, zip: text })}
+                placeholder="Zip"
+                style={styles.halfInput}
               />
               <Input
-                label="New Password"
-                value={passwordData.newPassword}
-                onChangeText={(text) => setPasswordData({ ...passwordData, newPassword: text })}
-                placeholder="Enter new password"
-                secureTextEntry
-              />
-              <Input
-                label="Confirm Password"
-                value={passwordData.confirmPassword}
-                onChangeText={(text) =>
-                  setPasswordData({ ...passwordData, confirmPassword: text })
-                }
-                placeholder="Confirm new password"
-                secureTextEntry
-              />
-
-              <Button
-                title="Save Changes"
-                onPress={handleChangePassword}
-                loading={loading}
-                style={styles.saveButton}
+                label="Country"
+                value={form.country}
+                onChangeText={(text) => setForm({ ...form, country: text })}
+                placeholder="Country"
+                style={styles.halfInput}
               />
             </View>
+            <View style={styles.row}>
+              <Input
+                label="Latitude"
+                value={form.lat}
+                onChangeText={(text) => setForm({ ...form, lat: text })}
+                placeholder="Latitude"
+                keyboardType="decimal-pad"
+                style={styles.halfInput}
+              />
+              <Input
+                label="Longitude"
+                value={form.lng}
+                onChangeText={(text) => setForm({ ...form, lng: text })}
+                placeholder="Longitude"
+                keyboardType="decimal-pad"
+                style={styles.halfInput}
+              />
+            </View>
+
+            <Button
+              title={loading || createPharmacyMutation.isPending || updatePharmacyMutation.isPending ? 'Saving...' : 'Save Changes'}
+              onPress={handleSave}
+              loading={loading || createPharmacyMutation.isPending || updatePharmacyMutation.isPending}
+              style={styles.saveButton}
+            />
           </View>
-        )}
+        </View>
       </ScrollView>
     </SafeAreaView>
   );
@@ -284,6 +382,18 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.backgroundLight,
+  },
+  loadingContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 24,
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 14,
+    color: colors.textSecondary,
+    textAlign: 'center',
   },
   profileHeader: {
     backgroundColor: colors.background,

@@ -22,6 +22,8 @@ import { Ionicons } from '@expo/vector-icons';
 import * as productApi from '../../services/product';
 import Toast from 'react-native-toast-message';
 import { API_BASE_URL } from '../../config/api';
+import { useAuth } from '../../contexts/AuthContext';
+import * as pharmacySubscriptionApi from '../../services/pharmacySubscription';
 
 type ProductDetailsScreenNavigationProp = NativeStackNavigationProp<ProductsStackParamList, 'ProductDetails'>;
 type ProductDetailsRouteProp = RouteProp<ProductsStackParamList, 'ProductDetails'>;
@@ -75,6 +77,44 @@ export const ProductDetailsScreen = () => {
   const { productId } = route.params;
   const queryClient = useQueryClient();
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
+  const { user } = useAuth();
+  const isPharmacy = user?.role === 'pharmacy' || (user as any)?.role === 'PHARMACY';
+  const isParapharmacy = user?.role === 'parapharmacy' || (user as any)?.role === 'PARAPHARMACY';
+  const isPharmacyUser = isPharmacy || isParapharmacy;
+  const userId = user?._id || user?.id;
+
+  const requiresSubscription = isPharmacy;
+
+  const { data: subscriptionResponse, isLoading: subscriptionLoading } = useQuery({
+    queryKey: ['my-pharmacy-subscription', userId],
+    queryFn: () => pharmacySubscriptionApi.getMyPharmacySubscription(),
+    enabled: !!userId && requiresSubscription,
+    retry: 1,
+  });
+
+  const subscriptionData = React.useMemo(() => {
+    if (!subscriptionResponse) return null;
+    const r: any = subscriptionResponse as any;
+    const data = r?.data ?? r;
+    return data?.data ?? data;
+  }, [subscriptionResponse]);
+
+  const hasActiveSubscription = React.useMemo(() => {
+    if (!requiresSubscription) return true;
+    if (!subscriptionData) return false;
+    if (subscriptionData?.hasActiveSubscription === true) return true;
+    if (subscriptionData?.subscriptionExpiresAt) return new Date(subscriptionData.subscriptionExpiresAt) > new Date();
+    return false;
+  }, [subscriptionData]);
+
+  const goToSubscription = () => {
+    const parent = (navigation as any).getParent?.();
+    if (parent) {
+      parent.navigate('More', { screen: 'PharmacySubscription' });
+    } else {
+      (navigation as any).navigate('More', { screen: 'PharmacySubscription' });
+    }
+  };
 
   // Fetch product details
   const {
@@ -85,7 +125,7 @@ export const ProductDetailsScreen = () => {
   } = useQuery({
     queryKey: ['product', productId],
     queryFn: () => productApi.getProductById(productId),
-    enabled: !!productId,
+    enabled: !!productId && isPharmacyUser,
   });
 
   // Extract product data
@@ -96,7 +136,6 @@ export const ProductDetailsScreen = () => {
     mutationFn: (id: string) => productApi.deleteProduct(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['pharmacy-products'] });
-      queryClient.invalidateQueries({ queryKey: ['doctor-products'] });
       queryClient.invalidateQueries({ queryKey: ['product', productId] });
       Toast.show({
         type: 'success',
@@ -116,10 +155,20 @@ export const ProductDetailsScreen = () => {
   });
 
   const handleEdit = () => {
+    if (requiresSubscription && !subscriptionLoading && !hasActiveSubscription) {
+      Toast.show({ type: 'info', text1: 'Subscription Required', text2: 'You need an active subscription to manage products' });
+      goToSubscription();
+      return;
+    }
     navigation.navigate('EditProduct', { productId });
   };
 
   const handleDelete = () => {
+    if (requiresSubscription && !subscriptionLoading && !hasActiveSubscription) {
+      Toast.show({ type: 'info', text1: 'Subscription Required', text2: 'You need an active subscription to manage products' });
+      goToSubscription();
+      return;
+    }
     Alert.alert(
       'Delete Product',
       `Are you sure you want to delete "${product?.name || 'this product'}"? This action cannot be undone.`,
@@ -142,6 +191,17 @@ export const ProductDetailsScreen = () => {
     .filter((url: string | null): url is string => url !== null) || [];
 
   // Loading state
+  if (!isPharmacyUser) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.loadingContainer}>
+          <Ionicons name="alert-circle-outline" size={48} color={colors.error} />
+          <Text style={styles.loadingText}>This screen is available for pharmacy accounts only.</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   if (isLoading) {
     return (
       <SafeAreaView style={styles.container}>
@@ -178,6 +238,13 @@ export const ProductDetailsScreen = () => {
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView showsVerticalScrollIndicator={false}>
+        {requiresSubscription && !subscriptionLoading && !hasActiveSubscription && (
+          <TouchableOpacity style={styles.subscriptionBanner} activeOpacity={0.8} onPress={goToSubscription}>
+            <Ionicons name="card-outline" size={18} color={colors.warning} />
+            <Text style={styles.subscriptionBannerText}>Subscription required to edit or delete products</Text>
+            <Ionicons name="chevron-forward" size={18} color={colors.textLight} />
+          </TouchableOpacity>
+        )}
         {/* Product Images */}
         {productImages.length > 0 ? (
           <View style={styles.imageContainer}>
@@ -325,7 +392,7 @@ export const ProductDetailsScreen = () => {
           style={styles.deleteButton}
           onPress={handleDelete}
           activeOpacity={0.7}
-          disabled={deleteProductMutation.isPending}
+          disabled={deleteProductMutation.isPending || (requiresSubscription && !subscriptionLoading && !hasActiveSubscription)}
         >
           {deleteProductMutation.isPending ? (
             <ActivityIndicator size="small" color={colors.error} />
@@ -335,9 +402,14 @@ export const ProductDetailsScreen = () => {
           <Text style={styles.deleteButtonText}>Delete</Text>
         </TouchableOpacity>
         <TouchableOpacity
-          style={[styles.editButton, { backgroundColor: colors.primary }]}
+          style={[
+            styles.editButton,
+            { backgroundColor: colors.primary },
+            requiresSubscription && !subscriptionLoading && !hasActiveSubscription && { opacity: 0.5 },
+          ]}
           onPress={handleEdit}
           activeOpacity={0.7}
+          disabled={requiresSubscription && !subscriptionLoading && !hasActiveSubscription}
         >
           <Ionicons name="create-outline" size={20} color={colors.textWhite} />
           <Text style={styles.editButtonText}>Edit Product</Text>
@@ -351,6 +423,23 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.backgroundLight,
+  },
+  subscriptionBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: colors.warningLight,
+    padding: 12,
+    marginHorizontal: 16,
+    marginTop: 12,
+    borderRadius: 8,
+    gap: 8,
+  },
+  subscriptionBannerText: {
+    flex: 1,
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.text,
   },
   loadingContainer: {
     flex: 1,

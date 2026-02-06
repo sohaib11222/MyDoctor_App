@@ -99,6 +99,9 @@ export const PharmacyOrdersScreen = () => {
   const navigation = useNavigation<PharmacyOrdersScreenNavigationProp>();
   const { user } = useAuth();
   const queryClient = useQueryClient();
+  const isPharmacy = user?.role === 'pharmacy' || (user as any)?.role === 'PHARMACY';
+  const isParapharmacy = user?.role === 'parapharmacy' || (user as any)?.role === 'PARAPHARMACY';
+  const isPharmacyOrParaUser = isPharmacy || isParapharmacy;
   const [statusFilter, setStatusFilter] = useState('');
   const [page, setPage] = useState(1);
   const [refreshing, setRefreshing] = useState(false);
@@ -135,7 +138,7 @@ export const PharmacyOrdersScreen = () => {
       }
       return response;
     },
-    enabled: !!user && (user?.role === 'doctor' || (user as any)?.role === 'DOCTOR'),
+    enabled: !!user && isPharmacyOrParaUser,
     placeholderData: (previousData) => previousData,
     retry: 1,
   });
@@ -154,7 +157,7 @@ export const PharmacyOrdersScreen = () => {
       });
       return response;
     },
-    enabled: !!user && (user?.role === 'doctor' || (user as any)?.role === 'DOCTOR'),
+    enabled: !!user && isPharmacyOrParaUser,
   });
 
   // Calculate counts for each status

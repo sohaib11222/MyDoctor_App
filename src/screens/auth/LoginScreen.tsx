@@ -17,10 +17,10 @@ import * as yup from 'yup';
 import { AuthStackParamList } from '../../navigation/types';
 import { Input } from '../../components/common/Input';
 import { Button } from '../../components/common/Button';
-import { useAuth, UserRole } from '../../contexts/AuthContext';
+import { useAuth } from '../../contexts/AuthContext';
 import { useEffect } from 'react';
 import { colors } from '../../constants/colors';
-import { Feather } from '@expo/vector-icons';
+ 
 
 type LoginScreenNavigationProp = NativeStackNavigationProp<AuthStackParamList>;
 
@@ -32,13 +32,11 @@ const schema = yup.object({
 interface LoginFormData {
   email: string;
   password: string;
-  role?: UserRole;
 }
 
 export const LoginScreen = () => {
   const navigation = useNavigation<LoginScreenNavigationProp>();
   const { login, user } = useAuth();
-  const [selectedRole, setSelectedRole] = useState<UserRole>('patient');
   const [loading, setLoading] = useState(false);
 
   // Navigate pending doctors to verification upload after login
@@ -62,7 +60,6 @@ export const LoginScreen = () => {
     defaultValues: {
       email: '',
       password: '',
-      role: 'patient',
     },
   });
 
@@ -78,12 +75,6 @@ export const LoginScreen = () => {
     }
   };
 
-  const roles: { value: UserRole; label: string; icon: string }[] = [
-    { value: 'patient', label: 'Patient', icon: 'user' },
-    { value: 'doctor', label: 'Doctor', icon: 'briefcase' },
-    { value: 'pharmacy', label: 'Pharmacy', icon: 'shopping-bag' },
-  ];
-
   return (
     <KeyboardAvoidingView
       style={styles.container}
@@ -97,9 +88,8 @@ export const LoginScreen = () => {
         {/* Header Image Section */}
         <View style={styles.imageContainer}>
           <View style={styles.imagePlaceholder}>
-
             <Image
-              source={require('../../../assets/auth_image.png')}
+              source={require('../../../assets/doctor_final.png')}
               style={styles.headerImage}
               resizeMode="contain"
             />
@@ -110,37 +100,6 @@ export const LoginScreen = () => {
         <View style={styles.formContainer}>
           <Text style={styles.title}>Login</Text>
           <Text style={styles.subtitle}>Access to our dashboard</Text>
-
-          {/* Role Selection */}
-          <View style={styles.roleContainer}>
-            <Text style={styles.roleLabel}>Login as:</Text>
-            <View style={styles.roleButtons}>
-              {roles.map((role) => (
-                <TouchableOpacity
-                  key={role.value}
-                  style={[
-                    styles.roleButton,
-                    selectedRole === role.value && styles.roleButtonActive,
-                  ]}
-                  onPress={() => setSelectedRole(role.value)}
-                >
-                  <Feather
-                    name={role.icon as any}
-                    size={20}
-                    color={selectedRole === role.value ? colors.textWhite : colors.primary}
-                  />
-                  <Text
-                    style={[
-                      styles.roleButtonText,
-                      selectedRole === role.value && styles.roleButtonTextActive,
-                    ]}
-                  >
-                    {role.label}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          </View>
 
           <Controller
             control={control}
@@ -215,21 +174,21 @@ const styles = StyleSheet.create({
   },
   imageContainer: {
     height: 200,
-    backgroundColor: colors.primaryLight,
+    // backgroundColor: colors.primaryLight,
     justifyContent: 'center',
     alignItems: 'center',
     borderBottomRightRadius: 30,
     borderBottomLeftRadius: 30,
   },
   headerImage: {
-    width: 100,
-    height: 100,
+    width: 222,
+    height: 170,
   },
   imagePlaceholder: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    backgroundColor: colors.primary,
+    width: 250,
+    height: 200,
+    borderRadius: 80,
+    backgroundColor: colors.background,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -250,44 +209,6 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     marginBottom: 32,
     textAlign: 'center',
-  },
-  roleContainer: {
-    marginBottom: 24,
-  },
-  roleLabel: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: colors.text,
-    marginBottom: 12,
-  },
-  roleButtons: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  roleButton: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: colors.primary,
-    backgroundColor: colors.background,
-    gap: 8,
-  },
-  roleButtonActive: {
-    backgroundColor: colors.primary,
-    borderColor: colors.primary,
-  },
-  roleButtonText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: colors.primary,
-  },
-  roleButtonTextActive: {
-    color: colors.textWhite,
   },
   input: {
     marginBottom: 16,

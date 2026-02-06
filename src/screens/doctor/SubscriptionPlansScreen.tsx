@@ -25,11 +25,16 @@ export const SubscriptionPlansScreen = () => {
   const [paymentMethod, setPaymentMethod] = useState('DUMMY'); // DUMMY, CARD, PAYPAL, BANK
   const [refreshing, setRefreshing] = useState(false);
 
+  const formatLimit = (value: number | null | undefined): string => {
+    if (value === null || value === undefined) return 'Unlimited';
+    return value.toString();
+  };
+
   // Fetch all subscription plans
   const { data: plansData, isLoading: plansLoading, error: plansError, refetch: refetchPlans } = useQuery({
     queryKey: ['subscriptionPlans'],
     queryFn: async () => {
-      const response = await subscriptionApi.listSubscriptionPlans();
+      const response = await subscriptionApi.listSubscriptionPlans({ isActive: true });
       return response.data || response;
     },
   });
@@ -74,7 +79,7 @@ export const SubscriptionPlansScreen = () => {
 
   // Format price for display
   const formatPrice = (price: number): string => {
-    return `$${price}`;
+    return `€${price}`;
   };
 
   // Format duration for display
@@ -212,6 +217,32 @@ export const SubscriptionPlansScreen = () => {
                 </Text>
               </View>
             </View>
+
+            {(currentSubscription as any)?.usage && (currentSubscription as any)?.remaining && (
+              <View style={styles.usageCard}>
+                <Text style={styles.usageTitle}>Usage This Period</Text>
+                <View style={styles.usageGrid}>
+                  <View style={styles.usageItem}>
+                    <Text style={styles.usageLabel}>Private Consultations</Text>
+                    <Text style={styles.usageValue}>
+                      {(currentSubscription as any).usage.privateConsultations} / {formatLimit((currentSubscription as any).subscriptionPlan?.limits?.privateConsultations)}
+                    </Text>
+                  </View>
+                  <View style={styles.usageItem}>
+                    <Text style={styles.usageLabel}>Video Consultations</Text>
+                    <Text style={styles.usageValue}>
+                      {(currentSubscription as any).usage.videoConsultations} / {formatLimit((currentSubscription as any).subscriptionPlan?.limits?.videoConsultations)}
+                    </Text>
+                  </View>
+                  <View style={styles.usageItem}>
+                    <Text style={styles.usageLabel}>Chat Sessions</Text>
+                    <Text style={styles.usageValue}>
+                      {(currentSubscription as any).usage.chatSessions} / {formatLimit((currentSubscription as any).subscriptionPlan?.limits?.chatSessions)}
+                    </Text>
+                  </View>
+                </View>
+              </View>
+            )}
           </View>
         )}
 
@@ -260,11 +291,29 @@ export const SubscriptionPlansScreen = () => {
                   )}
                   <View style={styles.planContent}>
                     <Text style={styles.planName}>{plan.name}</Text>
-                    {plan.description && <Text style={styles.planDescription}>{plan.description}</Text>}
                     <View style={styles.pricing}>
                       <Text style={styles.planPrice}>{formatPrice(plan.price)}</Text>
-                      <Text style={styles.planPeriod}>{formatDuration(plan.duration)}</Text>
+                      <Text style={styles.planPeriod}>{formatDuration(plan.durationInDays)}</Text>
                     </View>
+
+                    {plan.limits && (
+                      <View style={styles.limitsContainer}>
+                        <Text style={styles.limitsTitle}>Plan Limits</Text>
+                        <Text style={styles.limitsText}>
+                          Private Consultations: {formatLimit(plan.limits.privateConsultations)}
+                        </Text>
+                        <Text style={styles.limitsText}>
+                          Video Consultations: {formatLimit(plan.limits.videoConsultations)}
+                        </Text>
+                        <Text style={styles.limitsText}>
+                          Chat Sessions: {formatLimit(plan.limits.chatSessions)}
+                        </Text>
+                        <Text style={styles.limitsText}>
+                          CRM Access: {plan.crmAccess ? 'Yes' : 'No'}
+                        </Text>
+                      </View>
+                    )}
+
                     <View style={styles.featuresList}>
                       {plan.features && plan.features.length > 0 ? (
                         plan.features.map((feature, index) => (
@@ -341,7 +390,7 @@ export const SubscriptionPlansScreen = () => {
                     <View style={styles.selectedPlanInfo}>
                       <Text style={styles.selectedPlanName}>Selected Plan: {selectedPlan.name}</Text>
                       <Text style={styles.selectedPlanPrice}>
-                        Price: {formatPrice(selectedPlan.price)} {formatDuration(selectedPlan.duration)}
+                        Price: {formatPrice(selectedPlan.price)} {formatDuration(selectedPlan.durationInDays)}
                       </Text>
                     </View>
 
@@ -492,6 +541,38 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: colors.textWhite,
   },
+  usageCard: {
+    marginTop: 16,
+    backgroundColor: colors.backgroundLight,
+    borderRadius: 10,
+    padding: 12,
+  },
+  usageTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.text,
+    marginBottom: 10,
+  },
+  usageGrid: {
+    gap: 10,
+  },
+  usageItem: {
+    backgroundColor: colors.background,
+    borderRadius: 8,
+    padding: 10,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
+  },
+  usageLabel: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    marginBottom: 4,
+  },
+  usageValue: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.text,
+  },
   warningCard: {
     flexDirection: 'row',
     backgroundColor: colors.warning + '20',
@@ -604,6 +685,24 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: colors.textSecondary,
     marginTop: 4,
+  },
+  limitsContainer: {
+    width: '100%',
+    backgroundColor: colors.backgroundLight,
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 16,
+  },
+  limitsTitle: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.text,
+    marginBottom: 8,
+  },
+  limitsText: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    marginBottom: 6,
   },
   featuresList: {
     width: '100%',

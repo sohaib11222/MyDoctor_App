@@ -23,6 +23,7 @@ import { Button } from '../../components/common/Button';
 import { useAuth } from '../../contexts/AuthContext';
 import * as productApi from '../../services/product';
 import * as pharmacyApi from '../../services/pharmacy';
+import * as pharmacySubscriptionApi from '../../services/pharmacySubscription';
 import Toast from 'react-native-toast-message';
 import { API_BASE_URL } from '../../config/api';
 
@@ -49,50 +50,90 @@ export const ProductListScreen = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
   const [refreshing, setRefreshing] = useState(false);
-  const isPharmacyUser = user?.role === 'pharmacy' || (user as any)?.role === 'PHARMACY';
+  const isPharmacy = user?.role === 'pharmacy' || (user as any)?.role === 'PHARMACY';
+  const isParapharmacy = user?.role === 'parapharmacy' || (user as any)?.role === 'PARAPHARMACY';
+  const isPharmacyOrParaUser = isPharmacy || isParapharmacy;
+  const requiresSubscription = isPharmacy;
+  const isApproved = String((user as any)?.status || user?.status || '').toUpperCase() === 'APPROVED';
 
   // Get user ID (support both _id and id)
   const userId = user?._id || user?.id;
 
-  const { data: doctorPharmacyResponse } = useQuery({
-    queryKey: ['doctor-pharmacy', userId],
-    queryFn: () => pharmacyApi.listPharmacies({ ownerId: userId!, limit: 1 }),
-    enabled: !!userId && !isPharmacyUser,
-  });
-
   const { data: myPharmacyResponse } = useQuery({
     queryKey: ['my-pharmacy', userId],
     queryFn: () => pharmacyApi.getMyPharmacy(),
-    enabled: !!userId && isPharmacyUser,
+    enabled: !!userId && isPharmacyOrParaUser,
   });
 
-  const myPharmacy = useMemo(() => {
-    if (isPharmacyUser) {
-      const responseData = (myPharmacyResponse as any)?.data || myPharmacyResponse;
-      return responseData?.data || responseData || null;
+  const { data: subscriptionResponse, isLoading: subscriptionLoading } = useQuery({
+    queryKey: ['my-pharmacy-subscription', userId],
+    queryFn: () => pharmacySubscriptionApi.getMyPharmacySubscription(),
+    enabled: !!userId && requiresSubscription,
+    retry: 1,
+  });
+
+  const subscriptionData = useMemo(() => {
+    if (!subscriptionResponse) return null;
+    const r: any = subscriptionResponse as any;
+    const data = r?.data ?? r;
+    return data?.data ?? data;
+  }, [subscriptionResponse]);
+
+  const hasActiveSubscription = useMemo(() => {
+    if (!requiresSubscription) return true;
+    if (!subscriptionData) return false;
+    if (subscriptionData?.hasActiveSubscription === true) return true;
+    if (subscriptionData?.subscriptionExpiresAt) {
+      return new Date(subscriptionData.subscriptionExpiresAt) > new Date();
     }
-    if (!doctorPharmacyResponse) return null;
-    const responseData = doctorPharmacyResponse.data || doctorPharmacyResponse;
-    const pharmacies = Array.isArray(responseData) ? responseData : (responseData.pharmacies || []);
-    return pharmacies.length > 0 ? pharmacies[0] : null;
-  }, [doctorPharmacyResponse, myPharmacyResponse, isPharmacyUser]);
+    return false;
+  }, [subscriptionData]);
+
+  const goToSubscription = () => {
+    const parentNavigation = (navigation as any).getParent?.();
+    if (parentNavigation) {
+      parentNavigation.navigate('More', { screen: 'PharmacySubscription' });
+    } else {
+      (navigation as any).navigate('More', { screen: 'PharmacySubscription' });
+    }
+  };
+
+  const myPharmacy = useMemo(() => {
+    const responseData = (myPharmacyResponse as any)?.data || myPharmacyResponse;
+    return responseData?.data || responseData || null;
+  }, [myPharmacyResponse]);
+
+  const isProfileComplete = useMemo(() => {
+    if (!myPharmacy) return false;
+    return !!(
+      myPharmacy.name &&
+      myPharmacy.phone &&
+      myPharmacy.address &&
+      myPharmacy.address.line1 &&
+      myPharmacy.address.city
+    );
+  }, [myPharmacy]);
+
+  const showProfileBanner = !!myPharmacy && !isProfileComplete;
+
+  const sellerType = isParapharmacy ? 'PARAPHARMACY' : 'PHARMACY';
 
   // Build query params - show only this doctor's products
-  const queryParams = useMemo(() => {
+  const queryParams = useMemo<productApi.ProductFilters>(() => {
     const params: productApi.ProductFilters = {
-      sellerType: 'PHARMACY', // Doctor products have sellerType = 'PHARMACY'
+      sellerType: sellerType as any,
       sellerId: userId, // Filter by doctor's userId (which is the pharmacy's ownerId)
     };
     if (searchQuery) params.search = searchQuery;
     if (categoryFilter) params.category = categoryFilter;
     return params;
-  }, [userId, searchQuery, categoryFilter]);
+  }, [userId, sellerType, searchQuery, categoryFilter]);
 
   // Fetch products for this doctor
   const { data: productsResponse, isLoading, error, refetch } = useQuery({
     queryKey: ['pharmacy-products', queryParams],
     queryFn: () => productApi.listProducts(queryParams),
-    enabled: !!userId,
+    enabled: !!userId && isPharmacyOrParaUser,
   });
 
   // Extract products data
@@ -114,7 +155,6 @@ export const ProductListScreen = () => {
     mutationFn: (productId: string) => productApi.deleteProduct(productId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['pharmacy-products'] });
-      queryClient.invalidateQueries({ queryKey: ['doctor-products'] });
       Toast.show({
         type: 'success',
         text1: 'Success',
@@ -132,16 +172,25 @@ export const ProductListScreen = () => {
   });
 
   const handleAddProduct = () => {
+    if (!isApproved) {
+      Toast.show({
+        type: 'info',
+        text1: 'Pending Approval',
+        text2: 'Your pharmacy account is pending admin approval',
+      });
+      return;
+    }
+
     // Check if doctor has a pharmacy
     if (!myPharmacy) {
       // Navigate to PharmacyManagementScreen in MoreStack
       // Use parent navigator to navigate across tabs
       const parentNavigation = navigation.getParent();
       if (parentNavigation) {
-        parentNavigation.navigate('More', { screen: isPharmacyUser ? 'PharmacyProfile' : 'PharmacyManagement' });
+        parentNavigation.navigate('More', { screen: 'PharmacyProfile' });
       } else {
         // Fallback: try direct navigation
-        (navigation as any).navigate('More', { screen: isPharmacyUser ? 'PharmacyProfile' : 'PharmacyManagement' });
+        (navigation as any).navigate('More', { screen: 'PharmacyProfile' });
       }
       Toast.show({
         type: 'info',
@@ -150,14 +199,68 @@ export const ProductListScreen = () => {
       });
       return;
     }
+
+    if (!isProfileComplete) {
+      const parentNavigation = navigation.getParent();
+      if (parentNavigation) {
+        parentNavigation.navigate('More', { screen: 'PharmacyProfile' });
+      } else {
+        (navigation as any).navigate('More', { screen: 'PharmacyProfile' });
+      }
+      Toast.show({
+        type: 'info',
+        text1: 'Complete Profile',
+        text2: 'Please complete your pharmacy profile first before adding products',
+      });
+      return;
+    }
+
+    if (requiresSubscription && !subscriptionLoading && !hasActiveSubscription) {
+      Toast.show({
+        type: 'info',
+        text1: 'Subscription Required',
+        text2: 'You need an active subscription to manage products',
+      });
+      goToSubscription();
+      return;
+    }
     navigation.navigate('AddProduct');
   };
 
+  if (!isPharmacyOrParaUser) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.loadingContainer}>
+          <Ionicons name="alert-circle-outline" size={48} color={colors.error} />
+          <Text style={styles.loadingText}>This section is available for pharmacy accounts only.</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   const handleEditProduct = (productId: string) => {
+    if (requiresSubscription && !subscriptionLoading && !hasActiveSubscription) {
+      Toast.show({
+        type: 'info',
+        text1: 'Subscription Required',
+        text2: 'You need an active subscription to manage products',
+      });
+      goToSubscription();
+      return;
+    }
     navigation.navigate('EditProduct', { productId });
   };
 
   const handleDeleteProduct = (product: Product) => {
+    if (requiresSubscription && !subscriptionLoading && !hasActiveSubscription) {
+      Toast.show({
+        type: 'info',
+        text1: 'Subscription Required',
+        text2: 'You need an active subscription to manage products',
+      });
+      goToSubscription();
+      return;
+    }
     Alert.alert(
       'Delete Product',
       `Are you sure you want to delete "${product.name}"? This action cannot be undone.`,
@@ -264,22 +367,30 @@ export const ProductListScreen = () => {
         </View>
         <View style={styles.productActions}>
           <TouchableOpacity
-            style={styles.actionButton}
+            style={[
+              styles.actionButton,
+              requiresSubscription && !subscriptionLoading && !hasActiveSubscription && { opacity: 0.5 },
+            ]}
             onPress={(e) => {
               e.stopPropagation();
               handleEditProduct(item._id);
             }}
             activeOpacity={0.7}
+            disabled={requiresSubscription && !subscriptionLoading && !hasActiveSubscription}
           >
             <Ionicons name="create-outline" size={20} color={colors.primary} />
           </TouchableOpacity>
           <TouchableOpacity
-            style={styles.actionButton}
+            style={[
+              styles.actionButton,
+              requiresSubscription && !subscriptionLoading && !hasActiveSubscription && { opacity: 0.5 },
+            ]}
             onPress={(e) => {
               e.stopPropagation();
               handleDeleteProduct(item);
             }}
             activeOpacity={0.7}
+            disabled={requiresSubscription && !subscriptionLoading && !hasActiveSubscription}
           >
             <Ionicons name="trash-outline" size={20} color={colors.error} />
           </TouchableOpacity>
@@ -290,6 +401,36 @@ export const ProductListScreen = () => {
 
   return (
     <SafeAreaView style={styles.container}>
+      {showProfileBanner && (
+        <TouchableOpacity
+          activeOpacity={0.8}
+          onPress={() => {
+            const parentNavigation = navigation.getParent();
+            if (parentNavigation) {
+              parentNavigation.navigate('More', { screen: 'PharmacyProfile' });
+            } else {
+              (navigation as any).navigate('More', { screen: 'PharmacyProfile' });
+            }
+          }}
+          style={styles.profileBanner}
+        >
+          <Ionicons name="warning-outline" size={18} color={colors.warning} />
+          <Text style={styles.profileBannerText}>Complete your pharmacy profile to add products</Text>
+          <Ionicons name="chevron-forward" size={18} color={colors.textLight} />
+        </TouchableOpacity>
+      )}
+
+      {requiresSubscription && !subscriptionLoading && !hasActiveSubscription && (
+        <TouchableOpacity
+          activeOpacity={0.8}
+          onPress={goToSubscription}
+          style={styles.subscriptionBanner}
+        >
+          <Ionicons name="card-outline" size={18} color={colors.warning} />
+          <Text style={styles.subscriptionBannerText}>Subscription required to manage products</Text>
+          <Ionicons name="chevron-forward" size={18} color={colors.textLight} />
+        </TouchableOpacity>
+      )}
       {/* Pharmacy Info Banner */}
       {myPharmacy ? (
         <View style={styles.pharmacyBanner}>
@@ -350,7 +491,7 @@ export const ProductListScreen = () => {
           style={[styles.addButton, { backgroundColor: colors.primary }]}
           onPress={handleAddProduct}
           activeOpacity={0.7}
-          disabled={!myPharmacy}
+          disabled={!myPharmacy || !isProfileComplete || !isApproved || subscriptionLoading || !hasActiveSubscription}
         >
           <Ionicons name="add" size={20} color={colors.textWhite} />
           <Text style={styles.addButtonText}>Add Product</Text>
@@ -417,6 +558,41 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.backgroundLight,
+  },
+  profileBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: colors.warningLight,
+    padding: 12,
+    marginHorizontal: 16,
+    marginTop: 12,
+    marginBottom: 8,
+    borderRadius: 8,
+    gap: 8,
+  },
+  profileBannerText: {
+    flex: 1,
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.text,
+  },
+  subscriptionBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: colors.warningLight,
+    padding: 12,
+    marginHorizontal: 16,
+    marginBottom: 8,
+    borderRadius: 8,
+    gap: 8,
+  },
+  subscriptionBannerText: {
+    flex: 1,
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.text,
   },
   pharmacyBanner: {
     flexDirection: 'row',

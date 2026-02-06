@@ -24,6 +24,7 @@ import { MoreStackParamList } from '../../navigation/types';
 import { colors } from '../../constants/colors';
 import { Ionicons } from '@expo/vector-icons';
 import * as medicalRecordsApi from '../../services/medicalRecords';
+import * as prescriptionApi from '../../services/prescription';
 import * as uploadApi from '../../services/upload';
 import { API_BASE_URL } from '../../config/api';
 import Toast from 'react-native-toast-message';
@@ -93,43 +94,68 @@ export const MedicalRecordsScreen = () => {
   });
   const [filePreview, setFilePreview] = useState<string | null>(null);
 
-  // Determine record type filter based on active tab
-  const recordTypeFilter = useMemo(() => {
-    return activeTab === 'prescription' ? 'PRESCRIPTION' : undefined;
-  }, [activeTab]);
-
   // Fetch medical records
   const {
     data: recordsResponse,
-    isLoading,
-    refetch,
-  } = useQuery({
-    queryKey: ['medicalRecords', recordTypeFilter, currentPage],
+    isLoading: medicalLoading,
+    refetch: refetchMedical,
+  } = useQuery<medicalRecordsApi.MedicalRecordsListResponse>({
+    queryKey: ['medicalRecords', currentPage],
     queryFn: () =>
       medicalRecordsApi.getMedicalRecords({
-        recordType: recordTypeFilter,
         page: currentPage,
         limit: 20,
       }),
-    keepPreviousData: true,
+    enabled: activeTab === 'medical',
+  });
+
+  // Fetch prescriptions (new prescription module)
+  const {
+    data: prescriptionsResponse,
+    isLoading: prescriptionsLoading,
+    refetch: refetchPrescriptions,
+  } = useQuery<prescriptionApi.PrescriptionListResponse>({
+    queryKey: ['prescriptions', currentPage],
+    queryFn: () =>
+      prescriptionApi.listMyPrescriptions({
+        page: currentPage,
+        limit: 20,
+      }),
+    enabled: activeTab === 'prescription',
   });
 
   // Extract records and pagination
-  const recordsData = recordsResponse?.data || recordsResponse;
-  const records = recordsData?.records || [];
-  const pagination = recordsData?.pagination || { page: 1, limit: 20, total: 0, pages: 1 };
+  const recordsData = recordsResponse?.data;
+  const medicalRecords = recordsData?.records || [];
+  const medicalPagination = recordsData?.pagination || { page: 1, limit: 20, total: 0, pages: 1 };
 
-  // Filter records by search query
+  const prescriptionsData = prescriptionsResponse?.data;
+  const prescriptions = prescriptionsData?.prescriptions || [];
+  const prescriptionsPagination = prescriptionsData?.pagination || { page: 1, limit: 20, total: 0, pages: 1 };
+
+  const items = activeTab === 'prescription' ? prescriptions : medicalRecords;
+  const pagination = activeTab === 'prescription' ? prescriptionsPagination : medicalPagination;
+
+  // Filter items by search query
   const filteredRecords = useMemo(() => {
-    if (!searchQuery.trim()) return records;
+    if (!searchQuery.trim()) return items;
     const query = searchQuery.toLowerCase();
-    return records.filter(
-      (record) =>
-        record.title?.toLowerCase().includes(query) ||
-        record.description?.toLowerCase().includes(query) ||
-        record.fileName?.toLowerCase().includes(query)
-    );
-  }, [records, searchQuery]);
+    return items.filter((item: any) => {
+      if (activeTab === 'prescription') {
+        return (
+          item?.diagnosis?.toLowerCase().includes(query) ||
+          item?.doctorId?.fullName?.toLowerCase().includes(query) ||
+          item?.appointmentId?.appointmentNumber?.toLowerCase().includes(query)
+        );
+      }
+
+      return (
+        item?.title?.toLowerCase().includes(query) ||
+        item?.description?.toLowerCase().includes(query) ||
+        item?.fileName?.toLowerCase().includes(query)
+      );
+    });
+  }, [items, searchQuery, activeTab]);
 
   // Create medical record mutation
   const createRecordMutation = useMutation({
@@ -164,7 +190,7 @@ export const MedicalRecordsScreen = () => {
       }
     },
     onSuccess: () => {
-      queryClient.invalidateQueries(['medicalRecords']);
+      queryClient.invalidateQueries({ queryKey: ['medicalRecords'] });
       setShowAddModal(false);
       setFormData({
         title: '',
@@ -195,7 +221,7 @@ export const MedicalRecordsScreen = () => {
   const deleteRecordMutation = useMutation({
     mutationFn: (recordId: string) => medicalRecordsApi.deleteMedicalRecord(recordId),
     onSuccess: () => {
-      queryClient.invalidateQueries(['medicalRecords']);
+      queryClient.invalidateQueries({ queryKey: ['medicalRecords'] });
       Toast.show({
         type: 'success',
         text1: 'Success',
@@ -395,11 +421,79 @@ export const MedicalRecordsScreen = () => {
 
   const handleRefresh = async () => {
     setRefreshing(true);
-    await refetch();
+    if (activeTab === 'prescription') {
+      await refetchPrescriptions();
+    } else {
+      await refetchMedical();
+    }
     setRefreshing(false);
   };
 
-  const renderRecordItem = ({ item: record }: { item: medicalRecordsApi.MedicalRecord }) => {
+  const renderRecordItem = ({ item }: { item: any }) => {
+    if (activeTab === 'prescription') {
+      const prescription = item as prescriptionApi.Prescription;
+      const recordId = `#${prescription._id.slice(-6).toUpperCase()}`;
+      const appointmentId = (prescription.appointmentId && typeof prescription.appointmentId === 'object')
+        ? prescription.appointmentId._id
+        : prescription.appointmentId;
+
+      const doctorName =
+        prescription.doctorId && typeof prescription.doctorId === 'object'
+          ? prescription.doctorId.fullName || 'Unknown Doctor'
+          : 'Unknown Doctor';
+      const doctorImage =
+        prescription.doctorId && typeof prescription.doctorId === 'object'
+          ? prescription.doctorId.profileImage
+          : null;
+      const normalizedImageUrl = normalizeImageUrl(doctorImage);
+      const imageSource = normalizedImageUrl ? { uri: normalizedImageUrl } : defaultAvatar;
+
+      const title = prescription.appointmentId?.appointmentNumber
+        ? `Prescription for ${prescription.appointmentId.appointmentNumber}`
+        : 'Prescription';
+
+      return (
+        <View style={styles.recordCard}>
+          <View style={styles.recordHeader}>
+            <View style={styles.recordIcon}>
+              <Ionicons name="document-text" size={24} color={colors.primary} />
+            </View>
+            <View style={styles.recordInfo}>
+              <Text style={styles.recordId}>{recordId}</Text>
+              <Text style={styles.recordName}>{title}</Text>
+              <Text style={styles.recordDate}>{formatDate(prescription.issuedAt || prescription.createdAt)}</Text>
+            </View>
+          </View>
+
+          <View style={styles.doctorInfo}>
+            <Image source={imageSource} style={styles.doctorImage} defaultSource={defaultAvatar} />
+            <View style={styles.doctorDetails}>
+              <Text style={styles.doctorLabel}>Prescribed By</Text>
+              <Text style={styles.doctorName}>{doctorName}</Text>
+            </View>
+          </View>
+
+          <View style={styles.actionButtons}>
+            <TouchableOpacity
+              style={styles.viewButton}
+              onPress={() => navigation.navigate('Prescription', { appointmentId })}
+            >
+              <Ionicons name="eye-outline" size={18} color={colors.primary} />
+              <Text style={styles.viewButtonText}>View</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.downloadButton}
+              onPress={() => navigation.navigate('Prescription', { appointmentId })}
+            >
+              <Ionicons name="download-outline" size={18} color={colors.primary} />
+              <Text style={styles.downloadButtonText}>Download</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      );
+    }
+
+    const record = item as medicalRecordsApi.MedicalRecord;
     const recordId = `#${record._id.slice(-6).toUpperCase()}`;
     const doctorName =
       record.relatedDoctorId && typeof record.relatedDoctorId === 'object' && record.relatedDoctorId !== null
@@ -418,35 +512,20 @@ export const MedicalRecordsScreen = () => {
       <View style={styles.recordCard}>
         <View style={styles.recordHeader}>
           <View style={styles.recordIcon}>
-            <Ionicons
-              name={activeTab === 'prescription' ? 'document-text' : 'medical'}
-              size={24}
-              color={colors.primary}
-            />
+            <Ionicons name="medical" size={24} color={colors.primary} />
           </View>
           <View style={styles.recordInfo}>
             <Text style={styles.recordId}>{recordId}</Text>
             <Text style={styles.recordName}>{record.title}</Text>
             <Text style={styles.recordDate}>{formatDate(record.uploadedDate || record.createdAt)}</Text>
-            {activeTab === 'medical' && (
-              <View style={styles.recordTypeBadge}>
-                <View style={[styles.badge, { backgroundColor: getRecordTypeBadgeColor(record.recordType) }]}>
-                  <Text style={styles.badgeText}>{record.recordType?.replace('_', ' ') || 'OTHER'}</Text>
-                </View>
+            <View style={styles.recordTypeBadge}>
+              <View style={[styles.badge, { backgroundColor: getRecordTypeBadgeColor(record.recordType) }]}>
+                <Text style={styles.badgeText}>{record.recordType?.replace('_', ' ') || 'OTHER'}</Text>
               </View>
-            )}
-          </View>
-        </View>
-        {activeTab === 'prescription' && (
-          <View style={styles.doctorInfo}>
-            <Image source={imageSource} style={styles.doctorImage} defaultSource={defaultAvatar} />
-            <View style={styles.doctorDetails}>
-              <Text style={styles.doctorLabel}>Prescribed By</Text>
-              <Text style={styles.doctorName}>{doctorName}</Text>
             </View>
           </View>
-        )}
-        {activeTab === 'medical' && record.description && (
+        </View>
+        {record.description && (
           <View style={styles.descriptionContainer}>
             <Text style={styles.descriptionLabel}>Description:</Text>
             <Text style={styles.descriptionText} numberOfLines={2}>
@@ -464,7 +543,6 @@ export const MedicalRecordsScreen = () => {
             onPress={() => {
               const fileUrl = normalizeImageUrl(record.fileUrl);
               if (fileUrl) {
-                // In React Native, you might want to use Linking.openURL or a file viewer
                 Alert.alert('Download', 'File download functionality would open here');
               }
             }}
@@ -475,7 +553,7 @@ export const MedicalRecordsScreen = () => {
           <TouchableOpacity
             style={styles.deleteButton}
             onPress={() => handleDelete(record._id)}
-            disabled={deleteRecordMutation.isLoading}
+            disabled={deleteRecordMutation.isPending}
           >
             <Ionicons name="trash-outline" size={18} color={colors.error} />
           </TouchableOpacity>
@@ -527,7 +605,7 @@ export const MedicalRecordsScreen = () => {
       </View>
 
       {/* Content */}
-      {isLoading && currentPage === 1 ? (
+      {((activeTab === 'prescription' ? prescriptionsLoading : medicalLoading) && currentPage === 1) ? (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={colors.primary} />
           <Text style={styles.loadingText}>Loading records...</Text>
@@ -667,10 +745,10 @@ export const MedicalRecordsScreen = () => {
                 variant="secondary"
               />
               <Button
-                title={createRecordMutation.isLoading ? 'Uploading...' : 'Add Record'}
+                title={createRecordMutation.isPending ? 'Uploading...' : 'Add Record'}
                 onPress={handleSubmit}
                 style={styles.submitButton}
-                disabled={createRecordMutation.isLoading}
+                disabled={createRecordMutation.isPending}
               />
             </View>
           </View>

@@ -7,6 +7,7 @@ import api from './api';
 
 export interface Pharmacy {
   _id: string;
+  kind?: 'PHARMACY' | 'PARAPHARMACY';
   name: string;
   phone?: string;
   address?: {
@@ -21,8 +22,9 @@ export interface Pharmacy {
     lat: number;
     lng: number;
   };
-  ownerId: string;
+  ownerId: string | { _id: string };
   logo?: string;
+  isActive?: boolean;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -31,6 +33,7 @@ export interface PharmacyFilters {
   ownerId?: string;
   city?: string;
   search?: string;
+  kind?: 'PHARMACY' | 'PARAPHARMACY';
   page?: number;
   limit?: number;
 }
@@ -62,6 +65,7 @@ export interface MyPharmacyResponse {
 }
 
 export interface CreatePharmacyData {
+  kind?: 'PHARMACY' | 'PARAPHARMACY';
   name: string;
   phone?: string;
   address?: {

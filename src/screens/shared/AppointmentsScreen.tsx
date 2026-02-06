@@ -24,6 +24,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as appointmentApi from '../../services/appointment';
 import Toast from 'react-native-toast-message';
 import { API_BASE_URL } from '../../config/api';
+import { NotificationBell } from '../../components/common/NotificationBell';
 
 /**
  * Normalize image URL for mobile app
@@ -123,7 +124,7 @@ const AppointmentsScreen = () => {
       case 'upcoming':
         return ['PENDING', 'CONFIRMED']; // Show both pending and confirmed as upcoming
       case 'cancelled':
-        return ['CANCELLED', 'REJECTED'];
+        return ['CANCELLED'];
       case 'completed':
         return ['COMPLETED', 'NO_SHOW'];
       default:
@@ -157,32 +158,40 @@ const AppointmentsScreen = () => {
       }
       
       // Fetch all statuses for the active tab
-      const allPromises = statuses.map(status =>
-        appointmentApi.listAppointments({
-          status,
-          page: 1,
-          limit: 100, // Get all for now, can add pagination later
-          ...dateFilter, // Include date filters if provided
-        })
+      const results = await Promise.allSettled(
+        statuses.map((status) =>
+          appointmentApi.listAppointments({
+            status,
+            page: 1,
+            limit: 100, // Get all for now, can add pagination later
+            ...dateFilter, // Include date filters if provided
+          })
+        )
       );
-      
-      const results = await Promise.all(allPromises);
       
       // Combine all appointments
       let allAppointments: appointmentApi.Appointment[] = [];
       
       results.forEach((result, index) => {
-        const responseData = result.data || result;
+        if (result.status !== 'fulfilled') {
+          if (__DEV__) {
+            console.warn(`📅 Status ${statuses[index]} request failed:`, result.reason);
+          }
+          return;
+        }
+
+        const responseData = (result.value as any)?.data || result.value;
         if (__DEV__) {
           console.log(`📅 Status ${statuses[index]} response:`, {
             status: statuses[index],
             hasData: !!responseData,
-            appointmentsCount: responseData?.appointments?.length || 0,
-            pagination: responseData?.pagination,
+            appointmentsCount: responseData?.data?.appointments?.length || responseData?.appointments?.length || 0,
+            pagination: responseData?.data?.pagination || responseData?.pagination,
           });
         }
-        if (responseData?.appointments) {
-          allAppointments = [...allAppointments, ...responseData.appointments];
+        const appointments = responseData?.data?.appointments || responseData?.appointments;
+        if (appointments) {
+          allAppointments = [...allAppointments, ...appointments];
         }
       });
       
@@ -237,15 +246,22 @@ const AppointmentsScreen = () => {
         appointmentApi.listAppointments({ status: 'PENDING', limit: 1 }),
         appointmentApi.listAppointments({ status: 'CONFIRMED', limit: 1 }),
         appointmentApi.listAppointments({ status: 'CANCELLED', limit: 1 }),
-        appointmentApi.listAppointments({ status: 'REJECTED', limit: 1 }),
+        Promise.resolve(null),
         appointmentApi.listAppointments({ status: 'COMPLETED', limit: 1 }),
         appointmentApi.listAppointments({ status: 'NO_SHOW', limit: 1 }),
       ]);
+
+      const getTotal = (resp: any) => {
+        if (!resp) return 0;
+        const responseData = resp?.data || resp;
+        return responseData?.data?.pagination?.total || responseData?.pagination?.total || 0;
+      };
       
       return {
-        upcoming: (pending.data?.pagination?.total || 0) + (confirmed.data?.pagination?.total || 0),
-        cancelled: (cancelled.data?.pagination?.total || 0) + (rejected.data?.pagination?.total || 0),
-        completed: (completed.data?.pagination?.total || 0) + (noShow.data?.pagination?.total || 0),
+        upcoming: getTotal(pending) + getTotal(confirmed),
+        cancelled: getTotal(cancelled),
+        completed: getTotal(completed) + getTotal(noShow),
+        pendingRequests: getTotal(pending),
       };
     },
     enabled: !!user,
@@ -584,24 +600,36 @@ const AppointmentsScreen = () => {
       <View style={styles.header}>
         <View style={styles.headerTop}>
           <Text style={styles.headerTitle}>Appointments</Text>
-          {isDoctor && (
-            <View style={styles.headerActions}>
-              <TouchableOpacity
-                style={styles.headerActionBtn}
-                onPress={() => navigation.navigate('AppointmentRequests')}
-                activeOpacity={0.7}
-              >
-                <Ionicons name="calendar-outline" size={20} color={colors.textWhite} />
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.headerActionBtn}
-                onPress={() => navigation.navigate('AvailableTimings')}
-                activeOpacity={0.7}
-              >
-                <Ionicons name="time-outline" size={20} color={colors.textWhite} />
-              </TouchableOpacity>
-            </View>
-          )}
+          <View style={styles.headerActions}>
+            <NotificationBell />
+            {isDoctor && (
+              <>
+                <TouchableOpacity
+                  style={styles.headerActionBtn}
+                  onPress={() => navigation.navigate('AppointmentRequests')}
+                  activeOpacity={0.7}
+                >
+                  <View style={styles.headerIconWrap}>
+                    <Ionicons name="calendar-outline" size={20} color={colors.textWhite} />
+                    {!!(tabCounts as any)?.pendingRequests && (tabCounts as any).pendingRequests > 0 && (
+                      <View style={styles.headerBadge}>
+                        <Text style={styles.headerBadgeText}>
+                          {(tabCounts as any).pendingRequests > 99 ? '99+' : String((tabCounts as any).pendingRequests)}
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.headerActionBtn}
+                  onPress={() => navigation.navigate('AvailableTimings')}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons name="time-outline" size={20} color={colors.textWhite} />
+                </TouchableOpacity>
+              </>
+            )}
+          </View>
         </View>
         <View style={styles.searchContainer}>
           <View style={styles.searchInputContainer}>
@@ -990,6 +1018,26 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255, 255, 255, 0.2)',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  headerIconWrap: {
+    position: 'relative',
+  },
+  headerBadge: {
+    position: 'absolute',
+    top: -7,
+    right: -10,
+    backgroundColor: colors.error,
+    borderRadius: 10,
+    minWidth: 18,
+    height: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 4,
+  },
+  headerBadgeText: {
+    color: colors.textWhite,
+    fontSize: 10,
+    fontWeight: '700',
   },
   searchContainer: {
     marginTop: 0,

@@ -201,7 +201,18 @@ const BookingScreen = () => {
         text1: 'Success',
         text2: 'Appointment request created successfully!',
       });
-      // Navigate to appointments screen or success screen
+      // Navigate to the Appointments tab (works even if Booking was opened from Home stack)
+      try {
+        const parent = (navigation as any).getParent?.();
+        if (parent) {
+          parent.navigate('Appointments', { screen: 'AppointmentsScreen' });
+          return;
+        }
+      } catch {
+        // ignore
+      }
+
+      // Fallback: if already inside the Appointments stack
       navigation.navigate('AppointmentsScreen');
     },
     onError: (error: any) => {
@@ -329,7 +340,7 @@ const BookingScreen = () => {
       const fullDate = date.toISOString().split('T')[0];
       const isPast = date < today;
       const isToday = date.getTime() === today.getTime();
-      const isSelected = selectedDate && date.getTime() === selectedDate.getTime();
+      const isSelected = selectedDate ? date.getTime() === selectedDate.getTime() : false;
       
       dates.push({ date: day, fullDate, isPast, isToday, isSelected });
     }
@@ -821,12 +832,12 @@ const BookingScreen = () => {
             </TouchableOpacity>
             {currentStep === 6 ? (
               <TouchableOpacity
-                style={[styles.nextBtn, createAppointmentMutation.isLoading && styles.nextBtnDisabled]}
+                style={[styles.nextBtn, createAppointmentMutation.isPending && styles.nextBtnDisabled]}
                 onPress={handleSubmit}
                 activeOpacity={0.8}
-                disabled={createAppointmentMutation.isLoading}
+                disabled={createAppointmentMutation.isPending}
               >
-                {createAppointmentMutation.isLoading ? (
+                {createAppointmentMutation.isPending ? (
                   <>
                     <ActivityIndicator size="small" color={colors.textWhite} style={{ marginRight: 8 }} />
                     <Text style={styles.nextBtnText}>Creating...</Text>

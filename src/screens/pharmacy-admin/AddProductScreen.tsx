@@ -24,6 +24,7 @@ import { Menu } from 'react-native-paper';
 import { useAuth } from '../../contexts/AuthContext';
 import * as productApi from '../../services/product';
 import * as pharmacyApi from '../../services/pharmacy';
+import * as pharmacySubscriptionApi from '../../services/pharmacySubscription';
 import * as uploadApi from '../../services/upload';
 import Toast from 'react-native-toast-message';
 import { API_BASE_URL } from '../../config/api';
@@ -48,7 +49,11 @@ export const AddProductScreen = () => {
   const navigation = useNavigation<AddProductScreenNavigationProp>();
   const { user } = useAuth();
   const queryClient = useQueryClient();
-  const isPharmacyUser = user?.role === 'pharmacy' || (user as any)?.role === 'PHARMACY';
+  const isPharmacy = user?.role === 'pharmacy' || (user as any)?.role === 'PHARMACY';
+  const isParapharmacy = user?.role === 'parapharmacy' || (user as any)?.role === 'PARAPHARMACY';
+  const isPharmacyOrParaUser = isPharmacy || isParapharmacy;
+  const requiresSubscription = isPharmacy;
+  const isApproved = String((user as any)?.status || user?.status || '').toUpperCase() === 'APPROVED';
   const [productName, setProductName] = useState('');
   const [category, setCategory] = useState('');
   const [subCategory, setSubCategory] = useState('');
@@ -83,36 +88,130 @@ export const AddProductScreen = () => {
   // Get user ID
   const userId = user?._id || user?.id;
 
-  const { data: pharmacyListResponse, refetch: refetchPharmacy } = useQuery({
-    queryKey: ['doctor-pharmacy', userId],
-    queryFn: () => pharmacyApi.listPharmacies({ ownerId: userId!, limit: 1 }),
-    enabled: !!userId && !isPharmacyUser,
-  });
-
   const { data: myPharmacyResponse, refetch: refetchMyPharmacy } = useQuery({
     queryKey: ['my-pharmacy', userId],
     queryFn: () => pharmacyApi.getMyPharmacy(),
-    enabled: !!userId && isPharmacyUser,
+    enabled: !!userId && isPharmacyOrParaUser,
   });
 
-  const myPharmacy = useMemo(() => {
-    if (isPharmacyUser) {
-      const responseData = (myPharmacyResponse as any)?.data || myPharmacyResponse;
-      return responseData?.data || responseData || null;
-    }
+  const { data: subscriptionResponse, isLoading: subscriptionLoading } = useQuery({
+    queryKey: ['my-pharmacy-subscription', userId],
+    queryFn: () => pharmacySubscriptionApi.getMyPharmacySubscription(),
+    enabled: !!userId && requiresSubscription,
+    retry: 1,
+  });
 
-    if (!pharmacyListResponse) return null;
-    const responseData = (pharmacyListResponse as any).data || pharmacyListResponse;
-    const pharmacies = Array.isArray(responseData) ? responseData : responseData.pharmacies || [];
-    return pharmacies.length > 0 ? pharmacies[0] : null;
-  }, [pharmacyListResponse, myPharmacyResponse, isPharmacyUser]);
+  const subscriptionData = useMemo(() => {
+    if (!subscriptionResponse) return null;
+    const r: any = subscriptionResponse as any;
+    const data = r?.data ?? r;
+    return data?.data ?? data;
+  }, [subscriptionResponse]);
+
+  const hasActiveSubscription = useMemo(() => {
+    if (!requiresSubscription) return true;
+    if (!subscriptionData) return false;
+    if (subscriptionData?.hasActiveSubscription === true) return true;
+    if (subscriptionData?.subscriptionExpiresAt) return new Date(subscriptionData.subscriptionExpiresAt) > new Date();
+    return false;
+  }, [subscriptionData]);
+
+  const goToSubscription = () => {
+    const parent = (navigation as any).getParent?.();
+    if (parent) {
+      parent.navigate('More', { screen: 'PharmacySubscription' });
+    } else {
+      (navigation as any).navigate('More', { screen: 'PharmacySubscription' });
+    }
+  };
+
+  const myPharmacy = useMemo(() => {
+    const responseData = (myPharmacyResponse as any)?.data || myPharmacyResponse;
+    return responseData?.data || responseData || null;
+  }, [myPharmacyResponse]);
+
+  const isProfileComplete = useMemo(() => {
+    if (!myPharmacy) return false;
+    return !!(
+      myPharmacy.name &&
+      myPharmacy.phone &&
+      myPharmacy.address &&
+      myPharmacy.address.line1 &&
+      myPharmacy.address.city
+    );
+  }, [myPharmacy]);
+
+  const goToPharmacyProfile = () => {
+    const parent = (navigation as any).getParent?.();
+    if (parent) {
+      parent.navigate('More', { screen: 'PharmacyProfile' });
+    } else {
+      (navigation as any).navigate('More', { screen: 'PharmacyProfile' });
+    }
+  };
+
+  if (isPharmacyOrParaUser && !isApproved) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24 }}>
+          <Ionicons name="time-outline" size={54} color={colors.warning} />
+          <Text style={{ marginTop: 12, fontSize: 18, fontWeight: '700', color: colors.text }}>Pending Approval</Text>
+          <Text style={{ marginTop: 8, fontSize: 13, color: colors.textSecondary, textAlign: 'center' }}>
+            Your pharmacy account is pending admin approval. You cannot add products until approved.
+          </Text>
+          <Button title="Go Back" onPress={() => navigation.goBack()} style={{ marginTop: 16, width: '100%' }} />
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (isPharmacyOrParaUser && myPharmacy && !isProfileComplete) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24 }}>
+          <Ionicons name="warning-outline" size={54} color={colors.warning} />
+          <Text style={{ marginTop: 12, fontSize: 18, fontWeight: '700', color: colors.text }}>Complete Profile</Text>
+          <Text style={{ marginTop: 8, fontSize: 13, color: colors.textSecondary, textAlign: 'center' }}>
+            Please complete your pharmacy profile before adding products.
+          </Text>
+          <Button title="Complete Pharmacy Profile" onPress={goToPharmacyProfile} style={{ marginTop: 16, width: '100%' }} />
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (requiresSubscription && subscriptionLoading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24 }}>
+          <ActivityIndicator size="large" color={colors.primary} />
+          <Text style={{ marginTop: 12, fontSize: 14, color: colors.textSecondary }}>Loading subscription...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (requiresSubscription && !subscriptionLoading && !hasActiveSubscription) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24 }}>
+          <Ionicons name="card-outline" size={54} color={colors.warning} />
+          <Text style={{ marginTop: 12, fontSize: 18, fontWeight: '700', color: colors.text }}>Subscription Required</Text>
+          <Text style={{ marginTop: 8, fontSize: 13, color: colors.textSecondary, textAlign: 'center' }}>
+            You need an active subscription to add products.
+          </Text>
+          <Button title="View Subscription Plans" onPress={goToSubscription} style={{ marginTop: 16, width: '100%' }} />
+          <Button title="Go Back" onPress={() => navigation.goBack()} style={{ marginTop: 10, width: '100%' }} />
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   // Create product mutation
   const createProductMutation = useMutation({
     mutationFn: (data: productApi.CreateProductData) => productApi.createProduct(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['pharmacy-products'] });
-      queryClient.invalidateQueries({ queryKey: ['doctor-products'] });
       Toast.show({
         type: 'success',
         text1: 'Success',
@@ -149,7 +248,6 @@ export const AddProductScreen = () => {
   const createPharmacyMutation = useMutation({
     mutationFn: (data: pharmacyApi.CreatePharmacyData) => pharmacyApi.createPharmacy(data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['doctor-pharmacy'] });
       queryClient.invalidateQueries({ queryKey: ['my-pharmacy'] });
       Toast.show({
         type: 'success',
@@ -173,11 +271,7 @@ export const AddProductScreen = () => {
           lng: '',
         },
       });
-      if (isPharmacyUser) {
-        refetchMyPharmacy();
-      } else {
-        refetchPharmacy();
-      }
+      refetchMyPharmacy();
     },
     onError: (error: any) => {
       const errorMessage = error?.response?.data?.message || error?.message || 'Failed to create pharmacy';
@@ -279,18 +373,7 @@ export const AddProductScreen = () => {
   const handleSubmit = async () => {
     // Check if doctor has a pharmacy
     if (!myPharmacy) {
-      if (isPharmacyUser) {
-        setShowPharmacyModal(true);
-      } else {
-        // Navigate to PharmacyManagementScreen in MoreStack
-        const parentNavigation = navigation.getParent();
-        if (parentNavigation) {
-          parentNavigation.navigate('More', { screen: 'PharmacyManagement' });
-        } else {
-          // Fallback: try direct navigation
-          (navigation as any).navigate('More', { screen: 'PharmacyManagement' });
-        }
-      }
+      setShowPharmacyModal(true);
       Toast.show({
         type: 'info',
         text1: 'Pharmacy Required',
@@ -456,6 +539,14 @@ export const AddProductScreen = () => {
   };
 
   return (
+    !isPharmacyOrParaUser ? (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.loadingContainer}>
+          <Ionicons name="alert-circle-outline" size={48} color={colors.error} />
+          <Text style={styles.loadingText}>This section is available for pharmacy accounts only.</Text>
+        </View>
+      </SafeAreaView>
+    ) :
     <SafeAreaView style={styles.container}>
       <ScrollView showsVerticalScrollIndicator={false}>
         {/* Pharmacy Info Banner */}
@@ -480,19 +571,7 @@ export const AddProductScreen = () => {
               <TouchableOpacity
                 style={styles.createPharmacyButton}
                 onPress={() => {
-                  if (isPharmacyUser) {
-                    setShowPharmacyModal(true);
-                    return;
-                  }
-
-                  // Navigate to PharmacyManagementScreen in MoreStack
-                  const parentNavigation = navigation.getParent();
-                  if (parentNavigation) {
-                    parentNavigation.navigate('More', { screen: 'PharmacyManagement' });
-                  } else {
-                    // Fallback: try direct navigation
-                    (navigation as any).navigate('More', { screen: 'PharmacyManagement' });
-                  }
+                  setShowPharmacyModal(true);
                 }}
                 activeOpacity={0.7}
               >
@@ -815,6 +894,18 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.backgroundLight,
+  },
+  loadingContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 24,
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 14,
+    color: colors.textSecondary,
+    textAlign: 'center',
   },
   pharmacyBanner: {
     flexDirection: 'row',

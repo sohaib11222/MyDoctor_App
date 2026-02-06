@@ -80,7 +80,7 @@ export const InvoicesScreen = () => {
     data: paymentHistoryResponse,
     isLoading,
     refetch,
-  } = useQuery({
+  } = useQuery<paymentApi.TransactionsResponse>({
     queryKey: ['patientPaymentHistory', statusFilter, currentPage],
     queryFn: () =>
       paymentApi.getPatientPaymentHistory({
@@ -88,11 +88,10 @@ export const InvoicesScreen = () => {
         page: currentPage,
         limit: 20,
       }),
-    keepPreviousData: true,
   });
 
   // Extract transactions and pagination
-  const paymentHistoryData = paymentHistoryResponse?.data || paymentHistoryResponse;
+  const paymentHistoryData = paymentHistoryResponse?.data;
   const transactions = paymentHistoryData?.transactions || [];
   const pagination = paymentHistoryData?.pagination || { page: 1, limit: 20, total: 0, pages: 1 };
 

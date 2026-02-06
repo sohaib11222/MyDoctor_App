@@ -11,6 +11,7 @@ import * as notificationApi from '../../services/notification';
 import * as profileApi from '../../services/profile';
 import * as subscriptionApi from '../../services/subscription';
 import * as weeklyScheduleApi from '../../services/weeklySchedule';
+import { NotificationBell } from '../../components/common/NotificationBell';
 
 type MoreScreenNavigationProp = NativeStackNavigationProp<MoreStackParamList>;
 
@@ -70,6 +71,7 @@ export const MoreScreen = () => {
       return [
         { id: 1, title: 'All Orders', icon: 'shopping-bag', screen: 'AdminOrders' as keyof MoreStackParamList },
         { id: 2, title: 'Profile', icon: 'user', screen: 'Profile' as keyof MoreStackParamList },
+        { id: 2.5, title: 'Language', icon: 'globe', screen: 'Language' as keyof MoreStackParamList },
         { id: 3, title: 'Change Password', icon: 'lock', screen: 'ChangePassword' as keyof MoreStackParamList },
         { id: 4, title: 'Notifications', icon: 'bell', screen: 'Notifications' as keyof MoreStackParamList },
       ];
@@ -78,6 +80,18 @@ export const MoreScreen = () => {
     if (user?.role === 'pharmacy') {
       return [
         { id: 1, title: 'Profile', icon: 'user', screen: 'PharmacyProfile' as keyof MoreStackParamList },
+        { id: 1.5, title: 'Subscription', icon: 'credit-card', screen: 'PharmacySubscription' as keyof MoreStackParamList, showDanger: true },
+        // { id: 1.75, title: 'Language', icon: 'globe', screen: 'Language' as keyof MoreStackParamList },
+        { id: 2, title: 'Payout Settings', icon: 'dollar-sign', screen: 'PayoutSettings' as keyof MoreStackParamList },
+        { id: 3, title: 'Change Password', icon: 'lock', screen: 'ChangePassword' as keyof MoreStackParamList },
+        { id: 4, title: 'Notifications', icon: 'bell', screen: 'Notifications' as keyof MoreStackParamList },
+      ];
+    }
+
+    if (user?.role === 'parapharmacy') {
+      return [
+        { id: 1, title: 'Profile', icon: 'user', screen: 'PharmacyProfile' as keyof MoreStackParamList },
+        // { id: 1.5, title: 'Language', icon: 'globe', screen: 'Language' as keyof MoreStackParamList },
         { id: 2, title: 'Payout Settings', icon: 'dollar-sign', screen: 'PayoutSettings' as keyof MoreStackParamList },
         { id: 3, title: 'Change Password', icon: 'lock', screen: 'ChangePassword' as keyof MoreStackParamList },
         { id: 4, title: 'Notifications', icon: 'bell', screen: 'Notifications' as keyof MoreStackParamList },
@@ -86,7 +100,7 @@ export const MoreScreen = () => {
   
     if (user?.role === 'doctor') {
       return [
-        { id: 1, title: 'Dashboard', icon: 'grid', screen: 'DoctorDashboard' as keyof MoreStackParamList },
+        // { id: 1, title: 'Dashboard', icon: 'grid', screen: 'DoctorDashboard' as keyof MoreStackParamList },
         { id: 2, title: 'My Patients', icon: 'users', screen: 'MyPatients' as keyof MoreStackParamList },
         { id: 3, title: 'Reviews', icon: 'star', screen: 'Reviews' as keyof MoreStackParamList },
         { id: 4, title: 'Reschedule Requests', icon: 'calendar', screen: 'DoctorRescheduleRequests' as keyof MoreStackParamList },
@@ -95,10 +109,9 @@ export const MoreScreen = () => {
         { id: 6.5, title: 'Payout Settings', icon: 'dollar-sign', screen: 'PayoutSettings' as keyof MoreStackParamList },
         { id: 7, title: 'Available Timings', icon: 'clock', screen: 'AvailableTimings' as any, showDanger: true, isAppointmentsStack: true },
         { id: 8, title: 'Announcements', icon: 'bell', screen: 'Announcements' as keyof MoreStackParamList },
-        { id: 9, title: 'Pharmacy Management', icon: 'package', screen: 'PharmacyManagement' as keyof MoreStackParamList },
-        { id: 10, title: 'Orders', icon: 'shopping-bag', screen: 'PharmacyOrders' as keyof MoreStackParamList },
         { id: 11, title: 'Profile', icon: 'user', screen: 'Profile' as keyof MoreStackParamList },
         { id: 12, title: 'Profile Settings', icon: 'edit', screen: 'ProfileSettings' as keyof MoreStackParamList },
+        // { id: 12.5, title: 'Language', icon: 'globe', screen: 'Language' as keyof MoreStackParamList },
         // { id: 12, title: 'Social Media Links', icon: 'share-2', screen: 'SocialLinks' as keyof MoreStackParamList },
         // { id: 13, title: 'Settings', icon: 'settings', screen: 'Settings' as keyof MoreStackParamList },
         { id: 14, title: 'Change Password', icon: 'lock', screen: 'ChangePassword' as keyof MoreStackParamList },
@@ -106,9 +119,10 @@ export const MoreScreen = () => {
       ];
     } else {
       return [
-        { id: 1, title: 'Dashboard', icon: 'grid', screen: 'PatientDashboard' as keyof MoreStackParamList },
+        // { id: 1, title: 'Dashboard', icon: 'grid', screen: 'PatientDashboard' as keyof MoreStackParamList },
         // { id: 2, title: 'Profile', icon: 'user', screen: 'Profile' as keyof MoreStackParamList },
         { id: 3, title: 'Profile Settings', icon: 'edit', screen: 'PatientProfileSettings' as keyof MoreStackParamList },
+        // { id: 3.5, title: 'Language', icon: 'globe', screen: 'Language' as keyof MoreStackParamList },
         // { id: 4, title: 'Settings', icon: 'settings', screen: 'Settings' as keyof MoreStackParamList },
         { id: 5, title: 'Change Password', icon: 'lock', screen: 'ChangePassword' as keyof MoreStackParamList },
         { id: 6, title: 'Medical Records', icon: 'file-text', screen: 'MedicalRecords' as keyof MoreStackParamList },
@@ -132,13 +146,20 @@ export const MoreScreen = () => {
   return (
     <ScrollView style={styles.container}>
       <View style={styles.header}>
-        <View style={styles.avatar}>
-          <Text style={styles.avatarText}>
-            {user?.name?.split(' ').map(n => n[0]).join('') || 'U'}
-          </Text>
+        <View style={styles.headerTopRow}>
+          <View style={styles.headerLeft}>
+            <View style={styles.avatar}>
+              <Text style={styles.avatarText}>
+                {user?.name?.split(' ').map(n => n[0]).join('') || 'U'}
+              </Text>
+            </View>
+            <View style={styles.userInfo}>
+              <Text style={styles.userName}>{user?.name || 'User'}</Text>
+              <Text style={styles.userEmail}>{user?.email || ''}</Text>
+            </View>
+          </View>
+          <NotificationBell />
         </View>
-        <Text style={styles.userName}>{user?.name || 'User'}</Text>
-        <Text style={styles.userEmail}>{user?.email || ''}</Text>
       </View>
 
       <View style={styles.menuSection}>
@@ -216,21 +237,36 @@ const styles = StyleSheet.create({
   },
   header: {
     backgroundColor: colors.primary,
+    padding: 20,
     paddingTop: 60,
-    paddingBottom: 30,
+    alignItems: 'stretch',
     borderBottomLeftRadius: 30,
     borderBottomRightRadius: 30,
-    paddingHorizontal: 20,
+  },
+  headerTopRow: {
+    width: '100%',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
+  },
+  headerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    paddingRight: 12,
+  },
+  userInfo: {
+    flex: 1,
   },
   avatar: {
     width: 80,
     height: 80,
     borderRadius: 40,
-    backgroundColor: colors.textWhite,
+    backgroundColor: colors.background,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: 0,
+    marginRight: 12,
   },
   avatarText: {
     fontSize: 32,

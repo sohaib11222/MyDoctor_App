@@ -17,7 +17,7 @@ export interface RegisterData {
   password: string;
   phone?: string;
   gender?: 'MALE' | 'FEMALE' | 'OTHER';
-  role?: 'DOCTOR' | 'PATIENT' | 'PHARMACY';
+  role?: 'DOCTOR' | 'PATIENT' | 'PHARMACY' | 'PARAPHARMACY';
 }
 
 export interface AuthResponse {
@@ -56,13 +56,14 @@ export const login = async (credentials: LoginCredentials): Promise<AuthResponse
  */
 export const register = async (
   data: RegisterData,
-  userType: 'patient' | 'doctor' | 'pharmacy' = 'patient'
+  userType: 'patient' | 'doctor' | 'pharmacy' | 'parapharmacy' = 'patient'
 ): Promise<AuthResponse> => {
   // Map userType to backend role
-  const roleMap: Record<string, 'DOCTOR' | 'PATIENT' | 'PHARMACY'> = {
+  const roleMap: Record<string, 'DOCTOR' | 'PATIENT' | 'PHARMACY' | 'PARAPHARMACY'> = {
     patient: 'PATIENT',
     doctor: 'DOCTOR',
     pharmacy: 'PHARMACY',
+    parapharmacy: 'PARAPHARMACY',
   };
 
   const registrationData: RegisterData = {

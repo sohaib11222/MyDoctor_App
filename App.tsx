@@ -6,6 +6,7 @@ import { Provider as PaperProvider } from 'react-native-paper';
 import Toast from 'react-native-toast-message';
 import { AuthProvider } from './src/contexts/AuthContext';
 import { CartProvider } from './src/contexts/CartContext';
+import { LanguageProvider } from './src/contexts/LanguageContext';
 import { AppNavigator } from './src/navigation/AppNavigator';
 
 const queryClient = new QueryClient();
@@ -26,13 +27,15 @@ export default function App() {
   return (
     <PaperProvider>
       <QueryClientProvider client={queryClient}>
-        <AuthProvider>
-          <CartProvider>
-            <AppNavigator />
-            <StatusBar style="auto" />
-            <Toast config={toastConfig} />
-          </CartProvider>
-        </AuthProvider>
+        <LanguageProvider>
+          <AuthProvider>
+            <CartProvider>
+              <AppNavigator />
+              <StatusBar style="auto" />
+              <Toast config={toastConfig} />
+            </CartProvider>
+          </AuthProvider>
+        </LanguageProvider>
       </QueryClientProvider>
     </PaperProvider>
   );

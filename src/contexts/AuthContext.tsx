@@ -3,7 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import Toast from 'react-native-toast-message';
 import * as authApi from '../services/auth';
 
-export type UserRole = 'patient' | 'doctor' | 'pharmacy' | 'admin';
+export type UserRole = 'patient' | 'doctor' | 'pharmacy' | 'parapharmacy' | 'admin';
 
 export interface User {
   _id?: string;
@@ -111,6 +111,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       PATIENT: 'patient',
       DOCTOR: 'doctor',
       PHARMACY: 'pharmacy',
+      PARAPHARMACY: 'parapharmacy',
       ADMIN: 'admin',
     };
     return roleMap[backendRole] || 'patient';
@@ -162,7 +163,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             text1: 'Verification Required',
             text2: 'Please complete verification to continue',
           });
-        } else if (mappedUser.role === 'pharmacy' && mappedUser.status === 'PENDING') {
+        } else if ((mappedUser.role === 'pharmacy' || mappedUser.role === 'parapharmacy') && mappedUser.status === 'PENDING') {
           Toast.show({
             type: 'info',
             text1: 'Pending Approval',
@@ -219,6 +220,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           // Store user and token so they're logged in but stay in AuthNavigator
           setUser(mappedUser);
           await AsyncStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(mappedUser));
+          await AsyncStorage.setItem(STORAGE_KEYS.TOKEN, response.data.token);
           
           Toast.show({
             type: 'success',
@@ -230,9 +232,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           return;
         }
 
-        if (role === 'pharmacy' && mappedUser.status === 'PENDING') {
+        if ((role === 'pharmacy' || role === 'parapharmacy') && mappedUser.status === 'PENDING') {
           setUser(mappedUser);
           await AsyncStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(mappedUser));
+          await AsyncStorage.setItem(STORAGE_KEYS.TOKEN, response.data.token);
 
           Toast.show({
             type: 'success',
@@ -273,6 +276,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       setUser(null);
       // Clear documents submitted flag on logout
       await AsyncStorage.removeItem('doctor_documents_submitted');
+      await AsyncStorage.removeItem('pharmacy_documents_submitted');
       Toast.show({
         type: 'success',
         text1: 'Logged Out',
@@ -283,6 +287,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       // Even if API call fails, clear local storage
       await AsyncStorage.multiRemove([STORAGE_KEYS.USER, STORAGE_KEYS.TOKEN]);
       await AsyncStorage.removeItem('doctor_documents_submitted');
+      await AsyncStorage.removeItem('pharmacy_documents_submitted');
       setUser(null);
     }
   };

@@ -9,6 +9,7 @@ import {
   Dimensions,
   ActivityIndicator,
   RefreshControl,
+  FlatList,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -20,7 +21,6 @@ import { useAuth } from '../../contexts/AuthContext';
 import { colors } from '../../constants/colors';
 import { Ionicons } from '@expo/vector-icons';
 import * as doctorApi from '../../services/doctor';
-import * as productApi from '../../services/product';
 import * as appointmentApi from '../../services/appointment';
 import * as patientApi from '../../services/patient';
 import * as favoriteApi from '../../services/favorite';
@@ -32,6 +32,7 @@ import { ProfileIncompleteModal } from '../../components/common/ProfileIncomplet
 import { AddTimingsModal } from '../../components/common/AddTimingsModal';
 import { BuySubscriptionModal } from '../../components/common/BuySubscriptionModal';
 import { API_BASE_URL } from '../../config/api';
+import { NotificationBell } from '../../components/common/NotificationBell';
 
 type HomeScreenNavigationProp = NativeStackNavigationProp<HomeStackParamList>;
 
@@ -85,6 +86,21 @@ const formatDate = (date: string): string => {
   if (!date) return 'N/A';
   const d = new Date(date);
   return d.toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' });
+};
+
+const formatDateTime = (date: string, time?: string): string => {
+  if (!date) return 'N/A';
+  const d = new Date(date);
+  const dateStr = d.toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' });
+  return time ? `${dateStr} ${time}` : dateStr;
+};
+
+const formatCurrency = (amount: number): string => {
+  if (amount === null || amount === undefined) return '€0';
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'EUR',
+  }).format(amount);
 };
 
 export const HomeScreen = () => {
@@ -192,12 +208,7 @@ export const HomeScreen = () => {
   }, [user, doctorProfile, profileLoading, weeklySchedule, scheduleLoading, mySubscription, subscriptionLoading]);
 
   // Fetch products count for doctor
-  const { data: productsResponse, isLoading: productsLoading } = useQuery({
-    queryKey: ['doctorProducts', userId],
-    queryFn: () => productApi.listProducts({ sellerId: userId, limit: 1 }),
-    enabled: isDoctor && !!userId,
-    retry: 1,
-  });
+  const productsLoading = false;
 
   // Fetch all appointments to get all patients
   const { data: appointmentsResponse, isLoading: appointmentsLoading } = useQuery({
@@ -219,11 +230,46 @@ export const HomeScreen = () => {
     return responseData;
   }, [dashboardResponse]);
 
-  // Get total products count
-  const totalProducts = useMemo(() => {
-    if (!productsResponse?.data?.pagination) return 0;
-    return productsResponse.data.pagination.total || 0;
-  }, [productsResponse]);
+  const doctorStats = useMemo(() => {
+    if (!dashboard) {
+      return [
+        { id: '1', title: 'Total Patients', value: '0', change: '0 This Week', icon: 'people' },
+        { id: '2', title: "Today's Appointments", value: '0', change: 'No appointments', icon: 'calendar' },
+        { id: '3', title: 'Revenue', value: '€0', change: 'From Appointments', icon: 'cash' },
+      ];
+    }
+    return [
+      {
+        id: '1',
+        title: 'Total Patients',
+        value: String(dashboard.totalPatients || 0),
+        change: `${dashboard.weeklyAppointments?.count || 0} This Week`,
+        icon: 'people',
+      },
+      {
+        id: '2',
+        title: "Today's Appointments",
+        value: String(dashboard.todayAppointments?.count || 0),
+        change: (dashboard.todayAppointments?.count || 0) > 0 ? 'Active' : 'No appointments',
+        icon: 'calendar',
+      },
+      {
+        id: '3',
+        title: 'Revenue',
+        value: formatCurrency(dashboard.earningsFromAppointments || 0),
+        change: 'From Appointments',
+        icon: 'cash',
+      },
+    ];
+  }, [dashboard]);
+
+  const todayAppointments = useMemo(() => {
+    return dashboard?.todayAppointments?.appointments || [];
+  }, [dashboard]);
+
+  const upcomingAppointments = useMemo(() => {
+    return dashboard?.upcomingAppointments?.appointments || [];
+  }, [dashboard]);
 
   // Get all patients from all appointments
   const allPatients = useMemo(() => {
@@ -320,10 +366,15 @@ export const HomeScreen = () => {
 
           {/* Header Section */}
           <View style={styles.header}>
-          <View style={styles.headerContent}>
-            <Text style={styles.greeting}>Hello, Dr. {user?.name?.split(' ')[0] || 'Doctor'}</Text>
-            <Text style={styles.title}>My Patients</Text>
-            <Text style={styles.subtitle}>Manage your patients and appointments</Text>
+          <View style={styles.headerRow}>
+            <View style={styles.headerContent}>
+              <Text style={styles.greeting}>Hello, Dr. {user?.name?.split(' ')[0] || 'Doctor'}</Text>
+              <Text style={styles.title}>My Patients</Text>
+              <Text style={styles.subtitle}>Manage your patients and appointments</Text>
+            </View>
+            <View style={styles.headerBell}>
+              <NotificationBell />
+            </View>
           </View>
         </View>
 
@@ -331,68 +382,176 @@ export const HomeScreen = () => {
         <View style={styles.searchSection}>
           <TouchableOpacity
             style={styles.searchBar}
-            onPress={() => navigation.navigate('PatientSearch')}
+            onPress={() => {
+              const tabNavigator = navigation.getParent();
+              if (tabNavigator) {
+                (tabNavigator as any).navigate('More', { screen: 'MyPatients' });
+              }
+            }}
+            activeOpacity={0.8}
           >
-            <Ionicons name="search-outline" size={20} color={colors.textSecondary} style={{ marginRight: 8 }} />
+            <View style={styles.searchIconWrap}>
+              <Ionicons name="search-outline" size={18} color={colors.textSecondary} />
+            </View>
             <Text style={styles.searchPlaceholder}>Search patients...</Text>
+            <Ionicons name="chevron-forward" size={18} color={colors.textSecondary} />
           </TouchableOpacity>
         </View>
 
-        {/* Quick Stats */}
-        <View style={styles.statsContainer}>
-          <Card style={styles.statCard}>
-            <View style={styles.statIconContainer}>
-              <Ionicons name="people" size={24} color={colors.primary} />
-            </View>
-            <Text style={styles.statValue}>{dashboard?.totalPatients || 0}</Text>
-            <Text style={styles.statLabel}>Total Patients</Text>
-          </Card>
-          <Card style={styles.statCard}>
-            <View style={styles.statIconContainer}>
-              <Ionicons name="cube-outline" size={24} color={colors.success} />
-            </View>
-            <Text style={styles.statValue}>{totalProducts}</Text>
-            <Text style={styles.statLabel}>Total Products</Text>
-          </Card>
-          <Card style={styles.statCard}>
-            <View style={styles.statIconContainer}>
-              <Ionicons name="star" size={24} color={colors.warning} />
-            </View>
-            <Text style={styles.statValue}>
-              {dashboard?.rating?.average ? dashboard.rating.average.toFixed(1) : '0.0'}
-            </Text>
-            <Text style={styles.statLabel}>
-              Rating ({dashboard?.rating?.count || 0})
-            </Text>
-          </Card>
+        {/* Dashboard Stats */}
+        <View style={styles.dashboardStatsContainer}>
+          <FlatList
+            data={doctorStats}
+            keyExtractor={(item) => item.id}
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.dashboardStatsList}
+            renderItem={({ item }) => (
+              <View style={styles.dashboardStatCard}>
+                <View style={styles.dashboardStatTopRow}>
+                  <Text style={styles.dashboardStatTitle}>{item.title}</Text>
+                  <View style={styles.dashboardStatIcon}>
+                    <Ionicons name={item.icon as any} size={20} color={colors.primary} />
+                  </View>
+                </View>
+                <Text style={styles.dashboardStatValue}>{item.value}</Text>
+                <Text style={styles.dashboardStatChange}>{item.change}</Text>
+              </View>
+            )}
+          />
         </View>
 
-        {/* Action Buttons */}
-        <View style={styles.actionButtonsContainer}>
-          <TouchableOpacity
-            style={styles.actionButton}
-            onPress={() => {
-              const tabNavigator = navigation.getParent();
-              if (tabNavigator) {
-                (tabNavigator as any).navigate('Products', { screen: 'AddProduct' });
-              }
-            }}
-          >
-            <Ionicons name="add-circle-outline" size={20} color={colors.primary} />
-            <Text style={styles.actionButtonText}>Add Product</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.actionButton}
-            onPress={() => {
-              const tabNavigator = navigation.getParent();
-              if (tabNavigator) {
-                (tabNavigator as any).navigate('More', { screen: 'PharmacyManagement' });
-              }
-            }}
-          >
-            <Ionicons name="business-outline" size={20} color={colors.primary} />
-            <Text style={styles.actionButtonText}>My Pharmacy</Text>
-          </TouchableOpacity>
+        {/* Today's Appointments */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Today's Appointments</Text>
+            <TouchableOpacity
+              onPress={() => {
+                const tabNavigator = navigation.getParent();
+                if (tabNavigator) {
+                  (tabNavigator as any).navigate('Appointments', { screen: 'AppointmentsScreen' });
+                }
+              }}
+            >
+              <Text style={styles.seeAll}>View All</Text>
+            </TouchableOpacity>
+          </View>
+
+          {todayAppointments.length === 0 ? (
+            <View style={styles.emptyState}>
+              <Text style={styles.emptyStateText}>No appointments scheduled for today</Text>
+            </View>
+          ) : (
+            todayAppointments.slice(0, 5).map((apt: any, index: number) => {
+              const patient = typeof apt.patientId === 'object' ? apt.patientId : null;
+              const patientId = patient?._id || (typeof apt.patientId === 'string' ? apt.patientId : '');
+              const patientName = patient?.fullName || 'Unknown Patient';
+              const patientImage = patient?.profileImage ? normalizeImageUrl(patient.profileImage) : null;
+
+              return (
+                <TouchableOpacity
+                  key={apt._id || index}
+                  style={styles.appointmentItem}
+                  activeOpacity={0.7}
+                  onPress={() => {
+                    const tabNavigator = navigation.getParent();
+                    if (tabNavigator) {
+                      (tabNavigator as any).navigate('Appointments', {
+                        screen: 'AppointmentDetails',
+                        params: { appointmentId: apt._id },
+                      });
+                    }
+                  }}
+                >
+                  <View style={styles.appointmentLeft}>
+                    <Image
+                      source={patientImage ? { uri: patientImage } : defaultAvatar}
+                      style={styles.patientAvatar}
+                      defaultSource={defaultAvatar}
+                    />
+                    <View style={styles.appointmentInfoContainer}>
+                      <Text style={styles.patientName}>{patientName}</Text>
+                      <Text style={styles.appointmentMeta}>{formatDateTime(apt.appointmentDate, apt.appointmentTime)}</Text>
+                    </View>
+                  </View>
+
+                  <View style={styles.appointmentRight}>
+                    <TouchableOpacity
+                      style={styles.appointmentActionButton}
+                      onPress={() => (navigation as any).navigate('Chat' as any)}
+                    >
+                      <Ionicons name="chatbubble-outline" size={18} color={colors.primary} />
+                    </TouchableOpacity>
+                    <Ionicons name="chevron-forward" size={18} color={colors.textSecondary} />
+                  </View>
+                </TouchableOpacity>
+              );
+            })
+          )}
+        </View>
+
+        {/* Upcoming Appointments */}
+        {upcomingAppointments.length > 0 && (
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>Upcoming Appointments</Text>
+              <TouchableOpacity
+                onPress={() => {
+                  const tabNavigator = navigation.getParent();
+                  if (tabNavigator) {
+                    (tabNavigator as any).navigate('Appointments', { screen: 'AppointmentsScreen' });
+                  }
+                }}
+              >
+                <Text style={styles.seeAll}>View All</Text>
+              </TouchableOpacity>
+            </View>
+
+            {upcomingAppointments.slice(0, 3).map((apt: any, index: number) => {
+              const patient = typeof apt.patientId === 'object' ? apt.patientId : null;
+              const patientName = patient?.fullName || 'Unknown Patient';
+              const patientImage = patient?.profileImage ? normalizeImageUrl(patient.profileImage) : null;
+
+              return (
+                <View key={apt._id || index} style={styles.upcomingItem}>
+                  <View style={styles.appointmentLeft}>
+                    <Image
+                      source={patientImage ? { uri: patientImage } : defaultAvatar}
+                      style={styles.patientAvatar}
+                      defaultSource={defaultAvatar}
+                    />
+                    <View style={styles.appointmentInfoContainer}>
+                      <Text style={styles.patientName}>{patientName}</Text>
+                      <Text style={styles.appointmentMeta}>{formatDateTime(apt.appointmentDate, apt.appointmentTime)}</Text>
+                    </View>
+                  </View>
+                  <View style={styles.typeBadge}>
+                    <Text style={styles.typeText}>{apt.bookingType === 'ONLINE' ? 'Online' : 'Visit'}</Text>
+                  </View>
+                </View>
+              );
+            })}
+          </View>
+        )}
+
+        {/* Recent Invoices */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Recent Invoices</Text>
+            <TouchableOpacity
+              onPress={() => {
+                const tabNavigator = navigation.getParent();
+                if (tabNavigator) {
+                  (tabNavigator as any).navigate('More', { screen: 'Invoices' });
+                }
+              }}
+            >
+              <Text style={styles.seeAll}>View All</Text>
+            </TouchableOpacity>
+          </View>
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyStateText}>No recent invoices</Text>
+          </View>
         </View>
 
         {/* Recent Patients Section */}
@@ -426,7 +585,7 @@ export const HomeScreen = () => {
                 <TouchableOpacity
                   key={patientId || index}
                   style={styles.patientCard}
-                  onPress={() => (navigation as any).navigate('PatientProfile', { patientId })}
+                  activeOpacity={1}
                 >
                   <Image
                     source={patientImage ? { uri: patientImage } : defaultAvatar}
@@ -565,10 +724,15 @@ export const HomeScreen = () => {
     >
       {/* Header Section */}
       <View style={styles.header}>
-        <View style={styles.headerContent}>
-          <Text style={styles.greeting}>Hello, {user?.name?.split(' ')[0] || 'Patient'}</Text>
-          <Text style={styles.title}>Find Your Doctor</Text>
-          <Text style={styles.subtitle}>Book appointments easily and quickly</Text>
+        <View style={styles.headerRow}>
+          <View style={styles.headerContent}>
+            <Text style={styles.greeting}>Hello, {user?.name?.split(' ')[0] || 'Patient'}</Text>
+            <Text style={styles.title}>Find Your Doctor</Text>
+            <Text style={styles.subtitle}>Book appointments easily and quickly</Text>
+          </View>
+          <View style={styles.headerBell}>
+            <NotificationBell />
+          </View>
         </View>
       </View>
 
@@ -642,7 +806,7 @@ export const HomeScreen = () => {
                 }}
               >
                 <Image source={imageSource} style={styles.appointmentDoctorImage} defaultSource={defaultAvatar} />
-                <View style={styles.appointmentInfo}>
+                <View style={styles.appointmentCardInfo}>
                   <Text style={styles.appointmentDoctorName}>{doctorName}</Text>
                   <Text style={styles.appointmentSpeciality}>{specialization}</Text>
                   <View style={styles.appointmentDateTime}>
@@ -713,6 +877,7 @@ export const HomeScreen = () => {
             horizontal
             showsHorizontalScrollIndicator={false}
             style={styles.specialitiesScroll}
+            contentContainerStyle={styles.specialitiesContent}
           >
             {specializations.slice(0, 6).map((specialization) => (
               <TouchableOpacity
@@ -721,7 +886,9 @@ export const HomeScreen = () => {
                 onPress={() => navigation.navigate('Search')}
               >
                 <Text style={styles.specialityIcon}>⚕️</Text>
-                <Text style={styles.specialityName}>{specialization.name}</Text>
+                <Text style={styles.specialityName} numberOfLines={2}>
+                  {specialization.name}
+                </Text>
                 <Text style={styles.specialityCount}>View Doctors</Text>
               </TouchableOpacity>
             ))}
@@ -839,7 +1006,17 @@ const styles = StyleSheet.create({
     paddingBottom: 30,
     paddingHorizontal: 20,
   },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+  },
   headerContent: {
+    marginTop: 20,
+    flex: 1,
+    paddingRight: 12,
+  },
+  headerBell: {
     marginTop: 20,
   },
   greeting: {
@@ -865,17 +1042,145 @@ const styles = StyleSheet.create({
   },
   searchBar: {
     backgroundColor: colors.background,
-    borderRadius: 12,
-    padding: 16,
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderWidth: 1,
+    borderColor: colors.border,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  searchIconWrap: {
+    width: 30,
+    height: 30,
+    borderRadius: 10,
+    backgroundColor: colors.backgroundLight,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 10,
   },
   searchPlaceholder: {
     fontSize: 16,
     color: colors.textLight,
+    flex: 1,
+  },
+  dashboardStatsContainer: {
+    marginTop: 18,
+  },
+  dashboardStatsList: {
+    paddingHorizontal: 20,
+    paddingRight: 8,
+  },
+  dashboardStatCard: {
+    width: width * 0.62,
+    backgroundColor: colors.background,
+    borderRadius: 14,
+    padding: 16,
+    marginRight: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  dashboardStatTopRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+  },
+  dashboardStatTitle: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.textSecondary,
+    flex: 1,
+    paddingRight: 10,
+  },
+  dashboardStatIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 12,
+    backgroundColor: colors.backgroundLight,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  dashboardStatValue: {
+    fontSize: 26,
+    fontWeight: 'bold',
+    color: colors.text,
+    marginTop: 12,
+  },
+  dashboardStatChange: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    marginTop: 6,
+  },
+  appointmentItem: {
+    backgroundColor: colors.background,
+    borderRadius: 14,
+    padding: 14,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: colors.border,
+    marginBottom: 12,
+  },
+  appointmentLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    paddingRight: 10,
+  },
+  appointmentInfoContainer: {
+    marginLeft: 12,
+    flex: 1,
+  },
+  appointmentMeta: {
+    marginTop: 4,
+    fontSize: 12,
+    color: colors.textSecondary,
+  },
+  appointmentRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  appointmentActionButton: {
+    width: 34,
+    height: 34,
+    borderRadius: 12,
+    backgroundColor: colors.backgroundLight,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  upcomingItem: {
+    backgroundColor: colors.background,
+    borderRadius: 14,
+    padding: 14,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: colors.border,
+    marginBottom: 12,
+  },
+  typeBadge: {
+    backgroundColor: colors.backgroundLight,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  typeText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.textSecondary,
   },
   quickActions: {
     flexDirection: 'row',
@@ -914,12 +1219,19 @@ const styles = StyleSheet.create({
     marginHorizontal: -20,
     paddingHorizontal: 20,
   },
+  specialitiesContent: {
+    paddingRight: 8,
+  },
   specialityCard: {
     backgroundColor: colors.background,
     borderRadius: 12,
-    padding: 16,
+    width: 120,
+    minHeight: 130,
+    paddingHorizontal: 12,
+    paddingVertical: 14,
     marginRight: 12,
     alignItems: 'center',
+    justifyContent: 'center',
     width: 120,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
@@ -936,10 +1248,13 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: colors.text,
     marginBottom: 4,
+    textAlign: 'center',
+    minHeight: 34,
   },
   specialityCount: {
     fontSize: 12,
     color: colors.textSecondary,
+    textAlign: 'center',
   },
   doctorsScroll: {
     marginHorizontal: -20,
@@ -1225,7 +1540,7 @@ const styles = StyleSheet.create({
     borderRadius: 25,
     marginRight: 12,
   },
-  appointmentInfo: {
+  appointmentCardInfo: {
     flex: 1,
   },
   appointmentDoctorName: {

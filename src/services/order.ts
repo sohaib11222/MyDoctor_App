@@ -116,7 +116,7 @@ export const createOrder = async (data: CreateOrderData): Promise<OrderResponse>
     requestData.paymentMethod = data.paymentMethod;
   }
   
-  const response = await api.post('/orders', requestData);
+  const response: OrderResponse = await api.post('/orders', requestData);
   return response;
 };
 
@@ -126,7 +126,7 @@ export const createOrder = async (data: CreateOrderData): Promise<OrderResponse>
  * @returns Promise<OrderResponse>
  */
 export const getOrderById = async (orderId: string): Promise<OrderResponse> => {
-  const response = await api.get(`/orders/${orderId}`);
+  const response: OrderResponse = await api.get(`/orders/${orderId}`);
   return response;
 };
 
@@ -140,7 +140,7 @@ export const getPatientOrders = async (params?: {
   page?: number;
   limit?: number;
 }): Promise<OrdersResponse> => {
-  const response = await api.get('/orders', { params });
+  const response: OrdersResponse = await api.get('/orders', { params });
   return response;
 };
 
@@ -155,7 +155,7 @@ export const getPharmacyOrders = async (params?: {
   limit?: number;
 }): Promise<OrdersResponse> => {
   // Use /orders endpoint which routes to getPharmacyOrders for doctors
-  const response = await api.get('/orders', { params });
+  const response: OrdersResponse = await api.get('/orders', { params });
   return response;
 };
 
@@ -169,7 +169,7 @@ export const updateOrderStatus = async (
   orderId: string,
   status: Order['status']
 ): Promise<OrderResponse> => {
-  const response = await api.put(`/orders/${orderId}/status`, { status });
+  const response: OrderResponse = await api.put(`/orders/${orderId}/status`, { status });
   return response;
 };
 
@@ -179,7 +179,7 @@ export const updateOrderStatus = async (
  * @returns Promise<OrderResponse>
  */
 export const cancelOrder = async (orderId: string): Promise<OrderResponse> => {
-  const response = await api.post(`/orders/${orderId}/cancel`);
+  const response: OrderResponse = await api.post(`/orders/${orderId}/cancel`);
   return response;
 };
 
@@ -193,7 +193,7 @@ export const getAllOrders = async (params?: {
   page?: number;
   limit?: number;
 }): Promise<OrdersResponse> => {
-  const response = await api.get('/admin/orders', { params });
+  const response: OrdersResponse = await api.get('/admin/orders', { params });
   return response;
 };
 
@@ -207,7 +207,7 @@ export const updateShippingFee = async (
   orderId: string,
   shippingFee: number
 ): Promise<OrderResponse> => {
-  const response = await api.put(`/orders/${orderId}/shipping`, { shippingFee });
+  const response: OrderResponse = await api.put(`/orders/${orderId}/shipping`, { shippingFee });
   return response;
 };
 

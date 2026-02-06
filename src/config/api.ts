@@ -22,12 +22,14 @@ const getApiBaseUrl = (): string => {
   return LIVE_API_URL;
 };
 
+
 export const API_BASE_URL = getApiBaseUrl();
 
 // Log the API URL in development for debugging
 if (__DEV__) {
   console.log('📱 API Base URL:', API_BASE_URL);
   console.log('📱 Platform:', Platform.OS);
+  
 }
 
 export default API_BASE_URL;

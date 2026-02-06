@@ -22,27 +22,26 @@ import { PatientSearchScreen } from '../../screens/doctor/PatientSearchScreen';
 // Pharmacy screens
 import { PharmacyProfileScreen } from '../../screens/pharmacy-admin/PharmacyProfileScreen';
 import { PharmacySettingsScreen } from '../../screens/pharmacy-admin/PharmacySettingsScreen';
+import { PharmacySubscriptionPlansScreen } from '../../screens/pharmacy-admin/PharmacySubscriptionPlansScreen';
 import { CustomHeader } from '../../components/common/CustomHeader';
 import { MyPatientsScreen } from '../../screens/doctor/MyPatientsScreen';
 import { ProfileSettingsScreen } from '../../screens/doctor/ProfileSettingsScreen';
 import { SocialLinksScreen } from '../../screens/doctor/SocialLinksScreen';
-import { PharmacyManagementScreen } from '../../screens/doctor/PharmacyManagementScreen';
 import { ChangePasswordScreen } from '../../screens/shared/ChangePasswordScreen';
 import { PatientProfileSettingsScreen } from '../../screens/patient/PatientProfileSettingsScreen';
-import { PharmacyOrdersScreen } from '../../screens/pharmacy-admin/PharmacyOrdersScreen';
-import { OrderHistoryScreen } from '../../screens/pharmacy/OrderHistoryScreen';
-import { OrderDetailsScreen as PatientOrderDetailsScreen } from '../../screens/pharmacy/OrderDetailsScreen';
-import { OrderDetailsScreen as DoctorOrderDetailsScreen } from '../../screens/pharmacy-admin/OrderDetailsScreen';
 import { AdminOrdersScreen } from '../../screens/admin/AdminOrdersScreen';
 import PatientRescheduleRequestsScreen from '../../screens/patient/PatientRescheduleRequestsScreen';
 import DoctorRescheduleRequestsScreen from '../../screens/doctor/DoctorRescheduleRequestsScreen';
 import { useAuth } from '../../contexts/AuthContext';
+import { PrescriptionScreen } from '../../screens/shared/PrescriptionScreen';
+import { LanguageScreen } from '../../screens/shared/LanguageScreen';
 
 const Stack = createNativeStackNavigator<MoreStackParamList>();
 
 export const MoreStack = () => {
   const { user } = useAuth();
   const isDoctor = user?.role === 'doctor' || false;
+  const isPatient = user?.role === 'patient' || false;
   const isAdmin = ((user as any)?.role === 'admin' || (user as any)?.role === 'ADMIN') || false;
   return (
     <Stack.Navigator
@@ -77,6 +76,11 @@ export const MoreStack = () => {
         options={{ title: 'Settings' }}
       />
       <Stack.Screen 
+        name="Language" 
+        component={LanguageScreen}
+        options={{ title: 'Language' }}
+      />
+      <Stack.Screen 
         name="ChangePassword" 
         component={ChangePasswordScreen}
         options={{ title: 'Change Password' }}
@@ -106,6 +110,11 @@ export const MoreStack = () => {
         component={MedicalRecordsScreen}
         options={{ title: 'Medical Records' }}
       />
+      <Stack.Screen
+        name="Prescription"
+        component={PrescriptionScreen}
+        options={{ title: 'Prescription', headerShown: false }}
+      />
       <Stack.Screen 
         name="Dependents" 
         component={DependentsScreen}
@@ -116,20 +125,24 @@ export const MoreStack = () => {
         component={FavouritesScreen}
         options={{ title: 'Favourites' }}
       />
-      <Stack.Screen 
-        name="OrderHistory" 
-        component={OrderHistoryScreen}
-        options={{ title: 'Order History' }}
-      />
-      <Stack.Screen 
-        name="OrderDetails" 
-        component={isDoctor ? DoctorOrderDetailsScreen : PatientOrderDetailsScreen}
-        options={{ title: 'Order Details' }}
-      />
+      {isPatient && (
+        <Stack.Screen 
+          name="OrderHistory" 
+          component={require('../../screens/pharmacy/OrderHistoryScreen').OrderHistoryScreen}
+          options={{ title: 'Order History' }}
+        />
+      )}
+      {isPatient && (
+        <Stack.Screen 
+          name="OrderDetails" 
+          component={require('../../screens/pharmacy/OrderDetailsScreen').OrderDetailsScreen}
+          options={{ title: 'Order Details' }}
+        />
+      )}
       <Stack.Screen 
         name="Notifications" 
         component={NotificationsScreen}
-        options={{ title: 'Notifications' }}
+        options={{ title: 'Notifications', headerShown: false }}
       />
       <Stack.Screen 
         name="Invoices" 
@@ -172,20 +185,6 @@ export const MoreStack = () => {
         component={AnnouncementsScreen}
         options={{ title: 'Announcements' }}
       />
-      {isDoctor && (
-        <>
-          <Stack.Screen 
-            name="PharmacyManagement" 
-            component={PharmacyManagementScreen}
-            options={{ title: 'Pharmacy Management' }}
-          />
-          <Stack.Screen 
-            name="PharmacyOrders" 
-            component={PharmacyOrdersScreen}
-            options={{ title: 'Orders' }}
-          />
-        </>
-      )}
       {isAdmin && (
         <Stack.Screen 
           name="AdminOrders" 
@@ -218,6 +217,11 @@ export const MoreStack = () => {
         name="PharmacySettings" 
         component={PharmacySettingsScreen}
         options={{ title: 'Settings' }}
+      />
+      <Stack.Screen 
+        name="PharmacySubscription" 
+        component={PharmacySubscriptionPlansScreen}
+        options={{ title: 'Subscription Plans' }}
       />
     </Stack.Navigator>
   );

@@ -26,6 +26,8 @@ import * as uploadApi from '../../services/upload';
 import Toast from 'react-native-toast-message';
 import { API_BASE_URL } from '../../config/api';
 import { copyImageToCacheUri, deleteCacheFiles } from '../../utils/imageUpload';
+import { useAuth } from '../../contexts/AuthContext';
+import * as pharmacySubscriptionApi from '../../services/pharmacySubscription';
 
 type EditProductScreenNavigationProp = NativeStackNavigationProp<ProductsStackParamList, 'EditProduct'>;
 type EditProductRouteProp = RouteProp<ProductsStackParamList, 'EditProduct'>;
@@ -48,6 +50,44 @@ export const EditProductScreen = () => {
   const route = useRoute<EditProductRouteProp>();
   const { productId } = route.params;
   const queryClient = useQueryClient();
+  const { user } = useAuth();
+  const isPharmacy = user?.role === 'pharmacy' || (user as any)?.role === 'PHARMACY';
+  const isParapharmacy = user?.role === 'parapharmacy' || (user as any)?.role === 'PARAPHARMACY';
+  const isPharmacyUser = isPharmacy || isParapharmacy;
+  const userId = user?._id || user?.id;
+
+  const requiresSubscription = isPharmacy;
+
+  const { data: subscriptionResponse, isLoading: subscriptionLoading } = useQuery({
+    queryKey: ['my-pharmacy-subscription', userId],
+    queryFn: () => pharmacySubscriptionApi.getMyPharmacySubscription(),
+    enabled: !!userId && requiresSubscription,
+    retry: 1,
+  });
+
+  const subscriptionData = React.useMemo(() => {
+    if (!subscriptionResponse) return null;
+    const r: any = subscriptionResponse as any;
+    const data = r?.data ?? r;
+    return data?.data ?? data;
+  }, [subscriptionResponse]);
+
+  const hasActiveSubscription = React.useMemo(() => {
+    if (!requiresSubscription) return true;
+    if (!subscriptionData) return false;
+    if (subscriptionData?.hasActiveSubscription === true) return true;
+    if (subscriptionData?.subscriptionExpiresAt) return new Date(subscriptionData.subscriptionExpiresAt) > new Date();
+    return false;
+  }, [subscriptionData]);
+
+  const goToSubscription = () => {
+    const parent = (navigation as any).getParent?.();
+    if (parent) {
+      parent.navigate('More', { screen: 'PharmacySubscription' });
+    } else {
+      (navigation as any).navigate('More', { screen: 'PharmacySubscription' });
+    }
+  };
 
   const [productName, setProductName] = useState('');
   const [category, setCategory] = useState('');
@@ -67,8 +107,47 @@ export const EditProductScreen = () => {
   const { data: productResponse, isLoading: productLoading } = useQuery({
     queryKey: ['product', productId],
     queryFn: () => productApi.getProductById(productId),
-    enabled: !!productId,
+    enabled: !!productId && isPharmacyUser,
   });
+
+  if (!isPharmacyUser) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.loadingContainer}>
+          <Ionicons name="alert-circle-outline" size={48} color={colors.error} />
+          <Text style={styles.loadingText}>This section is available for pharmacy accounts only.</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (subscriptionLoading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={colors.primary} />
+          <Text style={styles.loadingText}>Loading subscription...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (!hasActiveSubscription) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.loadingContainer}>
+          <Ionicons name="card-outline" size={54} color={colors.warning} />
+          <Text style={styles.loadingText}>Subscription required to edit products.</Text>
+          <View style={{ width: '100%', paddingHorizontal: 24, marginTop: 16 }}>
+            <Button title="View Subscription Plans" onPress={goToSubscription} />
+          </View>
+          <View style={{ width: '100%', paddingHorizontal: 24, marginTop: 10 }}>
+            <Button title="Go Back" onPress={() => navigation.goBack()} />
+          </View>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   // Update product mutation
   const updateProductMutation = useMutation({
@@ -76,7 +155,6 @@ export const EditProductScreen = () => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['product', productId] });
       queryClient.invalidateQueries({ queryKey: ['pharmacy-products'] });
-      queryClient.invalidateQueries({ queryKey: ['doctor-products'] });
       Toast.show({
         type: 'success',
         text1: 'Success',

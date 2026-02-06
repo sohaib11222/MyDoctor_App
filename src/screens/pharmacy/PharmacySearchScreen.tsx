@@ -61,12 +61,13 @@ export const PharmacySearchScreen = () => {
   const route = useRoute<PharmacySearchRouteProp>();
   const [searchTerm, setSearchTerm] = useState('');
   const [cityFilter, setCityFilter] = useState('');
+  const [kind, setKind] = useState<'PHARMACY' | 'PARAPHARMACY'>('PHARMACY');
   const [page, setPage] = useState(1);
   const limit = 10;
 
-  const { data: pharmaciesData, isLoading, error, refetch, isRefreshing } = useQuery({
-    queryKey: ['pharmacies', { search: searchTerm, city: cityFilter, page, limit }],
-    queryFn: () => pharmacyApi.listPharmacies({ search: searchTerm, city: cityFilter, page, limit }),
+  const { data: pharmaciesData, isLoading, error, refetch, isRefetching } = useQuery({
+    queryKey: ['pharmacies', { kind, search: searchTerm, city: cityFilter, page, limit }],
+    queryFn: () => pharmacyApi.listPharmacies({ kind, search: searchTerm, city: cityFilter, page, limit }),
   });
 
   const pharmacies = pharmaciesData?.data?.pharmacies || [];
@@ -78,6 +79,12 @@ export const PharmacySearchScreen = () => {
   const handleSearch = () => {
     setPage(1);
     refetch();
+  };
+
+  const handleKindChange = (nextKind: 'PHARMACY' | 'PARAPHARMACY') => {
+    if (nextKind === kind) return;
+    setKind(nextKind);
+    setPage(1);
   };
 
   const handleCityChange = (selectedCity: string) => {
@@ -113,16 +120,21 @@ export const PharmacySearchScreen = () => {
   };
 
   const renderPharmacyCard = ({ item: pharmacy }: { item: pharmacyApi.Pharmacy }) => {
-    const pharmacyLogo = pharmacy.logo || '';
+    const rawOwner = (pharmacy as any)?.ownerId;
+    const ownerProfileImage = rawOwner && typeof rawOwner === 'object' ? rawOwner.profileImage : null;
+    const pharmacyLogo = pharmacy.logo || ownerProfileImage || '';
     const normalizedImageUrl = normalizeImageUrl(pharmacyLogo);
     const defaultAvatar = require('../../../assets/avatar.png');
     const imageSource = normalizedImageUrl ? { uri: normalizedImageUrl } : defaultAvatar;
 
     // Extract ownerId - ensure it's a string
-    const ownerId = pharmacy.ownerId
-      ? typeof pharmacy.ownerId === 'object' && pharmacy.ownerId._id
-        ? String(pharmacy.ownerId._id)
-        : String(pharmacy.ownerId)
+    const rawOwnerId = rawOwner;
+    const ownerId = rawOwnerId
+      ? typeof rawOwnerId === 'string'
+        ? rawOwnerId
+        : rawOwnerId?._id
+          ? String(rawOwnerId._id)
+          : null
       : null;
     const pharmacyAddress = formatAddress(pharmacy.address);
     const pharmacyPhone = pharmacy.phone || 'Phone not available';
@@ -166,12 +178,12 @@ export const PharmacySearchScreen = () => {
                   if (__DEV__) {
                     console.log('🔍 PharmacySearch - Navigating to ProductCatalog with:', {
                       sellerId: ownerId,
-                      sellerType: 'PHARMACY',
+                      sellerType: kind,
                     });
                   }
                   navigation.navigate('ProductCatalog', {
                     sellerId: ownerId,
-                    sellerType: 'PHARMACY',
+                    sellerType: kind,
                   });
                 }}
               >
@@ -195,13 +207,29 @@ export const PharmacySearchScreen = () => {
 
   return (
     <SafeAreaView style={styles.container}>
+      <View style={styles.kindTabs}>
+        <TouchableOpacity
+          style={[styles.kindTab, kind === 'PHARMACY' && styles.kindTabActive]}
+          onPress={() => handleKindChange('PHARMACY')}
+          activeOpacity={0.8}
+        >
+          <Text style={[styles.kindTabText, kind === 'PHARMACY' && styles.kindTabTextActive]}>Pharmacies</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.kindTab, kind === 'PARAPHARMACY' && styles.kindTabActive]}
+          onPress={() => handleKindChange('PARAPHARMACY')}
+          activeOpacity={0.8}
+        >
+          <Text style={[styles.kindTabText, kind === 'PARAPHARMACY' && styles.kindTabTextActive]}>Parapharmacies</Text>
+        </TouchableOpacity>
+      </View>
       {/* Search and Filter Section */}
       <View style={styles.searchSection}>
         <View style={styles.searchContainer}>
           <Ionicons name="search-outline" size={20} color={colors.textSecondary} />
           <TextInput
             style={styles.searchInput}
-            placeholder="Search pharmacies..."
+            placeholder={kind === 'PARAPHARMACY' ? 'Search parapharmacies...' : 'Search pharmacies...'}
             placeholderTextColor={colors.textLight}
             value={searchTerm}
             onChangeText={setSearchTerm}
@@ -262,7 +290,7 @@ export const PharmacySearchScreen = () => {
       {isLoading && page === 1 ? (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={colors.primary} />
-          <Text style={styles.loadingText}>Loading pharmacies...</Text>
+          <Text style={styles.loadingText}>{kind === 'PARAPHARMACY' ? 'Loading parapharmacies...' : 'Loading pharmacies...'}</Text>
         </View>
       ) : error ? (
         <View style={styles.errorContainer}>
@@ -292,7 +320,7 @@ export const PharmacySearchScreen = () => {
             contentContainerStyle={styles.listContent}
             showsVerticalScrollIndicator={false}
             refreshControl={
-              <RefreshControl refreshing={isRefreshing || false} onRefresh={refetch} />
+              <RefreshControl refreshing={isRefetching} onRefresh={refetch} />
             }
             ListFooterComponent={
               pagination.pages > 1 ? (
@@ -338,11 +366,36 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.backgroundLight,
   },
+  kindTabs: {
+    flexDirection: 'row',
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    gap: 10,
+  },
+  kindTab: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 10,
+    backgroundColor: colors.backgroundLight,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: 'center',
+  },
+  kindTabActive: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  kindTabText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: colors.text,
+  },
+  kindTabTextActive: {
+    color: colors.textWhite,
+  },
   searchSection: {
-    backgroundColor: colors.background,
     padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
+    backgroundColor: colors.background,
   },
   searchContainer: {
     flexDirection: 'row',

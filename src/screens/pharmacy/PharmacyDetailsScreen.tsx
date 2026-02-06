@@ -70,11 +70,16 @@ export const PharmacyDetailsScreen = () => {
 
   const pharmacy = pharmacyData?.data;
 
+  const sellerType = String((pharmacy as any)?.kind || '').toUpperCase() === 'PARAPHARMACY' ? 'PARAPHARMACY' : 'PHARMACY';
+
   // Extract ownerId - ensure it's a string
-  const ownerId = pharmacy?.ownerId
-    ? typeof pharmacy.ownerId === 'object' && pharmacy.ownerId._id
-      ? String(pharmacy.ownerId._id)
-      : String(pharmacy.ownerId)
+  const rawOwnerId = (pharmacy as any)?.ownerId;
+  const ownerId = rawOwnerId
+    ? typeof rawOwnerId === 'string'
+      ? rawOwnerId
+      : rawOwnerId?._id
+        ? String(rawOwnerId._id)
+        : null
     : null;
   
   if (__DEV__ && ownerId) {
@@ -82,12 +87,12 @@ export const PharmacyDetailsScreen = () => {
   }
 
   // Fetch products from this pharmacy
-  const { data: productsData } = useQuery({
-    queryKey: ['pharmacyProducts', ownerId],
+  const { data: productsData, isLoading: productsLoading } = useQuery({
+    queryKey: ['products', pharmacyId],
     queryFn: () => {
       const params: productApi.ProductFilters = { 
         sellerId: ownerId!, 
-        sellerType: 'PHARMACY', 
+        sellerType: sellerType as any,
         limit: 6 
       };
       if (__DEV__) {
@@ -249,12 +254,12 @@ export const PharmacyDetailsScreen = () => {
                 if (__DEV__) {
                   console.log('🏥 PharmacyDetails - Navigating to ProductCatalog with:', {
                     sellerId: ownerId,
-                    sellerType: 'PHARMACY',
+                    sellerType,
                   });
                 }
                 navigation.navigate('ProductCatalog', {
                   sellerId: ownerId,
-                  sellerType: 'PHARMACY',
+                  sellerType: sellerType as any,
                 });
               }}
             >
@@ -425,12 +430,12 @@ export const PharmacyDetailsScreen = () => {
                         if (__DEV__) {
                           console.log('🏥 PharmacyDetails - Navigating to ProductCatalog with:', {
                             sellerId: ownerId,
-                            sellerType: 'PHARMACY',
+                            sellerType,
                           });
                         }
                         navigation.navigate('ProductCatalog', {
                           sellerId: ownerId,
-                          sellerType: 'PHARMACY',
+                          sellerType: sellerType as any,
                         });
                       }}
                     >

@@ -24,8 +24,8 @@ export const AppNavigator = () => {
   return (
     <NavigationContainer>
       <Stack.Navigator screenOptions={{ headerShown: false }}>
-        {user && user.role === 'doctor' && user.verificationStatus === 'pending' ? (
-          // Keep doctors with pending verification in AuthNavigator to see PendingApproval screen
+        {user && ((user.role === 'doctor' && user.verificationStatus === 'pending') || ((user.role === 'pharmacy' || user.role === 'parapharmacy') && String(user.status).toUpperCase() === 'PENDING')) ? (
+          // Keep pending doctors/pharmacies in AuthNavigator to complete verification flows
           <Stack.Screen name="Auth" component={AuthNavigator} />
         ) : user ? (
           <Stack.Screen name="Main" component={TabNavigator} />

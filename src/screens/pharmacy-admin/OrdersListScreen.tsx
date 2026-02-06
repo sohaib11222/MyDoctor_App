@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -8,126 +8,162 @@ import {
   SafeAreaView,
   FlatList,
   TextInput,
+  ActivityIndicator,
+  RefreshControl,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { useQuery } from '@tanstack/react-query';
 import { OrdersStackParamList } from '../../navigation/types';
 import { colors } from '../../constants/colors';
 import { Ionicons } from '@expo/vector-icons';
+import * as orderApi from '../../services/order';
+import { useAuth } from '../../contexts/AuthContext';
+import * as pharmacySubscriptionApi from '../../services/pharmacySubscription';
+import { Button } from '../../components/common/Button';
 
 type OrdersListScreenNavigationProp = NativeStackNavigationProp<OrdersStackParamList>;
 
-interface Order {
-  id: string;
-  orderNumber: string;
-  customerName: string;
-  customerEmail: string;
-  orderDate: string;
-  total: string;
-  status: 'Pending' | 'Processing' | 'Shipped' | 'Delivered' | 'Cancelled';
-  itemCount: number;
-}
-
-const orders: Order[] = [
-  {
-    id: '1',
-    orderNumber: 'ORD-2024-001',
-    customerName: 'John Doe',
-    customerEmail: 'john.doe@example.com',
-    orderDate: '15 Nov 2024',
-    total: '$60.00',
-    status: 'Pending',
-    itemCount: 3,
-  },
-  {
-    id: '2',
-    orderNumber: 'ORD-2024-002',
-    customerName: 'Jane Smith',
-    customerEmail: 'jane.smith@example.com',
-    orderDate: '14 Nov 2024',
-    total: '$30.00',
-    status: 'Processing',
-    itemCount: 1,
-  },
-  {
-    id: '3',
-    orderNumber: 'ORD-2024-003',
-    customerName: 'Robert Johnson',
-    customerEmail: 'robert.j@example.com',
-    orderDate: '13 Nov 2024',
-    total: '$45.00',
-    status: 'Shipped',
-    itemCount: 2,
-  },
-  {
-    id: '4',
-    orderNumber: 'ORD-2024-004',
-    customerName: 'Emily Davis',
-    customerEmail: 'emily.d@example.com',
-    orderDate: '12 Nov 2024',
-    total: '$120.00',
-    status: 'Delivered',
-    itemCount: 5,
-  },
-  {
-    id: '5',
-    orderNumber: 'ORD-2024-005',
-    customerName: 'Michael Brown',
-    customerEmail: 'michael.b@example.com',
-    orderDate: '11 Nov 2024',
-    total: '$25.00',
-    status: 'Cancelled',
-    itemCount: 1,
-  },
+const statusFilters: Array<{ label: string; value?: orderApi.Order['status'] }> = [
+  { label: 'All' },
+  { label: 'Pending', value: 'PENDING' },
+  { label: 'Confirmed', value: 'CONFIRMED' },
+  { label: 'Processing', value: 'PROCESSING' },
+  { label: 'Shipped', value: 'SHIPPED' },
+  { label: 'Delivered', value: 'DELIVERED' },
+  { label: 'Cancelled', value: 'CANCELLED' },
+  { label: 'Refunded', value: 'REFUNDED' },
 ];
-
-const statusFilters = ['All', 'Pending', 'Processing', 'Shipped', 'Delivered', 'Cancelled'];
 
 export const OrdersListScreen = () => {
   const navigation = useNavigation<OrdersListScreenNavigationProp>();
+  const { user } = useAuth();
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedFilter, setSelectedFilter] = useState('All');
+  const [selectedFilter, setSelectedFilter] = useState(statusFilters[0]);
+  const [refreshing, setRefreshing] = useState(false);
 
-  const getStatusColor = (status: Order['status']) => {
+  const userId = user?._id || user?.id;
+  const isPharmacy = user?.role === 'pharmacy' || (user as any)?.role === 'PHARMACY';
+  const isParapharmacy = user?.role === 'parapharmacy' || (user as any)?.role === 'PARAPHARMACY';
+  const isPharmacyUser = isPharmacy || isParapharmacy;
+  const requiresSubscription = isPharmacy;
+
+  const { data: subscriptionResponse, isLoading: subscriptionLoading } = useQuery({
+    queryKey: ['my-pharmacy-subscription', userId],
+    queryFn: () => pharmacySubscriptionApi.getMyPharmacySubscription(),
+    enabled: !!userId && requiresSubscription,
+    retry: 1,
+  });
+
+  const subscriptionData = useMemo(() => {
+    if (!subscriptionResponse) return null;
+    const r: any = subscriptionResponse as any;
+    const data = r?.data ?? r;
+    return data?.data ?? data;
+  }, [subscriptionResponse]);
+
+  const hasActiveSubscription = useMemo(() => {
+    if (!requiresSubscription) return true;
+    if (!subscriptionData) return false;
+    if (subscriptionData?.hasActiveSubscription === true) return true;
+    if (subscriptionData?.subscriptionExpiresAt) return new Date(subscriptionData.subscriptionExpiresAt) > new Date();
+    return false;
+  }, [subscriptionData]);
+
+  const goToSubscription = () => {
+    const parent = (navigation as any).getParent?.();
+    if (parent) {
+      parent.navigate('More', { screen: 'PharmacySubscription' });
+    } else {
+      (navigation as any).navigate('More', { screen: 'PharmacySubscription' });
+    }
+  };
+
+  const getStatusColor = (status: orderApi.Order['status']) => {
     switch (status) {
-      case 'Pending':
+      case 'PENDING':
         return colors.warning;
-      case 'Processing':
+      case 'CONFIRMED':
+      case 'PROCESSING':
         return colors.primary;
-      case 'Shipped':
+      case 'SHIPPED':
         return colors.info;
-      case 'Delivered':
+      case 'DELIVERED':
         return colors.success;
-      case 'Cancelled':
+      case 'CANCELLED':
+      case 'REFUNDED':
         return colors.error;
       default:
         return colors.textSecondary;
     }
   };
 
-  const filteredOrders = orders.filter((order) => {
-    const matchesSearch =
-      order.orderNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      order.customerName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      order.customerEmail.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesFilter = selectedFilter === 'All' || order.status === selectedFilter;
-    return matchesSearch && matchesFilter;
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString);
+    return date.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+  };
+
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'EUR' }).format(amount || 0);
+  };
+
+  const { data: ordersResponse, isLoading, error, refetch } = useQuery({
+    queryKey: ['pharmacyOrders', selectedFilter.value || 'ALL', userId],
+    queryFn: () =>
+      orderApi.getPharmacyOrders({
+        status: selectedFilter.value,
+        page: 1,
+        limit: 200,
+      }),
+    enabled: !!userId && isPharmacyUser && hasActiveSubscription,
+    retry: 1,
   });
+
+  const orders = useMemo(() => {
+    return ordersResponse?.data?.orders || [];
+  }, [ordersResponse]);
+
+  const filteredOrders = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return orders;
+    return orders.filter((order) => {
+      const patient = typeof order.patientId === 'object' ? order.patientId : null;
+      const customerName = (patient?.fullName || '').toLowerCase();
+      const customerEmail = (patient?.email || '').toLowerCase();
+      const orderNumber = (order.orderNumber || '').toLowerCase();
+      return orderNumber.includes(q) || customerName.includes(q) || customerEmail.includes(q);
+    });
+  }, [orders, searchQuery]);
 
   const handleViewOrder = (orderId: string) => {
     navigation.navigate('OrderDetails', { orderId });
   };
 
-  const renderOrder = ({ item }: { item: Order }) => (
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    try {
+      await refetch();
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
+  const renderOrder = ({ item }: { item: orderApi.Order }) => {
+    const patient = typeof item.patientId === 'object' ? item.patientId : null;
+    const customerName = patient?.fullName || 'Customer';
+    const customerEmail = patient?.email || '';
+    const itemCount = item.items?.reduce((sum, it) => sum + (it.quantity || 0), 0) || 0;
+
+    return (
     <TouchableOpacity
       style={styles.orderCard}
-      onPress={() => handleViewOrder(item.id)}
+      onPress={() => handleViewOrder(item._id)}
       activeOpacity={0.7}
     >
       <View style={styles.orderHeader}>
         <View style={styles.orderInfo}>
           <Text style={styles.orderNumber}>{item.orderNumber}</Text>
-          <Text style={styles.orderDate}>{item.orderDate}</Text>
+          <Text style={styles.orderDate}>{formatDate(item.createdAt)}</Text>
         </View>
         <View style={[styles.statusBadge, { backgroundColor: `${getStatusColor(item.status)}20` }]}>
           <Text style={[styles.statusText, { color: getStatusColor(item.status) }]}>
@@ -139,88 +175,132 @@ export const OrdersListScreen = () => {
       <View style={styles.customerInfo}>
         <View style={styles.customerRow}>
           <Ionicons name="person-outline" size={16} color={colors.textSecondary} />
-          <Text style={styles.customerName}>{item.customerName}</Text>
+          <Text style={styles.customerName}>{customerName}</Text>
         </View>
         <View style={styles.customerRow}>
           <Ionicons name="mail-outline" size={16} color={colors.textSecondary} />
-          <Text style={styles.customerEmail}>{item.customerEmail}</Text>
+          <Text style={styles.customerEmail}>{customerEmail}</Text>
         </View>
       </View>
 
       <View style={styles.orderFooter}>
         <View style={styles.footerInfo}>
           <Text style={styles.footerLabel}>Items:</Text>
-          <Text style={styles.footerValue}>{item.itemCount}</Text>
+          <Text style={styles.footerValue}>{itemCount}</Text>
         </View>
         <View style={styles.footerInfo}>
           <Text style={styles.footerLabel}>Total:</Text>
-          <Text style={styles.footerTotal}>{item.total}</Text>
+          <Text style={styles.footerTotal}>{formatCurrency(item.total)}</Text>
         </View>
       </View>
     </TouchableOpacity>
-  );
+    );
+  };
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* Search Bar */}
-      <View style={styles.searchContainer}>
-        <Ionicons name="search-outline" size={20} color={colors.textSecondary} />
-        <TextInput
-          style={styles.searchInput}
-          placeholder="Search orders..."
-          placeholderTextColor={colors.textLight}
-          value={searchQuery}
-          onChangeText={setSearchQuery}
-        />
-      </View>
-
-      {/* Status Filters */}
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        style={styles.filtersContainer}
-        contentContainerStyle={styles.filtersContent}
-      >
-        {statusFilters.map((filter) => (
-          <TouchableOpacity
-            key={filter}
-            style={[
-              styles.filterChip,
-              selectedFilter === filter && styles.filterChipActive,
-            ]}
-            onPress={() => setSelectedFilter(filter)}
-            activeOpacity={0.7}
-          >
-            <Text
-              style={[
-                styles.filterChipText,
-                selectedFilter === filter && styles.filterChipTextActive,
-              ]}
-            >
-              {filter}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </ScrollView>
-
-      {/* Orders List */}
-      <FlatList
-        data={filteredOrders}
-        renderItem={renderOrder}
-        keyExtractor={(item) => item.id}
-        contentContainerStyle={styles.listContent}
-        ListEmptyComponent={
-          <View style={styles.emptyState}>
-            <Ionicons name="receipt-outline" size={64} color={colors.textLight} />
-            <Text style={styles.emptyStateTitle}>No orders found</Text>
-            <Text style={styles.emptyStateText}>
-              {searchQuery || selectedFilter !== 'All'
-                ? 'Try adjusting your filters'
-                : 'No orders have been placed yet'}
-            </Text>
+      {requiresSubscription && subscriptionLoading ? (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={colors.primary} />
+          <Text style={styles.loadingText}>Loading subscription...</Text>
+        </View>
+      ) : requiresSubscription && !hasActiveSubscription ? (
+        <View style={styles.emptyState}>
+          <Ionicons name="card-outline" size={64} color={colors.warning} />
+          <Text style={styles.emptyStateTitle}>Subscription Required</Text>
+          <Text style={styles.emptyStateText}>You need an active subscription to manage orders.</Text>
+          <View style={{ width: '100%', marginTop: 16 }}>
+            <Button title="View Subscription Plans" onPress={goToSubscription} />
           </View>
-        }
-      />
+        </View>
+      ) : (
+        <>
+          {!isPharmacyUser ? (
+            <View style={styles.emptyState}>
+              <Ionicons name="receipt-outline" size={64} color={colors.textLight} />
+              <Text style={styles.emptyStateTitle}>Orders</Text>
+              <Text style={styles.emptyStateText}>This section is available for pharmacy accounts only.</Text>
+            </View>
+          ) : isLoading && !refreshing ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="large" color={colors.primary} />
+              <Text style={styles.loadingText}>Loading orders...</Text>
+            </View>
+          ) : error ? (
+            <View style={styles.emptyState}>
+              <Ionicons name="alert-circle-outline" size={64} color={colors.error} />
+              <Text style={styles.emptyStateTitle}>Error loading orders</Text>
+              <Text style={styles.emptyStateText}>{(error as any)?.message || 'Please try again'}</Text>
+              <TouchableOpacity style={styles.retryButton} onPress={() => refetch()} activeOpacity={0.7}>
+                <Text style={styles.retryButtonText}>Retry</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <View style={{ flex: 1 }}>
+              {/* Search Bar */}
+              <View style={styles.searchContainer}>
+                <Ionicons name="search-outline" size={20} color={colors.textSecondary} />
+                <TextInput
+                  style={styles.searchInput}
+                  placeholder="Search orders..."
+                  placeholderTextColor={colors.textLight}
+                  value={searchQuery}
+                  onChangeText={setSearchQuery}
+                />
+              </View>
+
+              {/* Status Filters */}
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                style={styles.filtersContainer}
+                contentContainerStyle={styles.filtersContent}
+              >
+                {statusFilters.map((filter) => (
+                  <TouchableOpacity
+                    key={filter.label}
+                    style={[
+                      styles.filterChip,
+                      selectedFilter.label === filter.label && styles.filterChipActive,
+                    ]}
+                    onPress={() => setSelectedFilter(filter)}
+                    activeOpacity={0.7}
+                  >
+                    <Text
+                      style={[
+                        styles.filterChipText,
+                        selectedFilter.label === filter.label && styles.filterChipTextActive,
+                      ]}
+                    >
+                      {filter.label}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+
+              {/* Orders List */}
+              <FlatList
+                data={filteredOrders}
+                renderItem={renderOrder}
+                keyExtractor={(item) => item._id}
+                contentContainerStyle={styles.listContent}
+                refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />}
+                ListEmptyComponent={
+                  <View style={styles.emptyState}>
+                    <Ionicons name="receipt-outline" size={64} color={colors.textLight} />
+                    <Text style={styles.emptyStateTitle}>No orders found</Text>
+                    <Text style={styles.emptyStateText}>
+                      {searchQuery || selectedFilter.label !== 'All'
+                        ? 'Try adjusting your filters'
+                        : 'No orders have been placed yet'}
+                    </Text>
+                  </View>
+                }
+              />
+            </View>
+          )}
+        </>
+      )}
     </SafeAreaView>
   );
 };
@@ -383,6 +463,28 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: colors.textSecondary,
     textAlign: 'center',
+  },
+  loadingContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 24,
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 14,
+    color: colors.textSecondary,
+  },
+  retryButton: {
+    marginTop: 16,
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+    borderRadius: 10,
+    backgroundColor: colors.primary,
+  },
+  retryButtonText: {
+    color: colors.textWhite,
+    fontWeight: '600',
   },
 });
 

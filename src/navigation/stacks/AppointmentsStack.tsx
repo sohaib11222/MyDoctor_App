@@ -11,6 +11,7 @@ import { StartAppointmentScreen } from '../../screens/doctor/StartAppointmentScr
 import { AvailableTimingsScreen } from '../../screens/doctor/AvailableTimingsScreen';
 import { AppointmentRequestsScreen } from '../../screens/doctor/AppointmentRequestsScreen';
 import { MyPatientsScreen } from '../../screens/doctor/MyPatientsScreen';
+import { PrescriptionScreen } from '../../screens/shared/PrescriptionScreen';
 import RequestRescheduleScreen from '../../screens/patient/RequestRescheduleScreen';
 import PatientRescheduleRequestsScreen from '../../screens/patient/PatientRescheduleRequestsScreen';
 import DoctorRescheduleRequestsScreen from '../../screens/doctor/DoctorRescheduleRequestsScreen';
@@ -45,6 +46,11 @@ export const AppointmentsStack = () => {
         component={AppointmentDetailsScreen}
         // headerShown={false}
         options={{ title: 'Appointment Details' }}
+      />
+      <Stack.Screen
+        name="Prescription"
+        component={PrescriptionScreen}
+        options={{ title: 'Prescription', headerShown: false }}
       />
       <Stack.Screen 
         name="Booking" 

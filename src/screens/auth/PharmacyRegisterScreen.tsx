@@ -21,6 +21,7 @@ import { Button } from '../../components/common/Button';
 import { useAuth } from '../../contexts/AuthContext';
 import { colors } from '../../constants/colors';
 import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 type PharmacyRegisterScreenNavigationProp = NativeStackNavigationProp<AuthStackParamList>;
 
@@ -60,14 +61,19 @@ export const PharmacyRegisterScreen = () => {
     try {
       await registerUser(
         {
-          name: data.name,
+          fullName: data.name,
           email: `${data.phone}@pharmacy.temp`, // Temporary email for pharmacy
           password: data.password,
+          phone: data.phone,
         },
         'pharmacy'
       );
-      // Navigate to step 1 after registration
-      navigation.navigate('PharmacyRegisterStep1');
+      await AsyncStorage.removeItem('pharmacy_documents_submitted');
+
+      navigation.reset({
+        index: 0,
+        routes: [{ name: 'PharmacyVerificationUpload' }],
+      });
     } catch (error) {
       // Error is handled in AuthContext
     } finally {

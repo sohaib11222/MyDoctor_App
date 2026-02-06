@@ -74,7 +74,7 @@ export const ProductCatalogScreen = () => {
   const [showFilterModal, setShowFilterModal] = useState(false);
   const limit = 12;
 
-  const { data: productsData, isLoading, error, refetch, isRefreshing } = useQuery({
+  const { data: productsData, isLoading, error, refetch, isRefetching } = useQuery({
     queryKey: ['products', { search: searchQuery, category: selectedCategory, sellerId, sellerType, page, limit }],
     queryFn: () => {
       const params: productApi.ProductFilters = { search: searchQuery, page, limit };
@@ -231,7 +231,7 @@ export const ProductCatalogScreen = () => {
           columnWrapperStyle={styles.productRow}
           showsVerticalScrollIndicator={false}
           refreshControl={
-            <RefreshControl refreshing={isRefreshing || false} onRefresh={refetch} />
+            <RefreshControl refreshing={isRefetching} onRefresh={refetch} />
           }
           ListFooterComponent={
             pagination.pages > 1 ? (

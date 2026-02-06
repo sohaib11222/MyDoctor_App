@@ -156,7 +156,12 @@ const ChatDetailScreen = () => {
   const flatListRef = useRef<FlatList>(null);
 
   // For patients: Get or create conversation first if conversationId is not set
-  const { data: patientConversationData, isLoading: patientConversationLoading } = useQuery({
+  const {
+    data: patientConversationData,
+    isLoading: patientConversationLoading,
+    error: patientConversationError,
+    refetch: refetchPatientConversation,
+  } = useQuery({
     queryKey: ['patientConversation', doctorId, appointmentId, user?.id],
     queryFn: async () => {
       if (!isDoctor && doctorId && appointmentId && user?.id) {
@@ -169,7 +174,12 @@ const ChatDetailScreen = () => {
   });
 
   // For doctors: Get or create conversation first if conversationId is not set
-  const { data: doctorConversationData, isLoading: doctorConversationLoading } = useQuery({
+  const {
+    data: doctorConversationData,
+    isLoading: doctorConversationLoading,
+    error: doctorConversationError,
+    refetch: refetchDoctorConversation,
+  } = useQuery({
     queryKey: ['doctorConversation', user?.id, patientId, appointmentId],
     queryFn: async () => {
       if (isDoctor && user?.id && patientId && appointmentId) {
@@ -188,6 +198,7 @@ const ChatDetailScreen = () => {
   // Update conversationId if we got it from the API
   const conversationData = isDoctor ? doctorConversationData : patientConversationData;
   const conversationLoading = isDoctor ? doctorConversationLoading : patientConversationLoading;
+  const conversationSetupError = isDoctor ? doctorConversationError : patientConversationError;
   const actualConversationId = conversationId || conversationData?.data?._id || chatId;
 
   // Check if we have the required parameters
@@ -256,7 +267,28 @@ const ChatDetailScreen = () => {
   const isLoading = messagesLoading || conversationLoading;
   
   // Check if we're still waiting for conversation to be created
-  const isWaitingForConversation = !actualConversationId && hasRequiredParams && !conversationLoading;
+  const isWaitingForConversation = !actualConversationId && hasRequiredParams && !conversationLoading && !conversationSetupError;
+
+  useEffect(() => {
+    if (!conversationSetupError) return;
+
+    const status = (conversationSetupError as any)?.response?.status;
+    const backendMessage =
+      (conversationSetupError as any)?.response?.data?.message ||
+      (conversationSetupError as any)?.message ||
+      'Unable to open chat.';
+
+    if (status === 403) {
+      Alert.alert('Chat not available', backendMessage, [
+        {
+          text: 'OK',
+          onPress: () => {
+            if (navigation.canGoBack()) navigation.goBack();
+          },
+        },
+      ]);
+    }
+  }, [conversationSetupError, navigation]);
 
   // Transform backend messages to UI format
   const messages = useMemo(() => {
@@ -992,6 +1024,28 @@ const ChatDetailScreen = () => {
                 {(error as any)?.response?.data?.message || (error as any)?.message || 'Please try again'}
               </Text>
               <TouchableOpacity style={styles.retryButton} onPress={() => refetch()}>
+                <Text style={styles.retryButtonText}>Retry</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {conversationSetupError && !conversationLoading && !actualConversationId && (
+            <View style={styles.errorContainer}>
+              <Ionicons name="alert-circle-outline" size={48} color={colors.error} />
+              <Text style={styles.errorText}>Failed to open chat</Text>
+              <Text style={styles.errorSubtext}>
+                {(conversationSetupError as any)?.response?.data?.message || (conversationSetupError as any)?.message || 'Please try again'}
+              </Text>
+              <TouchableOpacity
+                style={styles.retryButton}
+                onPress={() => {
+                  if (isDoctor) {
+                    refetchDoctorConversation();
+                  } else {
+                    refetchPatientConversation();
+                  }
+                }}
+              >
                 <Text style={styles.retryButtonText}>Retry</Text>
               </TouchableOpacity>
             </View>

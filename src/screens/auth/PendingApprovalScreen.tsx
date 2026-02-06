@@ -26,14 +26,23 @@ export const PendingApprovalScreen = () => {
   const [checkingStatus, setCheckingStatus] = useState(true);
   const [currentStatus, setCurrentStatus] = useState<string | null>(null);
 
+  const isDoctor = user?.role === 'doctor';
+  const isPharmacy =
+    user?.role === 'pharmacy' ||
+    user?.role === 'parapharmacy' ||
+    (user as any)?.role === 'PHARMACY' ||
+    (user as any)?.role === 'PARAPHARMACY';
+  const documentsKey = isPharmacy ? 'pharmacy_documents_submitted' : 'doctor_documents_submitted';
+  const uploadRoute: keyof AuthStackParamList = isPharmacy ? 'PharmacyVerificationUpload' : 'DoctorVerificationUpload';
+
   // Prevent going back to verification upload if documents are submitted
   useEffect(() => {
     const unsubscribe = navigation.addListener('beforeRemove', async (e) => {
       // Check if documents have been submitted
-      const documentsSubmitted = await AsyncStorage.getItem('doctor_documents_submitted');
+      const documentsSubmitted = await AsyncStorage.getItem(documentsKey);
       
       // Allow navigation if user is going to update documents (explicit navigation)
-      if (e.data.action.type === 'NAVIGATE' && e.data.action.payload?.name === 'DoctorVerificationUpload') {
+      if (e.data.action.type === 'NAVIGATE' && e.data.action.payload?.name === uploadRoute) {
         return; // Allow navigation to upload screen
       }
       // Allow navigation to login (logout)
@@ -46,7 +55,7 @@ export const PendingApprovalScreen = () => {
       }
     });
     return unsubscribe;
-  }, [navigation]);
+  }, [navigation, documentsKey, uploadRoute]);
 
   useEffect(() => {
     const checkApprovalStatus = async () => {
@@ -58,7 +67,7 @@ export const PendingApprovalScreen = () => {
 
           if (status === 'APPROVED') {
             // Clear documents submitted flag since user is approved
-            await AsyncStorage.removeItem('doctor_documents_submitted');
+            await AsyncStorage.removeItem(documentsKey);
             // Doctor is approved, redirect to dashboard
             Toast.show({
               type: 'success',
@@ -106,7 +115,7 @@ export const PendingApprovalScreen = () => {
 
               if (userStatus === 'APPROVED') {
                 // Clear documents submitted flag since user is approved
-                await AsyncStorage.removeItem('doctor_documents_submitted');
+                await AsyncStorage.removeItem(documentsKey);
                 Toast.show({
                   type: 'success',
                   text1: 'Account Approved',
@@ -183,7 +192,7 @@ export const PendingApprovalScreen = () => {
 
           if (userStatus === 'APPROVED') {
             // Clear documents submitted flag since user is approved
-            await AsyncStorage.removeItem('doctor_documents_submitted');
+            await AsyncStorage.removeItem(documentsKey);
             Toast.show({
               type: 'success',
               text1: 'Account Approved',
@@ -233,8 +242,8 @@ export const PendingApprovalScreen = () => {
 
   const handleUpdateDocuments = async () => {
     // Clear the flag so user can upload new documents
-    await AsyncStorage.removeItem('doctor_documents_submitted');
-    navigation.navigate('DoctorVerificationUpload');
+    await AsyncStorage.removeItem(documentsKey);
+    navigation.navigate(uploadRoute);
   };
 
   const handleLogout = async () => {

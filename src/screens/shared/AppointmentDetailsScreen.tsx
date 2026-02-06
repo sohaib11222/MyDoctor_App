@@ -762,9 +762,13 @@ const AppointmentDetailsScreen = () => {
 
           {status === 'completed' && (
             <View style={styles.completedActions}>
-              <TouchableOpacity style={styles.downloadBtn} activeOpacity={0.8}>
+              <TouchableOpacity
+                style={styles.downloadBtn}
+                activeOpacity={0.8}
+                onPress={() => navigation.navigate('Prescription', { appointmentId })}
+              >
                 <Ionicons name="download-outline" size={18} color={colors.text} />
-                <Text style={styles.downloadBtnText}>Download Prescription</Text>
+                <Text style={styles.downloadBtnText}>{isDoctor ? 'Prescription' : 'Download Prescription'}</Text>
               </TouchableOpacity>
               {!isDoctor && !existingReview && (
                 <TouchableOpacity

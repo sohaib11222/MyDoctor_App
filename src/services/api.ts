@@ -6,6 +6,14 @@ import { API_BASE_URL } from '../config/api';
 const STORAGE_KEYS = {
   TOKEN: 'token',
   USER: 'user',
+  LANGUAGE: 'app_language',
+};
+
+let currentLanguage: string | null = null;
+
+export const setApiLanguage = (lang: string | null) => {
+  const cleaned = String(lang || '').trim();
+  currentLanguage = cleaned ? cleaned : null;
 };
 
 // Flag to prevent multiple simultaneous refresh attempts
@@ -63,6 +71,20 @@ api.interceptors.request.use(
       const token = await AsyncStorage.getItem(STORAGE_KEYS.TOKEN);
       if (token) {
         config.headers.Authorization = `Bearer ${token}`;
+      }
+
+      let langToSend = currentLanguage;
+      if (!langToSend) {
+        const storedLang = await AsyncStorage.getItem(STORAGE_KEYS.LANGUAGE);
+        const cleaned = String(storedLang || '').trim();
+        if (cleaned) {
+          langToSend = cleaned;
+          currentLanguage = cleaned;
+        }
+      }
+
+      if (langToSend) {
+        (config.headers as any)['Accept-Language'] = langToSend;
       }
       
       // Set Content-Type based on data type

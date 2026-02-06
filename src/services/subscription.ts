@@ -8,24 +8,38 @@ import api from './api';
 export interface SubscriptionPlan {
   _id: string;
   name: string;
-  description?: string;
   price: number;
-  duration: number; // in days
+  durationInDays: number;
   features: string[];
   status: 'ACTIVE' | 'INACTIVE';
+  limits?: {
+    privateConsultations: number | null;
+    videoConsultations: number | null;
+    chatSessions: number | null;
+  } | null;
+  crmAccess?: boolean;
   createdAt?: string;
   updatedAt?: string;
 }
 
 export interface Subscription {
-  _id: string;
-  doctorId: string;
   subscriptionPlan: SubscriptionPlan | string;
-  startDate: string;
-  endDate: string;
   subscriptionExpiresAt: string;
   hasActiveSubscription: boolean;
-  status: 'ACTIVE' | 'EXPIRED' | 'CANCELLED';
+  usage?: {
+    privateConsultations: number;
+    videoConsultations: number;
+    chatSessions: number;
+  };
+  remaining?: {
+    privateConsultations: number | null;
+    videoConsultations: number | null;
+    chatSessions: number | null;
+  };
+  window?: {
+    start: string;
+    end: string;
+  };
   createdAt?: string;
   updatedAt?: string;
 }
@@ -47,7 +61,7 @@ export interface SubscriptionPlansResponse {
  */
 export const buySubscriptionPlan = async (planId: string): Promise<SubscriptionResponse> => {
   const response = await api.post('/doctor/buy-subscription', { planId });
-  return response;
+  return response as unknown as SubscriptionResponse;
 };
 
 /**
@@ -55,7 +69,7 @@ export const buySubscriptionPlan = async (planId: string): Promise<SubscriptionR
  */
 export const getMySubscription = async (): Promise<SubscriptionResponse> => {
   const response = await api.get('/doctor/my-subscription');
-  return response;
+  return response as unknown as SubscriptionResponse;
 };
 
 /**
@@ -65,7 +79,7 @@ export const listSubscriptionPlans = async (params?: {
   isActive?: boolean;
 }): Promise<SubscriptionPlansResponse> => {
   const response = await api.get('/subscription', { params });
-  return response;
+  return response as unknown as SubscriptionPlansResponse;
 };
 
 /**
@@ -73,6 +87,6 @@ export const listSubscriptionPlans = async (params?: {
  */
 export const getActivePlans = async (): Promise<SubscriptionPlansResponse> => {
   const response = await api.get('/admin/subscription-plan/active');
-  return response;
+  return response as unknown as SubscriptionPlansResponse;
 };
 

@@ -56,7 +56,7 @@ export interface NotificationResponse {
  */
 export const getNotifications = async (params: NotificationFilters = {}): Promise<NotificationsResponse> => {
   const response = await api.get('/notification', { params });
-  return response.data || response;
+  return response as any;
 };
 
 /**
@@ -66,7 +66,7 @@ export const getNotifications = async (params: NotificationFilters = {}): Promis
  */
 export const markNotificationAsRead = async (notificationId: string): Promise<NotificationResponse> => {
   const response = await api.put(`/notification/read/${notificationId}`);
-  return response.data || response;
+  return response as any;
 };
 
 /**
@@ -91,6 +91,6 @@ export const markAllNotificationsAsRead = async (): Promise<{ success: boolean; 
  */
 export const getUnreadNotificationsCount = async (): Promise<number> => {
   const response = await getNotifications({ isRead: false, limit: 1 });
-  return response.data?.pagination?.total || 0;
+  return response?.data?.pagination?.total || 0;
 };
 

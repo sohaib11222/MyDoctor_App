@@ -89,6 +89,19 @@ const PatientRescheduleRequestsScreen = () => {
 
   const handleViewAppointment = (appointmentId: string | { _id: string }) => {
     const id = typeof appointmentId === 'string' ? appointmentId : appointmentId._id;
+    try {
+      const parent = (navigation as any).getParent?.();
+      if (parent) {
+        parent.navigate('Appointments', {
+          screen: 'AppointmentDetails',
+          params: { appointmentId: id },
+        });
+        return;
+      }
+    } catch {
+      // ignore
+    }
+
     navigation.navigate('AppointmentDetails', { appointmentId: id });
   };
 
@@ -109,9 +122,9 @@ const PatientRescheduleRequestsScreen = () => {
             <Ionicons name="alert-circle-outline" size={48} color={colors.warning} />
             <Text style={styles.errorTitle}>Unable to Load Requests</Text>
             <Text style={styles.errorText}>
-              {requestsError?.response?.status === 404
+              {((requestsError as any)?.response?.status === 404)
                 ? 'The reschedule request feature is not available. Please ensure the backend server has been restarted.'
-                : requestsError?.response?.data?.message || requestsError?.message || 'An error occurred while loading requests'}
+                : (requestsError as any)?.response?.data?.message || (requestsError as any)?.message || 'An error occurred while loading requests'}
             </Text>
           </View>
         ) : requests.length === 0 ? (

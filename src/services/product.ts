@@ -19,14 +19,14 @@ export interface Product {
   images?: string[];
   isActive: boolean;
   sellerId?: string;
-  sellerType?: 'DOCTOR' | 'PHARMACY' | 'ADMIN';
+  sellerType?: 'DOCTOR' | 'PHARMACY' | 'PARAPHARMACY' | 'ADMIN';
   createdAt?: string;
   updatedAt?: string;
 }
 
 export interface ProductFilters {
   sellerId?: string;
-  sellerType?: 'DOCTOR' | 'PHARMACY' | 'ADMIN';
+  sellerType?: 'DOCTOR' | 'PHARMACY' | 'PARAPHARMACY' | 'ADMIN';
   category?: string;
   subCategory?: string;
   search?: string;

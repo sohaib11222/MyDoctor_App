@@ -821,7 +821,7 @@ const DoctorProfileScreen = () => {
                   </Text>
                 </TouchableOpacity>
               </View>
-              <View style={styles.contactButtons}>
+              {/* <View style={styles.contactButtons}>
                 <TouchableOpacity
                   style={styles.contactBtn}
                   onPress={() => {
@@ -851,7 +851,7 @@ const DoctorProfileScreen = () => {
                   <Ionicons name="call-outline" size={16} color={colors.textWhite} />
                   <Text style={styles.contactBtnText}>Audio</Text>
                 </TouchableOpacity>
-              </View>
+              </View> */}
             </View>
           </View>
 

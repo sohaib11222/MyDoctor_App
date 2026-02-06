@@ -32,7 +32,16 @@ const BookingSuccessScreen = () => {
           <TouchableOpacity
             style={styles.viewInvoiceBtn}
             onPress={() => {
-              // Navigate to invoice view
+              try {
+                const parent = (navigation as any).getParent?.();
+                if (parent) {
+                  parent.navigate('Appointments', { screen: 'AppointmentsScreen' });
+                  return;
+                }
+              } catch {
+                // ignore
+              }
+
               navigation.navigate('AppointmentsScreen');
             }}
             activeOpacity={0.8}

@@ -91,6 +91,89 @@ export const uploadPharmacyLogo = async (file: ProductImageFile): Promise<any> =
   }
 };
 
+export const uploadPharmacyDocs = async (
+  files: ProductImageFile[],
+  docType: 'PHARMACY_LICENSE' | 'PHARMACY_DEGREE' | string
+): Promise<any> => {
+  try {
+    const token = await AsyncStorage.getItem(STORAGE_KEYS.TOKEN);
+
+    if (!API_BASE_URL) {
+      throw new Error('API_BASE_URL is not defined. Please check config/api.ts');
+    }
+
+    const url = `${API_BASE_URL}/upload/pharmacy-docs`;
+    if (__DEV__) {
+      console.log('🔗 Pharmacy Docs Upload (XMLHttpRequest):', url);
+      console.log('🔗 Files count:', files.length);
+    }
+
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', url);
+      xhr.timeout = 60000;
+
+      if (token) {
+        xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+      }
+
+      xhr.onload = () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          try {
+            const bodyData = JSON.parse(xhr.responseText);
+            resolve(bodyData);
+          } catch (e) {
+            reject(new Error(`Failed to parse response: ${xhr.responseText}`));
+          }
+        } else {
+          let errData: any = { message: `Upload failed: HTTP ${xhr.status}` };
+          try {
+            const parsed = JSON.parse(xhr.responseText);
+            if (parsed?.message) errData = parsed;
+          } catch {
+            if (xhr.responseText) errData = { message: xhr.responseText };
+          }
+          const err = new Error(errData?.message || `Upload failed: HTTP ${xhr.status}`) as any;
+          err.response = { status: xhr.status, data: errData };
+          reject(err);
+        }
+      };
+
+      xhr.onerror = () => {
+        const err = new Error('Network error during upload') as any;
+        err.code = 'ERR_NETWORK';
+        reject(err);
+      };
+
+      xhr.ontimeout = () => {
+        reject(new Error('Upload timeout after 60 seconds'));
+      };
+
+      const formData = new FormData();
+      formData.append('docType', docType);
+      files.forEach((f) => {
+        formData.append('files', {
+          uri: f.uri,
+          type: f.mime,
+          name: f.name,
+        } as any);
+      });
+
+      xhr.send(formData as any);
+    });
+  } catch (error: any) {
+    if (__DEV__) {
+      console.error('❌ Pharmacy docs upload error:', {
+        message: error?.message,
+        code: error?.code,
+        response: error?.response?.data,
+        status: error?.response?.status,
+      });
+    }
+    throw error;
+  }
+};
+
 /**
  * Upload doctor verification documents
  * @param {FormData} formData - FormData containing files (field name should be 'files')

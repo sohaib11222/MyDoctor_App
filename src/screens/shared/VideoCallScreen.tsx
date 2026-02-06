@@ -400,12 +400,12 @@ const VideoCallContent = ({
           </Text>
         </View>
 
-        {/* Main video area - split screen */}
+        {/* Main video area - PiP layout */}
         <View style={styles.videoArea}>
-          {/* Remote participant (left side) */}
+          {/* Remote participant (full screen) */}
           <View style={styles.remoteVideoContainer}>
             {uniqueRemoteParticipants.length > 0 ? (
-              <ParticipantView 
+              <ParticipantView
                 participant={uniqueRemoteParticipants[0]}
                 style={styles.participantView}
               />
@@ -417,6 +417,7 @@ const VideoCallContent = ({
                 </Text>
               </View>
             )}
+
             {uniqueRemoteParticipants.length > 0 && (
               <View style={styles.participantLabel}>
                 <View style={[styles.statusDot, { backgroundColor: '#4CAF50' }]} />
@@ -427,26 +428,16 @@ const VideoCallContent = ({
             )}
           </View>
 
-          {/* Local participant (right side) */}
+          {/* Local participant (small overlay) */}
           {localParticipant ? (
             <View style={styles.localVideoContainer}>
-              <ParticipantView 
-                participant={localParticipant}
-                style={styles.participantView}
-              />
+              <ParticipantView participant={localParticipant} style={styles.participantView} />
               <View style={styles.participantLabel}>
                 <View style={[styles.statusDot, { backgroundColor: '#2196F3' }]} />
                 <Text style={styles.participantLabelText}>You</Text>
               </View>
             </View>
-          ) : (
-            <View style={styles.localVideoContainer}>
-              <View style={styles.waitingContainer}>
-                <ActivityIndicator size="large" color={colors.primary} />
-                <Text style={styles.waitingText}>Initializing your video...</Text>
-              </View>
-            </View>
-          )}
+          ) : null}
         </View>
 
         {/* Call Controls */}
@@ -617,23 +608,27 @@ const styles = StyleSheet.create({
   },
   videoArea: {
     flex: 1,
-    flexDirection: 'row',
-    gap: 10,
-    padding: 10,
+    position: 'relative',
   },
   remoteVideoContainer: {
     flex: 1,
     backgroundColor: '#1a1a1a',
-    borderRadius: 8,
+    borderRadius: 0,
     overflow: 'hidden',
     position: 'relative',
   },
   localVideoContainer: {
-    flex: 1,
+    width: 120,
+    height: 160,
     backgroundColor: '#1a1a1a',
-    borderRadius: 8,
+    borderRadius: 12,
     overflow: 'hidden',
-    position: 'relative',
+    position: 'absolute',
+    right: 12,
+    top: Platform.OS === 'ios' ? 90 : 70,
+    zIndex: 30,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.25)',
   },
   participantView: {
     width: '100%',

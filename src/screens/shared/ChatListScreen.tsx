@@ -12,6 +12,7 @@ import {
   Dimensions,
   ActivityIndicator,
   RefreshControl,
+  Alert,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
@@ -24,6 +25,7 @@ import * as chatApi from '../../services/chat';
 import * as appointmentApi from '../../services/appointment';
 import { API_BASE_URL } from '../../config/api';
 import Toast from 'react-native-toast-message';
+import { NotificationBell } from '../../components/common/NotificationBell';
 
 type ChatListScreenNavigationProp = StackNavigationProp<ChatStackParamList, 'ChatList'>;
 
@@ -43,10 +45,40 @@ interface Chat {
   isRead?: boolean;
   conversationType?: 'DOCTOR_PATIENT' | 'ADMIN_DOCTOR';
   appointmentId?: string;
+  appointmentDate?: string;
+  appointmentTime?: string;
+  appointmentDuration?: number;
+  appointmentEndTime?: string;
   patientId?: string;
   doctorId?: string;
   adminId?: string;
 }
+
+const hasAppointmentWindowPassed = (chat: Chat) => {
+  if (!chat.appointmentDate || !chat.appointmentTime) return false;
+
+  const start = new Date(chat.appointmentDate);
+  const [h, m] = String(chat.appointmentTime).split(':').map((x) => Number(x));
+  if (Number.isFinite(h) && Number.isFinite(m)) {
+    start.setHours(h, m, 0, 0);
+  }
+
+  let end: Date | null = null;
+  if (chat.appointmentEndTime) {
+    const [eh, em] = String(chat.appointmentEndTime).split(':').map((x) => Number(x));
+    if (Number.isFinite(eh) && Number.isFinite(em)) {
+      end = new Date(start);
+      end.setHours(eh, em, 0, 0);
+    }
+  }
+
+  if (!end) {
+    const duration = typeof chat.appointmentDuration === 'number' && chat.appointmentDuration > 0 ? chat.appointmentDuration : 30;
+    end = new Date(start.getTime() + duration * 60 * 1000);
+  }
+
+  return new Date() > end;
+};
 
 /**
  * Normalize image URL for mobile app
@@ -217,6 +249,10 @@ const ChatListScreen = () => {
           isRead: true,
           conversationType: 'DOCTOR_PATIENT',
           appointmentId,
+          appointmentDate: apt.appointmentDate,
+          appointmentTime: apt.appointmentTime,
+          appointmentDuration: apt.appointmentDuration,
+          appointmentEndTime: apt.appointmentEndTime,
           patientId: user?.id,
           doctorId,
         };
@@ -276,6 +312,14 @@ const ChatListScreen = () => {
         });
       } else {
         // Navigate to patient/doctor chat
+        if (!isDoctor && hasAppointmentWindowPassed(item)) {
+          Alert.alert(
+            'Chat not available',
+            'Communication is only available during the scheduled appointment time window.',
+            [{ text: 'OK' }]
+          );
+          return;
+        }
         navigation.navigate('ChatDetail', {
           recipientName: item.name,
           chatId: item.conversationId,
@@ -343,15 +387,18 @@ const ChatListScreen = () => {
       <View style={styles.header}>
         <View style={styles.headerTop}>
           <Text style={styles.headerTitle}>Messages</Text>
-          {isDoctor && (
-            <TouchableOpacity
-              style={styles.adminChatButton}
-              onPress={() => navigation.navigate('AdminChat', {})}
-              activeOpacity={0.7}
-            >
-              <Ionicons name="headset-outline" size={20} color={colors.textWhite} />
-            </TouchableOpacity>
-          )}
+          <View style={styles.headerActions}>
+            <NotificationBell />
+            {isDoctor && (
+              <TouchableOpacity
+                style={styles.adminChatButton}
+                onPress={() => navigation.navigate('AdminChat', {})}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="headset-outline" size={20} color={colors.textWhite} />
+              </TouchableOpacity>
+            )}
+          </View>
         </View>
         <View style={styles.searchContainer}>
           <View style={styles.searchInputContainer}>
@@ -460,6 +507,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 20,
   },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
   headerTitle: {
     fontSize: 20,
     fontWeight: '600',
@@ -474,8 +526,6 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255, 255, 255, 0.2)',
     alignItems: 'center',
     justifyContent: 'center',
-    position: 'absolute',
-    right: 0,
   },
   searchContainer: {
     marginTop: 0,

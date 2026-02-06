@@ -20,6 +20,7 @@ import { Button } from '../../components/common/Button';
 import { useAuth, RegisterData, UserRole } from '../../contexts/AuthContext';
 import { colors } from '../../constants/colors';
 import { Feather } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 type RegisterScreenNavigationProp = NativeStackNavigationProp<AuthStackParamList>;
 
@@ -54,7 +55,7 @@ export const RegisterScreen = () => {
   const navigation = useNavigation<RegisterScreenNavigationProp>();
   const { register: registerUser } = useAuth();
   const [loading, setLoading] = useState(false);
-  const [selectedRole, setSelectedRole] = useState<UserRole>('patient');
+  const [selectedRole, setSelectedRole] = useState<Exclude<UserRole, 'admin'>>('patient');
 
   const {
     control,
@@ -75,7 +76,7 @@ export const RegisterScreen = () => {
   const onSubmit = async (data: RegisterFormData) => {
     setLoading(true);
     try {
-      const role: UserRole = selectedRole;
+      const role = selectedRole;
       await registerUser(
         {
           fullName: data.fullName,
@@ -86,6 +87,20 @@ export const RegisterScreen = () => {
         },
         role
       );
+
+      if (role === 'pharmacy' || role === 'parapharmacy') {
+        await AsyncStorage.removeItem('pharmacy_documents_submitted');
+        navigation.reset({
+          index: 0,
+          routes: [{ name: 'PharmacyVerificationUpload' }],
+        });
+      } else if (role === 'doctor') {
+        await AsyncStorage.removeItem('doctor_documents_submitted');
+        navigation.reset({
+          index: 0,
+          routes: [{ name: 'DoctorVerificationUpload' }],
+        });
+      }
     } catch (error) {
       // Error is handled in AuthContext
     } finally {
@@ -107,7 +122,7 @@ export const RegisterScreen = () => {
         <View style={styles.imageContainer}>
           <View style={styles.imagePlaceholder}>
             <Image
-              source={require('../../../assets/auth_image.png')}
+              source={require('../../../assets/doctor_final.png')}
               style={styles.headerImage}
               resizeMode="contain"
             />
@@ -188,7 +203,17 @@ export const RegisterScreen = () => {
           />
 
           <Button
-            title={loading ? 'Registering...' : selectedRole === 'patient' ? 'Register as Patient' : selectedRole === 'doctor' ? 'Register as Doctor' : 'Register as Pharmacy'}
+            title={
+              loading
+                ? 'Registering...'
+                : selectedRole === 'patient'
+                  ? 'Register as Patient'
+                  : selectedRole === 'doctor'
+                    ? 'Register as Doctor'
+                    : selectedRole === 'pharmacy'
+                      ? 'Register as Pharmacy'
+                      : 'Register as Parapharmacy'
+            }
             onPress={handleSubmit(onSubmit)}
             loading={loading}
             style={styles.registerButton}
@@ -223,6 +248,14 @@ export const RegisterScreen = () => {
               <Feather name="shopping-bag" size={20} color={selectedRole === 'pharmacy' ? colors.textWhite : colors.primary} />
               <Text style={[styles.roleButtonText, selectedRole === 'pharmacy' && styles.roleButtonTextActive]}>Pharmacy</Text>
             </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.roleButton, selectedRole === 'parapharmacy' && styles.roleButtonActive]}
+              onPress={() => setSelectedRole('parapharmacy')}
+            >
+              <Feather name="shopping-bag" size={20} color={selectedRole === 'parapharmacy' ? colors.textWhite : colors.primary} />
+              <Text style={[styles.roleButtonText, selectedRole === 'parapharmacy' && styles.roleButtonTextActive]}>Parapharmacy</Text>
+            </TouchableOpacity>
           </View>
 
           <View style={styles.loginContainer}>
@@ -247,22 +280,22 @@ const styles = StyleSheet.create({
   },
   imageContainer: {
     height: 200,
-    backgroundColor: colors.primaryLight,
+    // backgroundColor: colors.primaryLight,
     justifyContent: 'center',
     alignItems: 'center',
     borderBottomRightRadius: 30,
     borderBottomLeftRadius: 30,
   },
   imagePlaceholder: {
-    width: 120,
+    width: 250,
     height: 120,
     borderRadius: 60,
-    backgroundColor: colors.primary,
+    // backgroundColor: colors.primary,
     justifyContent: 'center',
     alignItems: 'center',
   },
   headerImage: {
-    width: 100,
+    width: 222,
     height: 100,
   },
   formContainer: {
@@ -307,30 +340,33 @@ const styles = StyleSheet.create({
   },
   roleButtonsRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     justifyContent: 'space-between',
-    gap: 10,
+    rowGap: 12,
+    columnGap: 12,
     marginBottom: 24,
   },
   roleButton: {
-    flex: 1,
-    flexDirection: 'row',
+    width: '48%',
+    flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 12,
+    paddingVertical: 14,
     paddingHorizontal: 10,
     borderRadius: 8,
     borderWidth: 1,
     borderColor: colors.primary,
     backgroundColor: colors.background,
-    gap: 8,
+    gap: 6,
   },
   roleButtonActive: {
     backgroundColor: colors.primary,
   },
   roleButtonText: {
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: '600',
     color: colors.primary,
+    textAlign: 'center',
   },
   roleButtonTextActive: {
     color: colors.textWhite,

@@ -22,6 +22,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as productApi from '../../services/product';
 import { useCart } from '../../contexts/CartContext';
 import { API_BASE_URL } from '../../config/api';
+import { NotificationBell } from '../../components/common/NotificationBell';
 
 type PharmacyHomeScreenNavigationProp = NativeStackNavigationProp<PharmacyStackParamList>;
 
@@ -88,18 +89,21 @@ export const PharmacyHomeScreen = () => {
         <View style={styles.bannerSection}>
           <View style={styles.bannerHeader}>
             <Text style={styles.bannerHeaderTitle}>Pharmacy</Text>
-            <TouchableOpacity
-              style={styles.cartIconContainer}
-              onPress={() => navigation.navigate('Cart')}
-              activeOpacity={0.7}
-            >
-              <Ionicons name="cart-outline" size={24} color={colors.textWhite} />
-              {cartCount > 0 && (
-                <View style={styles.cartBadge}>
-                  <Text style={styles.cartBadgeText}>{cartCount > 99 ? '99+' : cartCount}</Text>
-                </View>
-              )}
-            </TouchableOpacity>
+            <View style={styles.headerRight}>
+              <NotificationBell />
+              <TouchableOpacity
+                style={styles.cartIconContainer}
+                onPress={() => navigation.navigate('Cart')}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="cart-outline" size={24} color={colors.textWhite} />
+                {cartCount > 0 && (
+                  <View style={styles.cartBadge}>
+                    <Text style={styles.cartBadgeText}>{cartCount > 99 ? '99+' : cartCount}</Text>
+                  </View>
+                )}
+              </TouchableOpacity>
+            </View>
           </View>
           <View style={styles.bannerContent}>
             <Text style={styles.bannerTitle}>From the Leading Online Pharmacy</Text>
@@ -140,7 +144,7 @@ export const PharmacyHomeScreen = () => {
                   key={index}
                   style={styles.categoryCard}
                   onPress={() =>
-                    navigation.navigate('ProductCatalog', {
+                    (navigation as any).navigate('ProductCatalog', {
                       category,
                     })
                   }
@@ -251,6 +255,11 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 20,
+  },
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
   },
   bannerHeaderTitle: {
     fontSize: 22,

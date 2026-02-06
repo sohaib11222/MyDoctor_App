@@ -220,7 +220,7 @@ export const ForgotPasswordScreen = () => {
         <View style={styles.imageContainer}>
           <View style={styles.imagePlaceholder}>
             <Image
-              source={require('../../../assets/auth_image.png')}
+              source={require('../../../assets/doctor_final.png')}
               style={styles.headerImage}
               resizeMode="contain"
             />
@@ -396,23 +396,22 @@ const styles = StyleSheet.create({
   },
   imageContainer: {
     height: 200,
-    backgroundColor: colors.primaryLight,
     justifyContent: 'center',
     alignItems: 'center',
     borderBottomRightRadius: 30,
     borderBottomLeftRadius: 30,
   },
   imagePlaceholder: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    backgroundColor: colors.primary,
+    width: 250,
+    height: 200,
+    borderRadius: 80,
+    backgroundColor: colors.background,
     justifyContent: 'center',
     alignItems: 'center',
   },
   headerImage: {
-    width: 100,
-    height: 100,
+    width: 222,
+    height: 170,
   },
   formContainer: {
     flex: 1,

@@ -7,6 +7,7 @@ import { RegisterScreen } from '../screens/auth/RegisterScreen';
 import { ForgotPasswordScreen } from '../screens/auth/ForgotPasswordScreen';
 import { DoctorRegisterScreen } from '../screens/auth/DoctorRegisterScreen';
 import { DoctorVerificationUploadScreen } from '../screens/auth/DoctorVerificationUploadScreen';
+import { PharmacyVerificationUploadScreen } from '../screens/auth/PharmacyVerificationUploadScreen';
 import { PendingApprovalScreen } from '../screens/auth/PendingApprovalScreen';
 import { useAuth } from '../contexts/AuthContext';
 // Pharmacy registration removed - not in site
@@ -14,6 +15,7 @@ import { useAuth } from '../contexts/AuthContext';
 const Stack = createNativeStackNavigator<AuthStackParamList>();
 
 const DOCUMENTS_SUBMITTED_KEY = 'doctor_documents_submitted';
+const PHARMACY_DOCUMENTS_SUBMITTED_KEY = 'pharmacy_documents_submitted';
 
 export const AuthNavigator = () => {
   const { user } = useAuth();
@@ -30,6 +32,17 @@ export const AuthNavigator = () => {
           setInitialRoute('PendingApproval');
         } else {
           setInitialRoute('DoctorVerificationUpload');
+        }
+      } else if (
+        user &&
+        (user.role === 'pharmacy' || user.role === 'parapharmacy') &&
+        String(user.status).toUpperCase() === 'PENDING'
+      ) {
+        const documentsSubmitted = await AsyncStorage.getItem(PHARMACY_DOCUMENTS_SUBMITTED_KEY);
+        if (documentsSubmitted === 'true') {
+          setInitialRoute('PendingApproval');
+        } else {
+          setInitialRoute('PharmacyVerificationUpload');
         }
       } else {
         setInitialRoute('Login');
@@ -56,6 +69,7 @@ export const AuthNavigator = () => {
       <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
       <Stack.Screen name="DoctorRegister" component={DoctorRegisterScreen} />
       <Stack.Screen name="DoctorVerificationUpload" component={DoctorVerificationUploadScreen} />
+      <Stack.Screen name="PharmacyVerificationUpload" component={PharmacyVerificationUploadScreen} />
       <Stack.Screen name="PendingApproval" component={PendingApprovalScreen} />
     </Stack.Navigator>
   );

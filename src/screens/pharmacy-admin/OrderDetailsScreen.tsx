@@ -22,6 +22,8 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import * as orderApi from '../../services/order';
 import { API_BASE_URL } from '../../config/api';
 import Toast from 'react-native-toast-message';
+import { useAuth } from '../../contexts/AuthContext';
+import * as pharmacySubscriptionApi from '../../services/pharmacySubscription';
 
 type OrderDetailsScreenNavigationProp = NativeStackNavigationProp<OrdersStackParamList, 'OrderDetails'>;
 type OrderDetailsRouteProp = RouteProp<OrdersStackParamList, 'OrderDetails'>;
@@ -95,8 +97,67 @@ export const OrderDetailsScreen = () => {
   const route = useRoute<OrderDetailsRouteProp>();
   const { orderId } = route.params;
   const queryClient = useQueryClient();
+  const { user } = useAuth();
+  const userId = user?._id || user?.id;
+  const isPharmacy = user?.role === 'pharmacy' || (user as any)?.role === 'PHARMACY';
+  const isParapharmacy = user?.role === 'parapharmacy' || (user as any)?.role === 'PARAPHARMACY';
+  const isPharmacyUser = isPharmacy || isParapharmacy;
+  const requiresSubscription = isPharmacy;
   const [showShippingModal, setShowShippingModal] = useState(false);
   const [shippingFee, setShippingFee] = useState('');
+
+  const { data: subscriptionResponse, isLoading: subscriptionLoading } = useQuery({
+    queryKey: ['my-pharmacy-subscription', userId],
+    queryFn: () => pharmacySubscriptionApi.getMyPharmacySubscription(),
+    enabled: !!userId && requiresSubscription,
+    retry: 1,
+  });
+
+  const subscriptionData = React.useMemo(() => {
+    if (!subscriptionResponse) return null;
+    const r: any = subscriptionResponse as any;
+    const data = r?.data ?? r;
+    return data?.data ?? data;
+  }, [subscriptionResponse]);
+
+  const hasActiveSubscription = React.useMemo(() => {
+    if (!requiresSubscription) return true;
+    if (!subscriptionData) return false;
+    if (subscriptionData?.hasActiveSubscription === true) return true;
+    if (subscriptionData?.subscriptionExpiresAt) return new Date(subscriptionData.subscriptionExpiresAt) > new Date();
+    return false;
+  }, [subscriptionData]);
+
+  const goToSubscription = () => {
+    const parent = (navigation as any).getParent?.();
+    if (parent) {
+      parent.navigate('More', { screen: 'PharmacySubscription' });
+    } else {
+      (navigation as any).navigate('More', { screen: 'PharmacySubscription' });
+    }
+  };
+
+  if (requiresSubscription && subscriptionLoading) {
+    return (
+      <SafeAreaView style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color={colors.primary} />
+        <Text style={styles.loadingText}>Loading subscription...</Text>
+      </SafeAreaView>
+    );
+  }
+
+  if (requiresSubscription && !subscriptionLoading && !hasActiveSubscription) {
+    return (
+      <SafeAreaView style={styles.errorContainer}>
+        <Ionicons name="card-outline" size={64} color={colors.warning} />
+        <Text style={styles.errorTitle}>Subscription Required</Text>
+        <Text style={styles.errorText}>You need an active subscription to manage order details.</Text>
+        <View style={{ width: '100%', marginTop: 12 }}>
+          <Button title="View Plans" onPress={goToSubscription} />
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   // Fetch order data
   const { data: orderResponse, isLoading, error, refetch } = useQuery({
