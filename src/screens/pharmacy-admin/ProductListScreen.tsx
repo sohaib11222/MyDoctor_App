@@ -3,7 +3,6 @@ import {
   View,
   Text,
   StyleSheet,
-  ScrollView,
   TouchableOpacity,
   SafeAreaView,
   FlatList,
@@ -19,13 +18,13 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { ProductsStackParamList } from '../../navigation/types';
 import { colors } from '../../constants/colors';
 import { Ionicons } from '@expo/vector-icons';
-import { Button } from '../../components/common/Button';
 import { useAuth } from '../../contexts/AuthContext';
 import * as productApi from '../../services/product';
 import * as pharmacyApi from '../../services/pharmacy';
 import * as pharmacySubscriptionApi from '../../services/pharmacySubscription';
 import Toast from 'react-native-toast-message';
 import { API_BASE_URL } from '../../config/api';
+import { useTranslation } from 'react-i18next';
 
 type ProductListScreenNavigationProp = NativeStackNavigationProp<ProductsStackParamList>;
 
@@ -46,6 +45,7 @@ interface Product {
 export const ProductListScreen = () => {
   const navigation = useNavigation<ProductListScreenNavigationProp>();
   const { user } = useAuth();
+  const { t, i18n } = useTranslation();
   const queryClient = useQueryClient();
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
@@ -157,15 +157,16 @@ export const ProductListScreen = () => {
       queryClient.invalidateQueries({ queryKey: ['pharmacy-products'] });
       Toast.show({
         type: 'success',
-        text1: 'Success',
-        text2: 'Product deleted successfully!',
+        text1: t('common.success'),
+        text2: t('pharmacyAdmin.products.toasts.productDeleted'),
       });
     },
     onError: (error: any) => {
-      const errorMessage = error?.response?.data?.message || error?.message || 'Failed to delete product';
+      const errorMessage =
+        error?.response?.data?.message || error?.message || t('pharmacyAdmin.products.errors.failedToDeleteProduct');
       Toast.show({
         type: 'error',
-        text1: 'Error',
+        text1: t('common.error'),
         text2: errorMessage,
       });
     },
@@ -175,8 +176,8 @@ export const ProductListScreen = () => {
     if (!isApproved) {
       Toast.show({
         type: 'info',
-        text1: 'Pending Approval',
-        text2: 'Your pharmacy account is pending admin approval',
+        text1: t('pharmacyAdmin.products.toasts.pendingApprovalTitle'),
+        text2: t('pharmacyAdmin.products.toasts.pendingApprovalBody'),
       });
       return;
     }
@@ -194,8 +195,8 @@ export const ProductListScreen = () => {
       }
       Toast.show({
         type: 'info',
-        text1: 'Pharmacy Required',
-        text2: 'Please create a pharmacy first before adding products',
+        text1: t('pharmacyAdmin.products.toasts.pharmacyRequiredTitle'),
+        text2: t('pharmacyAdmin.products.toasts.pharmacyRequiredBody'),
       });
       return;
     }
@@ -209,8 +210,8 @@ export const ProductListScreen = () => {
       }
       Toast.show({
         type: 'info',
-        text1: 'Complete Profile',
-        text2: 'Please complete your pharmacy profile first before adding products',
+        text1: t('pharmacyAdmin.products.toasts.completeProfileTitle'),
+        text2: t('pharmacyAdmin.products.toasts.completeProfileBody'),
       });
       return;
     }
@@ -218,8 +219,8 @@ export const ProductListScreen = () => {
     if (requiresSubscription && !subscriptionLoading && !hasActiveSubscription) {
       Toast.show({
         type: 'info',
-        text1: 'Subscription Required',
-        text2: 'You need an active subscription to manage products',
+        text1: t('pharmacyAdmin.products.toasts.subscriptionRequiredTitle'),
+        text2: t('pharmacyAdmin.products.toasts.subscriptionRequiredBody'),
       });
       goToSubscription();
       return;
@@ -232,7 +233,7 @@ export const ProductListScreen = () => {
       <SafeAreaView style={styles.container}>
         <View style={styles.loadingContainer}>
           <Ionicons name="alert-circle-outline" size={48} color={colors.error} />
-          <Text style={styles.loadingText}>This section is available for pharmacy accounts only.</Text>
+          <Text style={styles.loadingText}>{t('pharmacyAdmin.common.pharmacyAccountsOnly')}</Text>
         </View>
       </SafeAreaView>
     );
@@ -242,8 +243,8 @@ export const ProductListScreen = () => {
     if (requiresSubscription && !subscriptionLoading && !hasActiveSubscription) {
       Toast.show({
         type: 'info',
-        text1: 'Subscription Required',
-        text2: 'You need an active subscription to manage products',
+        text1: t('pharmacyAdmin.products.toasts.subscriptionRequiredTitle'),
+        text2: t('pharmacyAdmin.products.toasts.subscriptionRequiredBody'),
       });
       goToSubscription();
       return;
@@ -255,19 +256,19 @@ export const ProductListScreen = () => {
     if (requiresSubscription && !subscriptionLoading && !hasActiveSubscription) {
       Toast.show({
         type: 'info',
-        text1: 'Subscription Required',
-        text2: 'You need an active subscription to manage products',
+        text1: t('pharmacyAdmin.products.toasts.subscriptionRequiredTitle'),
+        text2: t('pharmacyAdmin.products.toasts.subscriptionRequiredBody'),
       });
       goToSubscription();
       return;
     }
     Alert.alert(
-      'Delete Product',
-      `Are you sure you want to delete "${product.name}"? This action cannot be undone.`,
+      t('pharmacyAdmin.products.alerts.deleteProductTitle'),
+      t('pharmacyAdmin.products.alerts.deleteProductBody', { name: product.name }),
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: t('common.cancel'), style: 'cancel' },
         {
-          text: 'Delete',
+          text: t('common.delete'),
           style: 'destructive',
           onPress: () => {
             deleteProductMutation.mutate(product._id);
@@ -296,9 +297,9 @@ export const ProductListScreen = () => {
 
   // Format price
   const formatPrice = (price: number) => {
-    return new Intl.NumberFormat('en-US', {
+    return new Intl.NumberFormat(i18n.language, {
       style: 'currency',
-      currency: 'USD',
+      currency: 'EUR',
     }).format(price || 0);
   };
 
@@ -341,14 +342,16 @@ export const ProductListScreen = () => {
           <View style={styles.productDetails}>
             <Text style={styles.productName}>{item.name}</Text>
             {item.category && <Text style={styles.productCategory}>{item.category}</Text>}
-            {item.sku && <Text style={styles.productSku}>SKU: {item.sku}</Text>}
+            {item.sku && <Text style={styles.productSku}>{t('pharmacyAdmin.products.labels.sku', { sku: item.sku })}</Text>}
             <View style={styles.priceContainer}>
               {item.discountPrice && item.discountPrice < item.price ? (
                 <View style={styles.discountPriceContainer}>
                   <Text style={styles.originalPrice}>{formatPrice(item.price)}</Text>
                   <Text style={styles.discountPrice}>{formatPrice(item.discountPrice)}</Text>
                   <Text style={styles.discountPercent}>
-                    {getDiscountPercent(item.price, item.discountPrice)}% OFF
+                    {t('pharmacyAdmin.products.labels.percentOff', {
+                      percent: getDiscountPercent(item.price, item.discountPrice),
+                    })}
                   </Text>
                 </View>
               ) : (
@@ -357,10 +360,12 @@ export const ProductListScreen = () => {
             </View>
             <View style={styles.stockContainer}>
               <Text style={[styles.stockText, item.stock > 0 ? styles.stockInStock : styles.stockOutOfStock]}>
-                Stock: {item.stock || 0}
+                {t('pharmacyAdmin.products.labels.stock', { count: item.stock || 0 })}
               </Text>
               <View style={[styles.statusBadge, item.isActive ? styles.statusActive : styles.statusInactive]}>
-                <Text style={styles.statusText}>{item.isActive ? 'Active' : 'Inactive'}</Text>
+                <Text style={styles.statusText}>
+                  {item.isActive ? t('pharmacyAdmin.products.status.active') : t('pharmacyAdmin.products.status.inactive')}
+                </Text>
               </View>
             </View>
           </View>
@@ -415,7 +420,7 @@ export const ProductListScreen = () => {
           style={styles.profileBanner}
         >
           <Ionicons name="warning-outline" size={18} color={colors.warning} />
-          <Text style={styles.profileBannerText}>Complete your pharmacy profile to add products</Text>
+          <Text style={styles.profileBannerText}>{t('pharmacyAdmin.dashboard.profileBanner.completeProfile')}</Text>
           <Ionicons name="chevron-forward" size={18} color={colors.textLight} />
         </TouchableOpacity>
       )}
@@ -427,7 +432,7 @@ export const ProductListScreen = () => {
           style={styles.subscriptionBanner}
         >
           <Ionicons name="card-outline" size={18} color={colors.warning} />
-          <Text style={styles.subscriptionBannerText}>Subscription required to manage products</Text>
+          <Text style={styles.subscriptionBannerText}>{t('pharmacyAdmin.products.banners.subscriptionRequired')}</Text>
           <Ionicons name="chevron-forward" size={18} color={colors.textLight} />
         </TouchableOpacity>
       )}
@@ -436,7 +441,7 @@ export const ProductListScreen = () => {
         <View style={styles.pharmacyBanner}>
           <Ionicons name="storefront" size={20} color={colors.success} />
           <View style={styles.pharmacyInfo}>
-            <Text style={styles.pharmacyName}>Your Pharmacy: {myPharmacy.name}</Text>
+            <Text style={styles.pharmacyName}>{t('pharmacyAdmin.products.pharmacyBanner.yourPharmacy', { name: myPharmacy.name })}</Text>
             {(myPharmacy as any).address?.city && (
               <Text style={styles.pharmacyLocation}>{(myPharmacy as any).address.city}</Text>
             )}
@@ -446,9 +451,9 @@ export const ProductListScreen = () => {
         <View style={styles.pharmacyWarningBanner}>
           <Ionicons name="warning" size={20} color={colors.warning} />
           <View style={styles.pharmacyInfo}>
-            <Text style={styles.pharmacyWarningText}>No Pharmacy Found</Text>
+            <Text style={styles.pharmacyWarningText}>{t('pharmacyAdmin.products.pharmacyBanner.noPharmacyFoundTitle')}</Text>
             <Text style={styles.pharmacyWarningSubtext}>
-              You need to create a pharmacy before adding products
+              {t('pharmacyAdmin.products.pharmacyBanner.noPharmacyFoundBody')}
             </Text>
           </View>
         </View>
@@ -460,7 +465,7 @@ export const ProductListScreen = () => {
           <Ionicons name="search-outline" size={20} color={colors.textSecondary} />
           <TextInput
             style={styles.searchInput}
-            placeholder="Search products..."
+            placeholder={t('pharmacyAdmin.products.placeholders.searchProducts')}
             placeholderTextColor={colors.textLight}
             value={searchQuery}
             onChangeText={setSearchQuery}
@@ -470,7 +475,7 @@ export const ProductListScreen = () => {
           <View style={styles.categoryFilterContainer}>
             <TextInput
               style={styles.categoryInput}
-              placeholder="Filter by category"
+              placeholder={t('pharmacyAdmin.products.placeholders.filterByCategory')}
               placeholderTextColor={colors.textLight}
               value={categoryFilter}
               onChangeText={setCategoryFilter}
@@ -479,7 +484,7 @@ export const ProductListScreen = () => {
           {hasActiveFilters && (
             <TouchableOpacity style={styles.clearButton} onPress={handleClearFilters} activeOpacity={0.7}>
               <Ionicons name="close-circle" size={20} color={colors.textSecondary} />
-              <Text style={styles.clearButtonText}>Clear</Text>
+              <Text style={styles.clearButtonText}>{t('common.clear')}</Text>
             </TouchableOpacity>
           )}
         </View>
@@ -494,7 +499,7 @@ export const ProductListScreen = () => {
           disabled={!myPharmacy || !isProfileComplete || !isApproved || subscriptionLoading || !hasActiveSubscription}
         >
           <Ionicons name="add" size={20} color={colors.textWhite} />
-          <Text style={styles.addButtonText}>Add Product</Text>
+          <Text style={styles.addButtonText}>{t('screens.addProduct')}</Text>
         </TouchableOpacity>
       </View>
 
@@ -502,17 +507,17 @@ export const ProductListScreen = () => {
       {isLoading && !refreshing ? (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={colors.primary} />
-          <Text style={styles.loadingText}>Loading products...</Text>
+          <Text style={styles.loadingText}>{t('pharmacyAdmin.products.loadingProducts')}</Text>
         </View>
       ) : error ? (
         <View style={styles.errorContainer}>
           <Ionicons name="alert-circle-outline" size={48} color={colors.error} />
-          <Text style={styles.errorTitle}>Error Loading Products</Text>
+          <Text style={styles.errorTitle}>{t('pharmacyAdmin.products.errorLoadingProductsTitle')}</Text>
           <Text style={styles.errorText}>
-            {(error as any)?.response?.data?.message || (error as any)?.message || 'Unknown error'}
+            {(error as any)?.response?.data?.message || (error as any)?.message || t('pharmacyAdmin.common.unknownError')}
           </Text>
           <TouchableOpacity style={styles.retryButton} onPress={() => refetch()} activeOpacity={0.7}>
-            <Text style={styles.retryButtonText}>Retry</Text>
+            <Text style={styles.retryButtonText}>{t('common.retry')}</Text>
           </TouchableOpacity>
         </View>
       ) : (
@@ -525,15 +530,15 @@ export const ProductListScreen = () => {
           ListEmptyComponent={
             <View style={styles.emptyState}>
               <Ionicons name="cube-outline" size={64} color={colors.textLight} />
-              <Text style={styles.emptyStateTitle}>No products found</Text>
+              <Text style={styles.emptyStateTitle}>{t('pharmacyAdmin.products.empty.title')}</Text>
               <Text style={styles.emptyStateText}>
                 {searchQuery || categoryFilter
-                  ? 'Try a different search term'
-                  : 'Add your first product to get started'}
+                  ? t('pharmacyAdmin.products.empty.tryDifferentSearch')
+                  : t('pharmacyAdmin.products.empty.addFirstProductHint')}
               </Text>
               {!searchQuery && !categoryFilter && (
                 <TouchableOpacity style={styles.emptyStateButton} onPress={handleAddProduct} activeOpacity={0.7}>
-                  <Text style={styles.emptyStateButtonText}>Add First Product</Text>
+                  <Text style={styles.emptyStateButtonText}>{t('pharmacyAdmin.products.actions.addFirstProduct')}</Text>
                 </TouchableOpacity>
               )}
             </View>
@@ -542,8 +547,11 @@ export const ProductListScreen = () => {
             pagination && pagination.pages > 1 ? (
               <View style={styles.paginationInfo}>
                 <Text style={styles.paginationText}>
-                  Showing {((pagination.page - 1) * pagination.limit) + 1} to{' '}
-                  {Math.min(pagination.page * pagination.limit, pagination.total)} of {pagination.total} products
+                  {t('pharmacyAdmin.products.pagination.showing', {
+                    from: (pagination.page - 1) * pagination.limit + 1,
+                    to: Math.min(pagination.page * pagination.limit, pagination.total),
+                    total: pagination.total,
+                  })}
                 </Text>
               </View>
             ) : null

@@ -24,6 +24,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as productApi from '../../services/product';
 import { useCart } from '../../contexts/CartContext';
 import { API_BASE_URL } from '../../config/api';
+import { useTranslation } from 'react-i18next';
 
 type ProductCatalogScreenNavigationProp = NativeStackNavigationProp<PharmacyStackParamList, 'ProductCatalog'>;
 type ProductCatalogRouteProp = RouteProp<PharmacyStackParamList, 'ProductCatalog'>;
@@ -65,6 +66,7 @@ export const ProductCatalogScreen = () => {
   const navigation = useNavigation<ProductCatalogScreenNavigationProp>();
   const route = useRoute<ProductCatalogRouteProp>();
   const { addToCart } = useCart();
+  const { t } = useTranslation();
   const sellerId = route.params?.sellerId;
   const sellerType = route.params?.sellerType;
 
@@ -176,7 +178,7 @@ export const ProductCatalogScreen = () => {
           <Ionicons name="search-outline" size={20} color={colors.textSecondary} />
           <TextInput
             style={styles.searchInput}
-            placeholder="Search products..."
+            placeholder={t('pharmacy.catalog.searchProductsPlaceholder')}
             placeholderTextColor={colors.textLight}
             value={searchQuery}
             onChangeText={setSearchQuery}
@@ -192,11 +194,11 @@ export const ProductCatalogScreen = () => {
             onPress={() => setShowFilterModal(true)}
           >
             <Ionicons name="filter" size={18} color={colors.primary} />
-            <Text style={styles.filterButtonText}>Filter</Text>
+            <Text style={styles.filterButtonText}>{t('pharmacy.catalog.filter')}</Text>
           </TouchableOpacity>
           <Text style={styles.productCount}>
-            Showing {products.length} of {pagination.total} products
-            {sellerId && sellerType && ' from this seller'}
+            {t('pharmacy.catalog.showingProducts', { shown: products.length, total: pagination.total })}
+            {sellerId && sellerType ? t('pharmacy.catalog.fromThisSeller') : ''}
           </Text>
         </View>
       </View>
@@ -205,21 +207,21 @@ export const ProductCatalogScreen = () => {
       {isLoading && page === 1 ? (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={colors.primary} />
-          <Text style={styles.loadingText}>Loading products...</Text>
+          <Text style={styles.loadingText}>{t('pharmacy.catalog.loadingProducts')}</Text>
         </View>
       ) : error ? (
         <View style={styles.errorContainer}>
           <Ionicons name="alert-circle-outline" size={64} color={colors.error} />
-          <Text style={styles.errorText}>Failed to load products</Text>
+          <Text style={styles.errorText}>{t('pharmacy.catalog.failedToLoadProducts')}</Text>
           <TouchableOpacity style={styles.retryButton} onPress={() => refetch()}>
-            <Text style={styles.retryButtonText}>Retry</Text>
+            <Text style={styles.retryButtonText}>{t('common.retry')}</Text>
           </TouchableOpacity>
         </View>
       ) : products.length === 0 ? (
         <View style={styles.emptyContainer}>
           <Ionicons name="cube-outline" size={64} color={colors.textLight} />
-          <Text style={styles.emptyText}>No products found</Text>
-          <Text style={styles.emptySubtext}>Try adjusting your search filters</Text>
+          <Text style={styles.emptyText}>{t('pharmacy.catalog.noProductsFound')}</Text>
+          <Text style={styles.emptySubtext}>{t('pharmacy.catalog.emptySubtext')}</Text>
         </View>
       ) : (
         <FlatList
@@ -244,11 +246,11 @@ export const ProductCatalogScreen = () => {
                   <Text
                     style={[styles.pageButtonText, page === 1 && styles.pageButtonTextDisabled]}
                   >
-                    Previous
+                    {t('pharmacy.common.previous')}
                   </Text>
                 </TouchableOpacity>
                 <Text style={styles.pageInfo}>
-                  Page {page} of {pagination.pages}
+                  {t('pharmacy.common.pageOf', { page, pages: pagination.pages })}
                 </Text>
                 <TouchableOpacity
                   style={[
@@ -264,7 +266,7 @@ export const ProductCatalogScreen = () => {
                       page === pagination.pages && styles.pageButtonTextDisabled,
                     ]}
                   >
-                    Next
+                    {t('pharmacy.common.next')}
                   </Text>
                 </TouchableOpacity>
               </View>
@@ -283,7 +285,7 @@ export const ProductCatalogScreen = () => {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Filter by Category</Text>
+              <Text style={styles.modalTitle}>{t('pharmacy.catalog.filterByCategory')}</Text>
               <TouchableOpacity onPress={() => setShowFilterModal(false)}>
                 <Ionicons name="close" size={24} color={colors.text} />
               </TouchableOpacity>
@@ -304,7 +306,7 @@ export const ProductCatalogScreen = () => {
                       <Ionicons name="checkmark" size={16} color={colors.textWhite} />
                     )}
                   </View>
-                  <Text style={styles.categoryFilterText}>All Categories</Text>
+                  <Text style={styles.categoryFilterText}>{t('pharmacy.catalog.allCategories')}</Text>
                 </View>
               </TouchableOpacity>
               {categories.map((category) => (
@@ -338,7 +340,7 @@ export const ProductCatalogScreen = () => {
                   setPage(1);
                 }}
               >
-                <Text style={styles.resetButtonText}>Clear Filters</Text>
+                <Text style={styles.resetButtonText}>{t('pharmacy.common.clearFilters')}</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.applyButton}
@@ -348,7 +350,7 @@ export const ProductCatalogScreen = () => {
                   refetch();
                 }}
               >
-                <Text style={styles.applyButtonText}>Apply</Text>
+                <Text style={styles.applyButtonText}>{t('common.apply')}</Text>
               </TouchableOpacity>
             </View>
           </View>

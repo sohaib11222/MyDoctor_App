@@ -21,26 +21,12 @@ import { useAuth, RegisterData, UserRole } from '../../contexts/AuthContext';
 import { colors } from '../../constants/colors';
 import { Feather } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useTranslation } from 'react-i18next';
 
 type RegisterScreenNavigationProp = NativeStackNavigationProp<AuthStackParamList>;
 
-const schema = yup.object({
-  fullName: yup
-    .string()
-    .min(2, 'Full name must be at least 2 characters')
-    .required('Full name is required'),
-  email: yup.string().email('Invalid email').required('Email is required'),
-  password: yup
-    .string()
-    .min(6, 'Password must be at least 6 characters')
-    .required('Password is required'),
-  password_confirmation: yup
-    .string()
-    .oneOf([yup.ref('password')], 'Passwords must match')
-    .required('Confirm password is required'),
-  phone: yup.string().optional(),
-  gender: yup.string().oneOf(['MALE', 'FEMALE', 'OTHER'], 'Invalid gender').optional(),
-});
+
+const PHONE_E164_REGEX = /^\+\d{7,15}$/;
 
 interface RegisterFormData {
   fullName: string;
@@ -56,10 +42,33 @@ export const RegisterScreen = () => {
   const { register: registerUser } = useAuth();
   const [loading, setLoading] = useState(false);
   const [selectedRole, setSelectedRole] = useState<Exclude<UserRole, 'admin'>>('patient');
+  const { t } = useTranslation();
+
+  const schema = yup.object({
+    fullName: yup
+      .string()
+      .min(2, t('auth.validation.fullNameMin'))
+      .required(t('auth.validation.fullNameRequired')),
+    email: yup
+      .string()
+      .email(t('auth.validation.invalidEmail'))
+      .required(t('auth.validation.emailRequired')),
+    password: yup
+      .string()
+      .min(6, t('auth.validation.passwordMin'))
+      .required(t('auth.validation.passwordRequired')),
+    password_confirmation: yup
+      .string()
+      .oneOf([yup.ref('password')], t('auth.validation.passwordsMustMatch'))
+      .required(t('auth.validation.confirmPasswordRequired')),
+    phone: yup.string().optional(),
+    gender: yup.string().oneOf(['MALE', 'FEMALE', 'OTHER'], 'Invalid gender').optional(),
+  });
 
   const {
     control,
     handleSubmit,
+    setError,
     formState: { errors },
   } = useForm<RegisterFormData>({
     resolver: yupResolver(schema),
@@ -77,12 +86,25 @@ export const RegisterScreen = () => {
     setLoading(true);
     try {
       const role = selectedRole;
+
+      if (role === 'pharmacy' || role === 'parapharmacy') {
+        const phone = (data.phone || '').trim();
+        if (!phone) {
+          setError('phone', { type: 'manual', message: t('auth.validation.phoneRequired') });
+          return;
+        }
+        if (!PHONE_E164_REGEX.test(phone)) {
+          setError('phone', { type: 'manual', message: t('auth.validation.phoneE164') });
+          return;
+        }
+      }
+
       await registerUser(
         {
           fullName: data.fullName,
           email: data.email,
           password: data.password,
-          phone: data.phone,
+          phone: data.phone?.trim() || undefined,
           gender: data.gender,
         },
         role
@@ -92,7 +114,7 @@ export const RegisterScreen = () => {
         await AsyncStorage.removeItem('pharmacy_documents_submitted');
         navigation.reset({
           index: 0,
-          routes: [{ name: 'PharmacyVerificationUpload' }],
+          routes: [{ name: 'PharmacyPhoneVerification' }],
         });
       } else if (role === 'doctor') {
         await AsyncStorage.removeItem('doctor_documents_submitted');
@@ -131,16 +153,16 @@ export const RegisterScreen = () => {
 
         {/* Register Form */}
         <View style={styles.formContainer}>
-          <Text style={styles.title}>Register</Text>
-          <Text style={styles.subtitle}>Access to our dashboard</Text>
+          <Text style={styles.title}>{t('auth.register.title')}</Text>
+          <Text style={styles.subtitle}>{t('auth.register.subtitle')}</Text>
 
           <Controller
             control={control}
             name="fullName"
             render={({ field: { onChange, onBlur, value } }) => (
               <Input
-                label="Full Name"
-                placeholder="Enter your full name"
+                label={t('auth.register.fullNameLabel')}
+                placeholder={t('auth.register.fullNamePlaceholder')}
                 value={value}
                 onChangeText={onChange}
                 onBlur={onBlur}
@@ -155,8 +177,8 @@ export const RegisterScreen = () => {
             name="email"
             render={({ field: { onChange, onBlur, value } }) => (
               <Input
-                label="Email"
-                placeholder="Enter your email"
+                label={t('auth.register.emailLabel')}
+                placeholder={t('auth.register.emailPlaceholder')}
                 value={value}
                 onChangeText={onChange}
                 onBlur={onBlur}
@@ -173,8 +195,8 @@ export const RegisterScreen = () => {
             name="password"
             render={({ field: { onChange, onBlur, value } }) => (
               <Input
-                label="Password"
-                placeholder="Enter your password"
+                label={t('auth.register.passwordLabel')}
+                placeholder={t('auth.register.passwordPlaceholder')}
                 value={value}
                 onChangeText={onChange}
                 onBlur={onBlur}
@@ -190,8 +212,8 @@ export const RegisterScreen = () => {
             name="password_confirmation"
             render={({ field: { onChange, onBlur, value } }) => (
               <Input
-                label="Confirm Password"
-                placeholder="Confirm your password"
+                label={t('auth.register.confirmPasswordLabel')}
+                placeholder={t('auth.register.confirmPasswordPlaceholder')}
                 value={value}
                 onChangeText={onChange}
                 onBlur={onBlur}
@@ -202,17 +224,37 @@ export const RegisterScreen = () => {
             )}
           />
 
+          {(selectedRole === 'pharmacy' || selectedRole === 'parapharmacy') && (
+            <Controller
+              control={control}
+              name="phone"
+              render={({ field: { onChange, onBlur, value } }) => (
+                <Input
+                  label={t('auth.register.phoneLabel')}
+                  placeholder={t('auth.register.phonePlaceholder')}
+                  value={value}
+                  onChangeText={onChange}
+                  onBlur={onBlur}
+                  keyboardType="phone-pad"
+                  autoCapitalize="none"
+                  error={errors.phone?.message}
+                  style={styles.input}
+                />
+              )}
+            />
+          )}
+
           <Button
             title={
               loading
-                ? 'Registering...'
+                ? t('auth.register.buttonRegistering')
                 : selectedRole === 'patient'
-                  ? 'Register as Patient'
+                  ? t('auth.register.buttonAsPatient')
                   : selectedRole === 'doctor'
-                    ? 'Register as Doctor'
+                    ? t('auth.register.buttonAsDoctor')
                     : selectedRole === 'pharmacy'
-                      ? 'Register as Pharmacy'
-                      : 'Register as Parapharmacy'
+                      ? t('auth.register.buttonAsPharmacy')
+                      : t('auth.register.buttonAsParapharmacy')
             }
             onPress={handleSubmit(onSubmit)}
             loading={loading}
@@ -222,7 +264,7 @@ export const RegisterScreen = () => {
           {/* Divider */}
           <View style={styles.divider}>
             <View style={styles.dividerLine} />
-            <Text style={styles.dividerText}>or</Text>
+            <Text style={styles.dividerText}>{t('auth.register.dividerOr')}</Text>
             <View style={styles.dividerLine} />
           </View>
 
@@ -232,21 +274,21 @@ export const RegisterScreen = () => {
               onPress={() => setSelectedRole('patient')}
             >
               <Feather name="user" size={20} color={selectedRole === 'patient' ? colors.textWhite : colors.primary} />
-              <Text style={[styles.roleButtonText, selectedRole === 'patient' && styles.roleButtonTextActive]}>Patient</Text>
+              <Text style={[styles.roleButtonText, selectedRole === 'patient' && styles.roleButtonTextActive]}>{t('auth.register.rolePatient')}</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.roleButton, selectedRole === 'doctor' && styles.roleButtonActive]}
               onPress={() => setSelectedRole('doctor')}
             >
               <Feather name="briefcase" size={20} color={selectedRole === 'doctor' ? colors.textWhite : colors.primary} />
-              <Text style={[styles.roleButtonText, selectedRole === 'doctor' && styles.roleButtonTextActive]}>Doctor</Text>
+              <Text style={[styles.roleButtonText, selectedRole === 'doctor' && styles.roleButtonTextActive]}>{t('auth.register.roleDoctor')}</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.roleButton, selectedRole === 'pharmacy' && styles.roleButtonActive]}
               onPress={() => setSelectedRole('pharmacy')}
             >
               <Feather name="shopping-bag" size={20} color={selectedRole === 'pharmacy' ? colors.textWhite : colors.primary} />
-              <Text style={[styles.roleButtonText, selectedRole === 'pharmacy' && styles.roleButtonTextActive]}>Pharmacy</Text>
+              <Text style={[styles.roleButtonText, selectedRole === 'pharmacy' && styles.roleButtonTextActive]}>{t('auth.register.rolePharmacy')}</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -254,14 +296,14 @@ export const RegisterScreen = () => {
               onPress={() => setSelectedRole('parapharmacy')}
             >
               <Feather name="shopping-bag" size={20} color={selectedRole === 'parapharmacy' ? colors.textWhite : colors.primary} />
-              <Text style={[styles.roleButtonText, selectedRole === 'parapharmacy' && styles.roleButtonTextActive]}>Parapharmacy</Text>
+              <Text style={[styles.roleButtonText, selectedRole === 'parapharmacy' && styles.roleButtonTextActive]}>{t('auth.register.roleParapharmacy')}</Text>
             </TouchableOpacity>
           </View>
 
           <View style={styles.loginContainer}>
-            <Text style={styles.loginText}>Already have an account? </Text>
+            <Text style={styles.loginText}>{t('auth.register.haveAccount')} </Text>
             <TouchableOpacity onPress={() => navigation.navigate('Login')}>
-              <Text style={styles.loginLink}>Login</Text>
+              <Text style={styles.loginLink}>{t('auth.register.loginLink')}</Text>
             </TouchableOpacity>
           </View>
         </View>

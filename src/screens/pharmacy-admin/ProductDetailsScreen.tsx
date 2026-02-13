@@ -24,6 +24,7 @@ import Toast from 'react-native-toast-message';
 import { API_BASE_URL } from '../../config/api';
 import { useAuth } from '../../contexts/AuthContext';
 import * as pharmacySubscriptionApi from '../../services/pharmacySubscription';
+import { useTranslation } from 'react-i18next';
 
 type ProductDetailsScreenNavigationProp = NativeStackNavigationProp<ProductsStackParamList, 'ProductDetails'>;
 type ProductDetailsRouteProp = RouteProp<ProductsStackParamList, 'ProductDetails'>;
@@ -41,11 +42,10 @@ const normalizeImageUrl = (url: string | undefined): string | null => {
   return `${serverBaseUrl}${cleanUrl}`;
 };
 
-// Format price
-const formatPrice = (price: number): string => {
-  return new Intl.NumberFormat('en-US', {
+const formatPrice = (price: number, language: string): string => {
+  return new Intl.NumberFormat(language || 'en', {
     style: 'currency',
-    currency: 'USD',
+    currency: 'EUR',
     minimumFractionDigits: 2,
   }).format(price || 0);
 };
@@ -56,12 +56,11 @@ const getDiscountPercent = (price: number, discountPrice?: number): number => {
   return Math.round(((price - discountPrice) / price) * 100);
 };
 
-// Format date
-const formatDate = (dateString?: string): string => {
-  if (!dateString) return 'N/A';
+const formatDate = (dateString: string | undefined, language: string, fallbackText: string): string => {
+  if (!dateString) return fallbackText;
   try {
     const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', {
+    return date.toLocaleDateString(language || 'en', {
       year: 'numeric',
       month: 'short',
       day: 'numeric',
@@ -78,6 +77,7 @@ export const ProductDetailsScreen = () => {
   const queryClient = useQueryClient();
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const { user } = useAuth();
+  const { t, i18n } = useTranslation();
   const isPharmacy = user?.role === 'pharmacy' || (user as any)?.role === 'PHARMACY';
   const isParapharmacy = user?.role === 'parapharmacy' || (user as any)?.role === 'PARAPHARMACY';
   const isPharmacyUser = isPharmacy || isParapharmacy;
@@ -139,16 +139,16 @@ export const ProductDetailsScreen = () => {
       queryClient.invalidateQueries({ queryKey: ['product', productId] });
       Toast.show({
         type: 'success',
-        text1: 'Success',
-        text2: 'Product deleted successfully!',
+        text1: t('common.success'),
+        text2: t('pharmacyAdmin.products.toasts.productDeleted'),
       });
       navigation.goBack();
     },
     onError: (error: any) => {
-      const errorMessage = error?.response?.data?.message || error?.message || 'Failed to delete product';
+      const errorMessage = error?.response?.data?.message || error?.message || t('pharmacyAdmin.products.errors.failedToDeleteProduct');
       Toast.show({
         type: 'error',
-        text1: 'Error',
+        text1: t('common.error'),
         text2: errorMessage,
       });
     },
@@ -156,7 +156,11 @@ export const ProductDetailsScreen = () => {
 
   const handleEdit = () => {
     if (requiresSubscription && !subscriptionLoading && !hasActiveSubscription) {
-      Toast.show({ type: 'info', text1: 'Subscription Required', text2: 'You need an active subscription to manage products' });
+      Toast.show({
+        type: 'info',
+        text1: t('pharmacyAdmin.products.toasts.subscriptionRequiredTitle'),
+        text2: t('pharmacyAdmin.products.toasts.subscriptionRequiredBody'),
+      });
       goToSubscription();
       return;
     }
@@ -165,17 +169,21 @@ export const ProductDetailsScreen = () => {
 
   const handleDelete = () => {
     if (requiresSubscription && !subscriptionLoading && !hasActiveSubscription) {
-      Toast.show({ type: 'info', text1: 'Subscription Required', text2: 'You need an active subscription to manage products' });
+      Toast.show({
+        type: 'info',
+        text1: t('pharmacyAdmin.products.toasts.subscriptionRequiredTitle'),
+        text2: t('pharmacyAdmin.products.toasts.subscriptionRequiredBody'),
+      });
       goToSubscription();
       return;
     }
     Alert.alert(
-      'Delete Product',
-      `Are you sure you want to delete "${product?.name || 'this product'}"? This action cannot be undone.`,
+      t('pharmacyAdmin.products.alerts.deleteProductTitle'),
+      t('pharmacyAdmin.products.alerts.deleteProductBody', { name: product?.name || t('pharmacyAdmin.products.details.thisProduct') }),
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: t('common.cancel'), style: 'cancel' },
         {
-          text: 'Delete',
+          text: t('common.delete'),
           style: 'destructive',
           onPress: () => {
             deleteProductMutation.mutate(productId);
@@ -196,7 +204,7 @@ export const ProductDetailsScreen = () => {
       <SafeAreaView style={styles.container}>
         <View style={styles.loadingContainer}>
           <Ionicons name="alert-circle-outline" size={48} color={colors.error} />
-          <Text style={styles.loadingText}>This screen is available for pharmacy accounts only.</Text>
+          <Text style={styles.loadingText}>{t('pharmacyAdmin.common.pharmacyAccountsOnly')}</Text>
         </View>
       </SafeAreaView>
     );
@@ -207,7 +215,7 @@ export const ProductDetailsScreen = () => {
       <SafeAreaView style={styles.container}>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={colors.primary} />
-          <Text style={styles.loadingText}>Loading product details...</Text>
+          <Text style={styles.loadingText}>{t('pharmacyAdmin.products.details.loading')}</Text>
         </View>
       </SafeAreaView>
     );
@@ -219,12 +227,12 @@ export const ProductDetailsScreen = () => {
       <SafeAreaView style={styles.container}>
         <View style={styles.errorContainer}>
           <Ionicons name="alert-circle-outline" size={48} color={colors.error} />
-          <Text style={styles.errorTitle}>Error Loading Product</Text>
+          <Text style={styles.errorTitle}>{t('pharmacyAdmin.products.details.errorTitle')}</Text>
           <Text style={styles.errorText}>
-            {error?.message || 'Failed to load product details. Please try again.'}
+            {error?.message || t('pharmacyAdmin.products.details.errorBody')}
           </Text>
           <TouchableOpacity style={styles.retryButton} onPress={() => refetch()} activeOpacity={0.7}>
-            <Text style={styles.retryButtonText}>Retry</Text>
+            <Text style={styles.retryButtonText}>{t('common.retry')}</Text>
           </TouchableOpacity>
         </View>
       </SafeAreaView>
@@ -241,7 +249,7 @@ export const ProductDetailsScreen = () => {
         {requiresSubscription && !subscriptionLoading && !hasActiveSubscription && (
           <TouchableOpacity style={styles.subscriptionBanner} activeOpacity={0.8} onPress={goToSubscription}>
             <Ionicons name="card-outline" size={18} color={colors.warning} />
-            <Text style={styles.subscriptionBannerText}>Subscription required to edit or delete products</Text>
+            <Text style={styles.subscriptionBannerText}>{t('pharmacyAdmin.products.details.subscriptionBanner')}</Text>
             <Ionicons name="chevron-forward" size={18} color={colors.textLight} />
           </TouchableOpacity>
         )}
@@ -271,7 +279,7 @@ export const ProductDetailsScreen = () => {
             )}
             {hasDiscount && (
               <View style={styles.discountBadge}>
-                <Text style={styles.discountBadgeText}>{discountPercent}% OFF</Text>
+                <Text style={styles.discountBadgeText}>{t('pharmacyAdmin.products.labels.percentOff', { percent: discountPercent })}</Text>
               </View>
             )}
           </View>
@@ -279,7 +287,7 @@ export const ProductDetailsScreen = () => {
           <View style={styles.imageContainer}>
             <View style={styles.placeholderImage}>
               <Ionicons name="image-outline" size={64} color={colors.textLight} />
-              <Text style={styles.placeholderText}>No Image</Text>
+              <Text style={styles.placeholderText}>{t('pharmacyAdmin.products.details.noImage')}</Text>
             </View>
           </View>
         )}
@@ -309,7 +317,7 @@ export const ProductDetailsScreen = () => {
                   { color: product.isActive ? colors.success : colors.error },
                 ]}
               >
-                {product.isActive ? 'Active' : 'Inactive'}
+                {product.isActive ? t('pharmacyAdmin.products.status.active') : t('pharmacyAdmin.products.status.inactive')}
               </Text>
             </View>
           </View>
@@ -318,18 +326,18 @@ export const ProductDetailsScreen = () => {
           <View style={styles.priceSection}>
             {hasDiscount ? (
               <View style={styles.priceRow}>
-                <Text style={styles.discountPrice}>{formatPrice(product.discountPrice!)}</Text>
-                <Text style={styles.originalPrice}>{formatPrice(product.price)}</Text>
+                <Text style={styles.discountPrice}>{formatPrice(product.discountPrice!, i18n.language)}</Text>
+                <Text style={styles.originalPrice}>{formatPrice(product.price, i18n.language)}</Text>
               </View>
             ) : (
-              <Text style={styles.productPrice}>{formatPrice(product.price)}</Text>
+              <Text style={styles.productPrice}>{formatPrice(product.price, i18n.language)}</Text>
             )}
           </View>
 
           {/* Product Details */}
           <View style={styles.detailsSection}>
             <View style={styles.detailRow}>
-              <Text style={styles.detailLabel}>Stock:</Text>
+              <Text style={styles.detailLabel}>{t('pharmacyAdmin.products.details.stockLabel')}</Text>
               <View style={styles.stockContainer}>
                 <Text
                   style={[
@@ -339,25 +347,25 @@ export const ProductDetailsScreen = () => {
                 >
                   {product.stock || 0}
                 </Text>
-                <Text style={styles.stockUnit}> units</Text>
+                <Text style={styles.stockUnit}>{t('pharmacyAdmin.products.details.unitsSuffix')}</Text>
               </View>
             </View>
             {product.sku && (
               <View style={styles.detailRow}>
-                <Text style={styles.detailLabel}>SKU:</Text>
+                <Text style={styles.detailLabel}>{t('pharmacyAdmin.products.details.skuLabel')}</Text>
                 <Text style={styles.detailValue}>{product.sku}</Text>
               </View>
             )}
             {product.createdAt && (
               <View style={styles.detailRow}>
-                <Text style={styles.detailLabel}>Date Added:</Text>
-                <Text style={styles.detailValue}>{formatDate(product.createdAt)}</Text>
+                <Text style={styles.detailLabel}>{t('pharmacyAdmin.products.details.dateAddedLabel')}</Text>
+                <Text style={styles.detailValue}>{formatDate(product.createdAt, i18n.language, t('common.na'))}</Text>
               </View>
             )}
             {product.updatedAt && product.updatedAt !== product.createdAt && (
               <View style={styles.detailRow}>
-                <Text style={styles.detailLabel}>Last Updated:</Text>
-                <Text style={styles.detailValue}>{formatDate(product.updatedAt)}</Text>
+                <Text style={styles.detailLabel}>{t('pharmacyAdmin.products.details.lastUpdatedLabel')}</Text>
+                <Text style={styles.detailValue}>{formatDate(product.updatedAt, i18n.language, t('common.na'))}</Text>
               </View>
             )}
           </View>
@@ -365,7 +373,7 @@ export const ProductDetailsScreen = () => {
           {/* Tags */}
           {product.tags && product.tags.length > 0 && (
             <View style={styles.tagsSection}>
-              <Text style={styles.sectionTitle}>Tags</Text>
+              <Text style={styles.sectionTitle}>{t('pharmacyAdmin.products.details.tagsTitle')}</Text>
               <View style={styles.tagsContainer}>
                 {product.tags.map((tag: string, index: number) => (
                   <View key={index} style={styles.tag}>
@@ -379,7 +387,7 @@ export const ProductDetailsScreen = () => {
           {/* Description */}
           {product.description && (
             <View style={styles.descriptionSection}>
-              <Text style={styles.sectionTitle}>Description</Text>
+              <Text style={styles.sectionTitle}>{t('pharmacyAdmin.products.details.descriptionTitle')}</Text>
               <Text style={styles.descriptionText}>{product.description}</Text>
             </View>
           )}
@@ -399,7 +407,7 @@ export const ProductDetailsScreen = () => {
           ) : (
             <Ionicons name="trash-outline" size={20} color={colors.error} />
           )}
-          <Text style={styles.deleteButtonText}>Delete</Text>
+          <Text style={styles.deleteButtonText}>{t('common.delete')}</Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={[
@@ -412,7 +420,7 @@ export const ProductDetailsScreen = () => {
           disabled={requiresSubscription && !subscriptionLoading && !hasActiveSubscription}
         >
           <Ionicons name="create-outline" size={20} color={colors.textWhite} />
-          <Text style={styles.editButtonText}>Edit Product</Text>
+          <Text style={styles.editButtonText}>{t('pharmacyAdmin.products.details.editProduct')}</Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>

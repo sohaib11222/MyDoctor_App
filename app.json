@@ -4,7 +4,7 @@
     "slug": "mydoctor-app",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
+    "icon": "./assets/app_icon.png",
     "userInterfaceStyle": "light",
     "newArchEnabled": false,
     "splash": {
@@ -21,8 +21,9 @@
       }
     },
     "android": {
+      "icon": "./assets/app_icon.png",
       "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
+        "foregroundImage": "./assets/app_icon.png",
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
@@ -36,14 +37,7 @@
         "android.permission.ACCESS_NETWORK_STATE",
         "android.permission.ACCESS_FINE_LOCATION",
         "android.permission.ACCESS_COARSE_LOCATION"
-      ],
-      // Google Maps API key is optional - removed to use default provider (works without API key)
-      // If you want to use Google Maps specifically, uncomment and add your API key:
-      // "config": {
-      //   "googleMaps": {
-      //     "apiKey": "YOUR_GOOGLE_MAPS_API_KEY_HERE"
-      //   }
-      // }
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"

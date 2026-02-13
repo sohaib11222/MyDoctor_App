@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as Localization from 'expo-localization';
 import { setApiLanguage } from '../services/api';
+import i18n from '../i18n/appI18n';
 
 type LanguageContextType = {
   language: string;
@@ -15,22 +15,25 @@ const LanguageContext = createContext<LanguageContextType | undefined>(undefined
 
 const normalizeLang = (lang: string) => {
   const cleaned = String(lang || '').trim();
-  if (!cleaned) return 'en';
-  return cleaned;
+  if (!cleaned) return 'it';
+
+  const lower = cleaned.toLowerCase();
+  if (lower.startsWith('it')) return 'it';
+  return 'en';
 };
 
 export const LanguageProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [language, setLanguageState] = useState<string>('en');
+  const [language, setLanguageState] = useState<string>('it');
   const [isReady, setIsReady] = useState(false);
 
   useEffect(() => {
     const init = async () => {
       try {
         const stored = await AsyncStorage.getItem(LANGUAGE_STORAGE_KEY);
-        const device = Localization.getLocales?.()?.[0]?.languageTag;
-        const initial = normalizeLang(stored || device || 'en');
+        const initial = normalizeLang(stored || 'it');
         setLanguageState(initial);
         setApiLanguage(initial);
+        await i18n.changeLanguage(initial);
       } finally {
         setIsReady(true);
       }
@@ -43,6 +46,7 @@ export const LanguageProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     const normalized = normalizeLang(lang);
     setLanguageState(normalized);
     setApiLanguage(normalized);
+    await i18n.changeLanguage(normalized);
     await AsyncStorage.setItem(LANGUAGE_STORAGE_KEY, normalized);
   };
 

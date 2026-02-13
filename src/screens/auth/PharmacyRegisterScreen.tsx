@@ -22,14 +22,10 @@ import { useAuth } from '../../contexts/AuthContext';
 import { colors } from '../../constants/colors';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useTranslation } from 'react-i18next';
 
 type PharmacyRegisterScreenNavigationProp = NativeStackNavigationProp<AuthStackParamList>;
 
-const schema = yup.object({
-  name: yup.string().min(3, 'Name must be at least 3 characters').required('Name is required'),
-  phone: yup.string().required('Phone number is required'),
-  password: yup.string().min(6, 'Password must be at least 6 characters').required('Password is required'),
-});
 
 interface PharmacyRegisterFormData {
   name: string;
@@ -42,6 +38,19 @@ export const PharmacyRegisterScreen = () => {
   const { register: registerUser } = useAuth();
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const { t } = useTranslation();
+
+  const schema = yup.object({
+    name: yup
+      .string()
+      .min(3, t('auth.validation.nameMin'))
+      .required(t('auth.validation.nameRequired')),
+    phone: yup.string().required(t('auth.validation.phoneRequired')),
+    password: yup
+      .string()
+      .min(6, t('auth.validation.passwordMin'))
+      .required(t('auth.validation.passwordRequired')),
+  });
 
   const {
     control,
@@ -72,7 +81,7 @@ export const PharmacyRegisterScreen = () => {
 
       navigation.reset({
         index: 0,
-        routes: [{ name: 'PharmacyVerificationUpload' }],
+        routes: [{ name: 'PharmacyPhoneVerification' }],
       });
     } catch (error) {
       // Error is handled in AuthContext
@@ -101,15 +110,15 @@ export const PharmacyRegisterScreen = () => {
         {/* Registration Form */}
         <View style={styles.formContainer}>
           <View style={styles.headerRow}>
-            <Text style={styles.title}>Pharmacy Register</Text>
+            <Text style={styles.title}>{t('auth.pharmacyRegister.title')}</Text>
             <TouchableOpacity
               onPress={() => navigation.navigate('DoctorRegister')}
               activeOpacity={0.7}
             >
-              <Text style={styles.linkText}>Are you a Doctor?</Text>
+              <Text style={styles.linkText}>{t('auth.pharmacyRegister.doctorLink')}</Text>
             </TouchableOpacity>
           </View>
-          <Text style={styles.subtitle}>Create your pharmacy account</Text>
+          <Text style={styles.subtitle}>{t('auth.pharmacyRegister.subtitle')}</Text>
 
           <View style={styles.form}>
             <Controller
@@ -117,8 +126,8 @@ export const PharmacyRegisterScreen = () => {
               name="name"
               render={({ field: { onChange, onBlur, value } }) => (
                 <Input
-                  label="Name"
-                  placeholder="Enter pharmacy name"
+                  label={t('auth.pharmacyRegister.nameLabel')}
+                  placeholder={t('auth.pharmacyRegister.namePlaceholder')}
                   value={value}
                   onChangeText={onChange}
                   onBlur={onBlur}
@@ -133,8 +142,8 @@ export const PharmacyRegisterScreen = () => {
               name="phone"
               render={({ field: { onChange, onBlur, value } }) => (
                 <Input
-                  label="Phone"
-                  placeholder="Enter phone number"
+                  label={t('auth.pharmacyRegister.phoneLabel')}
+                  placeholder={t('auth.pharmacyRegister.phonePlaceholder')}
                   value={value}
                   onChangeText={onChange}
                   onBlur={onBlur}
@@ -149,8 +158,8 @@ export const PharmacyRegisterScreen = () => {
               name="password"
               render={({ field: { onChange, onBlur, value } }) => (
                 <Input
-                  label="Create Password"
-                  placeholder="Enter password"
+                  label={t('auth.pharmacyRegister.createPasswordLabel')}
+                  placeholder={t('auth.pharmacyRegister.passwordPlaceholder')}
                   value={value}
                   onChangeText={onChange}
                   onBlur={onBlur}
@@ -173,7 +182,7 @@ export const PharmacyRegisterScreen = () => {
             />
 
             <Button
-              title="Sign Up"
+              title={t('auth.pharmacyRegister.button')}
               onPress={handleSubmit(onSubmit)}
               loading={loading}
               style={styles.submitButton}
@@ -181,24 +190,24 @@ export const PharmacyRegisterScreen = () => {
 
             <View style={styles.divider}>
               <View style={styles.dividerLine} />
-              <Text style={styles.dividerText}>or</Text>
+              <Text style={styles.dividerText}>{t('auth.pharmacyRegister.dividerOr')}</Text>
               <View style={styles.dividerLine} />
             </View>
 
             <TouchableOpacity style={styles.socialButton} activeOpacity={0.7}>
               <Ionicons name="logo-google" size={20} color={colors.text} />
-              <Text style={styles.socialButtonText}>Sign in With Google</Text>
+              <Text style={styles.socialButtonText}>{t('auth.pharmacyRegister.signInWithGoogle')}</Text>
             </TouchableOpacity>
 
             <TouchableOpacity style={styles.socialButton} activeOpacity={0.7}>
               <Ionicons name="logo-facebook" size={20} color={colors.primary} />
-              <Text style={styles.socialButtonText}>Sign in With Facebook</Text>
+              <Text style={styles.socialButtonText}>{t('auth.pharmacyRegister.signInWithFacebook')}</Text>
             </TouchableOpacity>
 
             <View style={styles.loginLink}>
-              <Text style={styles.loginLinkText}>Already have account? </Text>
+              <Text style={styles.loginLinkText}>{t('auth.pharmacyRegister.haveAccount')} </Text>
               <TouchableOpacity onPress={() => navigation.navigate('Login')} activeOpacity={0.7}>
-                <Text style={styles.loginLinkButton}>Sign In</Text>
+                <Text style={styles.loginLinkButton}>{t('auth.pharmacyRegister.signIn')}</Text>
               </TouchableOpacity>
             </View>
           </View>

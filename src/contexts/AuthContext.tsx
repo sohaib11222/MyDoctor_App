@@ -21,6 +21,7 @@ export interface User {
   status?: 'PENDING' | 'APPROVED' | 'REJECTED' | 'BLOCKED';
   // Patient specific
   phone?: string;
+  isPhoneVerified?: boolean;
 }
 
 interface AuthContextType {
@@ -80,6 +81,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             verificationStatus: mapBackendStatusToAppStatus(userData.status),
             status: userData.status,
             phone: userData.phone,
+            isPhoneVerified: Boolean(userData.isPhoneVerified),
           };
           
           setUser(mappedUser);
@@ -151,6 +153,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           verificationStatus: mapBackendStatusToAppStatus(backendUser.status),
           status: backendUser.status,
           phone: backendUser.phone,
+          isPhoneVerified: Boolean(backendUser.isPhoneVerified),
         };
 
         setUser(mappedUser);
@@ -213,6 +216,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           verificationStatus: mapBackendStatusToAppStatus(backendUser.status),
           status: backendUser.status,
           phone: backendUser.phone,
+          isPhoneVerified: Boolean(backendUser.isPhoneVerified),
         };
 
         // For doctors, set user but keep them in AuthNavigator for verification flow

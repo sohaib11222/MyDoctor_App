@@ -28,6 +28,7 @@ import { API_BASE_URL } from '../../config/api';
 import { copyImageToCacheUri, deleteCacheFiles } from '../../utils/imageUpload';
 import { useAuth } from '../../contexts/AuthContext';
 import * as pharmacySubscriptionApi from '../../services/pharmacySubscription';
+import { useTranslation } from 'react-i18next';
 
 type EditProductScreenNavigationProp = NativeStackNavigationProp<ProductsStackParamList, 'EditProduct'>;
 type EditProductRouteProp = RouteProp<ProductsStackParamList, 'EditProduct'>;
@@ -51,6 +52,7 @@ export const EditProductScreen = () => {
   const { productId } = route.params;
   const queryClient = useQueryClient();
   const { user } = useAuth();
+  const { t } = useTranslation();
   const isPharmacy = user?.role === 'pharmacy' || (user as any)?.role === 'PHARMACY';
   const isParapharmacy = user?.role === 'parapharmacy' || (user as any)?.role === 'PARAPHARMACY';
   const isPharmacyUser = isPharmacy || isParapharmacy;
@@ -115,7 +117,7 @@ export const EditProductScreen = () => {
       <SafeAreaView style={styles.container}>
         <View style={styles.loadingContainer}>
           <Ionicons name="alert-circle-outline" size={48} color={colors.error} />
-          <Text style={styles.loadingText}>This section is available for pharmacy accounts only.</Text>
+          <Text style={styles.loadingText}>{t('pharmacyAdmin.common.pharmacyAccountsOnly')}</Text>
         </View>
       </SafeAreaView>
     );
@@ -126,7 +128,7 @@ export const EditProductScreen = () => {
       <SafeAreaView style={styles.container}>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={colors.primary} />
-          <Text style={styles.loadingText}>Loading subscription...</Text>
+          <Text style={styles.loadingText}>{t('pharmacyAdmin.dashboard.banners.loadingSubscription')}</Text>
         </View>
       </SafeAreaView>
     );
@@ -137,12 +139,12 @@ export const EditProductScreen = () => {
       <SafeAreaView style={styles.container}>
         <View style={styles.loadingContainer}>
           <Ionicons name="card-outline" size={54} color={colors.warning} />
-          <Text style={styles.loadingText}>Subscription required to edit products.</Text>
+          <Text style={styles.loadingText}>{t('pharmacyAdmin.products.edit.gates.subscriptionRequiredBody')}</Text>
           <View style={{ width: '100%', paddingHorizontal: 24, marginTop: 16 }}>
-            <Button title="View Subscription Plans" onPress={goToSubscription} />
+            <Button title={t('pharmacyAdmin.orders.actions.viewSubscriptionPlans')} onPress={goToSubscription} />
           </View>
           <View style={{ width: '100%', paddingHorizontal: 24, marginTop: 10 }}>
-            <Button title="Go Back" onPress={() => navigation.goBack()} />
+            <Button title={t('common.goBack')} onPress={() => navigation.goBack()} />
           </View>
         </View>
       </SafeAreaView>
@@ -157,16 +159,16 @@ export const EditProductScreen = () => {
       queryClient.invalidateQueries({ queryKey: ['pharmacy-products'] });
       Toast.show({
         type: 'success',
-        text1: 'Success',
-        text2: 'Product updated successfully!',
+        text1: t('common.success'),
+        text2: t('pharmacyAdmin.products.edit.toasts.productUpdated'),
       });
       navigation.goBack();
     },
     onError: (error: any) => {
-      const errorMessage = error?.response?.data?.message || error?.message || 'Failed to update product';
+      const errorMessage = error?.response?.data?.message || error?.message || t('pharmacyAdmin.products.edit.errors.failedToUpdateProduct');
       Toast.show({
         type: 'error',
-        text1: 'Error',
+        text1: t('common.error'),
         text2: errorMessage,
       });
     },
@@ -215,7 +217,7 @@ export const EditProductScreen = () => {
   const pickImage = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') {
-      Alert.alert('Permission Required', 'Please grant camera roll permissions.');
+      Alert.alert(t('pharmacyAdmin.common.permissionRequiredTitle'), t('pharmacyAdmin.common.cameraRollPermissionBody'));
       return;
     }
 
@@ -233,8 +235,8 @@ export const EditProductScreen = () => {
     } catch (error) {
       Toast.show({
         type: 'error',
-        text1: 'Error',
-        text2: 'Failed to pick image',
+        text1: t('common.error'),
+        text2: t('pharmacyAdmin.products.edit.errors.failedToPickImage'),
       });
     }
   };
@@ -252,8 +254,8 @@ export const EditProductScreen = () => {
     if (!productName.trim()) {
       Toast.show({
         type: 'error',
-        text1: 'Required',
-        text2: 'Product name is required',
+        text1: t('common.required'),
+        text2: t('pharmacyAdmin.products.edit.validation.productNameRequired'),
       });
       return;
     }
@@ -263,8 +265,8 @@ export const EditProductScreen = () => {
     if (priceValue === null || isNaN(priceValue) || priceValue < 0) {
       Toast.show({
         type: 'error',
-        text1: 'Invalid Price',
-        text2: 'Please enter a valid price (must be a number >= 0)',
+        text1: t('pharmacyAdmin.products.edit.validation.invalidPriceTitle'),
+        text2: t('pharmacyAdmin.products.edit.validation.invalidPriceBody'),
       });
       return;
     }
@@ -278,8 +280,8 @@ export const EditProductScreen = () => {
         if (isNaN(stockValue) || stockValue < 0) {
           Toast.show({
             type: 'error',
-            text1: 'Invalid Stock',
-            text2: 'Stock must be a non-negative integer',
+            text1: t('pharmacyAdmin.products.edit.validation.invalidStockTitle'),
+            text2: t('pharmacyAdmin.products.edit.validation.invalidStockBody'),
           });
           return;
         }
@@ -295,16 +297,16 @@ export const EditProductScreen = () => {
         if (isNaN(discountPriceValue) || discountPriceValue < 0) {
           Toast.show({
             type: 'error',
-            text1: 'Invalid Discount',
-            text2: 'Discount price must be a non-negative number',
+            text1: t('pharmacyAdmin.products.edit.validation.invalidDiscountTitle'),
+            text2: t('pharmacyAdmin.products.edit.validation.invalidDiscountNonNegativeBody'),
           });
           return;
         }
         if (discountPriceValue >= priceValue) {
           Toast.show({
             type: 'error',
-            text1: 'Invalid Discount',
-            text2: 'Discount price must be less than regular price',
+            text1: t('pharmacyAdmin.products.edit.validation.invalidDiscountTitle'),
+            text2: t('pharmacyAdmin.products.edit.validation.invalidDiscountLessThanPriceBody'),
           });
           return;
         }
@@ -393,10 +395,10 @@ export const EditProductScreen = () => {
       const isNetworkError = error?.code === 'ERR_NETWORK' || !error?.response;
       Toast.show({
         type: 'error',
-        text1: 'Error',
+        text1: t('common.error'),
         text2: isNetworkError
-          ? 'Image upload failed. Check your connection and try again.'
-          : error?.response?.data?.message || error?.message || 'Failed to upload images',
+          ? t('pharmacyAdmin.products.edit.errors.imageUploadFailed')
+          : error?.response?.data?.message || error?.message || t('pharmacyAdmin.products.edit.errors.failedToUploadImages'),
       });
     } finally {
       if (tempFileUris.length > 0) {
@@ -410,7 +412,7 @@ export const EditProductScreen = () => {
       <SafeAreaView style={styles.container}>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={colors.primary} />
-          <Text style={styles.loadingText}>Loading product...</Text>
+          <Text style={styles.loadingText}>{t('pharmacyAdmin.products.edit.loadingProduct')}</Text>
         </View>
       </SafeAreaView>
     );
@@ -422,19 +424,24 @@ export const EditProductScreen = () => {
         <View style={styles.form}>
           {/* Product Name */}
           <Input
-            label="Product Name *"
-            placeholder="Enter product name"
+            label={t('pharmacyAdmin.products.edit.form.productNameLabel')}
+            placeholder={t('pharmacyAdmin.products.edit.form.productNamePlaceholder')}
             value={productName}
             onChangeText={setProductName}
           />
 
           {/* SKU */}
-          <Input label="SKU" placeholder="Product SKU (optional)" value={sku} onChangeText={setSku} />
+          <Input
+            label={t('pharmacyAdmin.products.edit.form.skuLabel')}
+            placeholder={t('pharmacyAdmin.products.edit.form.skuPlaceholder')}
+            value={sku}
+            onChangeText={setSku}
+          />
 
           {/* Price and Stock */}
           <View style={styles.row}>
             <Input
-              label="Price *"
+              label={t('pharmacyAdmin.products.edit.form.priceLabel')}
               placeholder="0.00"
               value={price}
               onChangeText={setPrice}
@@ -442,7 +449,7 @@ export const EditProductScreen = () => {
               style={styles.halfInput}
             />
             <Input
-              label="Stock"
+              label={t('pharmacyAdmin.products.edit.form.stockLabel')}
               placeholder="0"
               value={stock}
               onChangeText={setStock}
@@ -453,8 +460,8 @@ export const EditProductScreen = () => {
 
           {/* Discount Price */}
           <Input
-            label="Discount Price"
-            placeholder="0.00 (optional)"
+            label={t('pharmacyAdmin.products.edit.form.discountPriceLabel')}
+            placeholder={t('pharmacyAdmin.products.edit.form.discountPricePlaceholder')}
             value={discountPrice}
             onChangeText={setDiscountPrice}
             keyboardType="decimal-pad"
@@ -462,7 +469,7 @@ export const EditProductScreen = () => {
 
           {/* Category */}
           <View style={styles.pickerContainer}>
-            <Text style={styles.label}>Category</Text>
+            <Text style={styles.label}>{t('pharmacyAdmin.products.edit.form.categoryLabel')}</Text>
             <Menu
               visible={categoryMenuVisible}
               onDismiss={() => setCategoryMenuVisible(false)}
@@ -473,7 +480,7 @@ export const EditProductScreen = () => {
                   activeOpacity={0.7}
                 >
                   <Text style={[styles.pickerText, !category && styles.pickerPlaceholder]}>
-                    {category || 'Select Category (optional)'}
+                    {category || t('pharmacyAdmin.products.edit.form.categoryPlaceholder')}
                   </Text>
                   <Ionicons name="chevron-down" size={20} color={colors.textSecondary} />
                 </TouchableOpacity>
@@ -486,7 +493,7 @@ export const EditProductScreen = () => {
                     setCategory(cat);
                     setCategoryMenuVisible(false);
                   }}
-                  title={cat}
+                  title={t(`pharmacyAdmin.products.categories.${cat}` as any, { defaultValue: cat })}
                 />
               ))}
             </Menu>
@@ -494,18 +501,18 @@ export const EditProductScreen = () => {
 
           {/* Sub Category */}
           <Input
-            label="Sub Category"
-            placeholder="Product sub category (optional)"
+            label={t('pharmacyAdmin.products.edit.form.subCategoryLabel')}
+            placeholder={t('pharmacyAdmin.products.edit.form.subCategoryPlaceholder')}
             value={subCategory}
             onChangeText={setSubCategory}
           />
 
           {/* Description */}
           <View style={styles.textAreaContainer}>
-            <Text style={styles.label}>Description</Text>
+            <Text style={styles.label}>{t('pharmacyAdmin.products.edit.form.descriptionLabel')}</Text>
             <View style={styles.textAreaWrapper}>
               <Input
-                placeholder="Enter product description (optional)"
+                placeholder={t('pharmacyAdmin.products.edit.form.descriptionPlaceholder')}
                 value={description}
                 onChangeText={setDescription}
                 multiline
@@ -517,19 +524,19 @@ export const EditProductScreen = () => {
 
           {/* Tags */}
           <Input
-            label="Tags (comma-separated)"
-            placeholder="tag1, tag2, tag3 (optional)"
+            label={t('pharmacyAdmin.products.edit.form.tagsLabel')}
+            placeholder={t('pharmacyAdmin.products.edit.form.tagsPlaceholder')}
             value={tags}
             onChangeText={setTags}
           />
 
           {/* Product Images */}
           <View style={styles.imagesSection}>
-            <Text style={styles.label}>Product Images</Text>
+            <Text style={styles.label}>{t('pharmacyAdmin.products.edit.form.imagesLabel')}</Text>
             <TouchableOpacity style={styles.uploadButton} onPress={pickImage} activeOpacity={0.7}>
               <Ionicons name="cloud-upload-outline" size={32} color={colors.primary} />
-              <Text style={styles.uploadButtonText}>Upload Images</Text>
-              <Text style={styles.uploadHint}>You can select multiple images</Text>
+              <Text style={styles.uploadButtonText}>{t('pharmacyAdmin.products.edit.actions.uploadImages')}</Text>
+              <Text style={styles.uploadHint}>{t('pharmacyAdmin.products.edit.hints.multipleImages')}</Text>
             </TouchableOpacity>
 
             {/* Existing Images */}
@@ -574,7 +581,7 @@ export const EditProductScreen = () => {
 
           {/* Active Status */}
           <View style={styles.switchContainer}>
-            <Text style={styles.label}>Active</Text>
+            <Text style={styles.label}>{t('pharmacyAdmin.products.edit.form.activeLabel')}</Text>
             <Switch
               value={isActive}
               onValueChange={setIsActive}
@@ -587,7 +594,7 @@ export const EditProductScreen = () => {
       {/* Submit Button */}
       <View style={styles.footer}>
         <Button
-          title={updateProductMutation.isPending ? 'Updating...' : 'Save Changes'}
+          title={updateProductMutation.isPending ? t('pharmacyAdmin.products.edit.actions.updating') : t('common.saveChanges')}
           onPress={handleSubmit}
           loading={updateProductMutation.isPending}
         />

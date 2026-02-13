@@ -15,10 +15,12 @@ import { colors } from '../../constants/colors';
 import { Ionicons } from '@expo/vector-icons';
 import * as announcementApi from '../../services/announcement';
 import Toast from 'react-native-toast-message';
+import { useTranslation } from 'react-i18next';
 
 export const AnnouncementsScreen = () => {
   const { user } = useAuth();
   const queryClient = useQueryClient();
+  const { t, i18n } = useTranslation();
   const [filter, setFilter] = useState<'all' | 'unread' | 'pinned'>('all');
   const [page, setPage] = useState(1);
   const limit = 20;
@@ -57,15 +59,16 @@ export const AnnouncementsScreen = () => {
       queryClient.invalidateQueries({ queryKey: ['announcementUnreadCount'] });
       Toast.show({
         type: 'success',
-        text1: 'Success',
-        text2: 'Announcement marked as read',
+        text1: t('common.success'),
+        text2: t('doctor.announcements.toasts.markedAsRead'),
       });
     },
     onError: (error: any) => {
-      const errorMessage = error?.response?.data?.message || error?.message || 'Failed to mark as read';
+      const errorMessage =
+        error?.response?.data?.message || error?.message || t('doctor.announcements.errors.failedToMarkAsRead');
       Toast.show({
         type: 'error',
-        text1: 'Error',
+        text1: t('common.error'),
         text2: errorMessage,
       });
     },
@@ -123,14 +126,24 @@ export const AnnouncementsScreen = () => {
     if (!dateString) return '';
     const date = new Date(dateString);
     const options: Intl.DateTimeFormatOptions = { day: 'numeric', month: 'short', year: 'numeric' };
-    return date.toLocaleDateString('en-US', options);
+    return date.toLocaleDateString(i18n.language || 'en-US', options);
   };
 
   // Format time
   const formatTime = (dateString: string): string => {
     if (!dateString) return '';
     const date = new Date(dateString);
-    return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+    return date.toLocaleTimeString(i18n.language || 'en-US', { hour: '2-digit', minute: '2-digit' });
+  };
+
+  const getPriorityLabel = (priority: string): string => {
+    const normalized = (priority || '').toLowerCase();
+    return t(`doctor.announcements.priority.${normalized}`, { defaultValue: priority });
+  };
+
+  const getTypeLabel = (announcementType: string): string => {
+    const normalized = (announcementType || '').toLowerCase();
+    return t(`doctor.announcements.types.${normalized}`, { defaultValue: announcementType });
   };
 
   // Get priority color
@@ -191,7 +204,7 @@ export const AnnouncementsScreen = () => {
       <SafeAreaView style={styles.container}>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={colors.primary} />
-          <Text style={styles.loadingText}>Loading announcements...</Text>
+          <Text style={styles.loadingText}>{t('doctor.announcements.loading')}</Text>
         </View>
       </SafeAreaView>
     );
@@ -202,9 +215,11 @@ export const AnnouncementsScreen = () => {
       <SafeAreaView style={styles.container}>
         <View style={styles.errorContainer}>
           <Ionicons name="alert-circle-outline" size={48} color={colors.error} />
-          <Text style={styles.errorTitle}>Error Loading Announcements</Text>
+          <Text style={styles.errorTitle}>{t('doctor.announcements.errorTitle')}</Text>
           <Text style={styles.errorText}>
-            {(error as any)?.response?.data?.message || (error as any)?.message || 'Failed to load announcements'}
+            {(error as any)?.response?.data?.message ||
+              (error as any)?.message ||
+              t('doctor.announcements.errors.failedToLoadAnnouncements')}
           </Text>
         </View>
       </SafeAreaView>
@@ -216,10 +231,10 @@ export const AnnouncementsScreen = () => {
       {/* Header Stats */}
       <View style={styles.headerStats}>
         <View style={styles.statBadge}>
-          <Text style={styles.statBadgeText}>{unreadCount} Unread</Text>
+          <Text style={styles.statBadgeText}>{t('doctor.announcements.stats.unread', { count: unreadCount })}</Text>
         </View>
         <View style={[styles.statBadge, styles.primaryBadge]}>
-          <Text style={styles.statBadgeText}>{pinnedCount} Pinned</Text>
+          <Text style={styles.statBadgeText}>{t('doctor.announcements.stats.pinned', { count: pinnedCount })}</Text>
         </View>
       </View>
 
@@ -232,7 +247,7 @@ export const AnnouncementsScreen = () => {
             activeOpacity={0.7}
           >
             <Text style={[styles.filterTabText, filter === 'all' && styles.filterTabTextActive]}>
-              All ({announcements.length})
+              {t('doctor.announcements.tabs.all', { count: announcements.length })}
             </Text>
           </TouchableOpacity>
           <TouchableOpacity
@@ -241,7 +256,7 @@ export const AnnouncementsScreen = () => {
             activeOpacity={0.7}
           >
             <Text style={[styles.filterTabText, filter === 'unread' && styles.filterTabTextActive]}>
-              Unread ({unreadCount})
+              {t('doctor.announcements.tabs.unread', { count: unreadCount })}
             </Text>
           </TouchableOpacity>
           <TouchableOpacity
@@ -250,7 +265,7 @@ export const AnnouncementsScreen = () => {
             activeOpacity={0.7}
           >
             <Text style={[styles.filterTabText, filter === 'pinned' && styles.filterTabTextActive]}>
-              Pinned ({pinnedCount})
+              {t('doctor.announcements.tabs.pinned', { count: pinnedCount })}
             </Text>
           </TouchableOpacity>
         </ScrollView>
@@ -264,8 +279,8 @@ export const AnnouncementsScreen = () => {
         {filteredAnnouncements.length === 0 ? (
           <View style={styles.emptyState}>
             <Ionicons name="notifications-off-outline" size={64} color={colors.textLight} />
-            <Text style={styles.emptyStateTitle}>No announcements found</Text>
-            <Text style={styles.emptyStateText}>You're all caught up!</Text>
+            <Text style={styles.emptyStateTitle}>{t('doctor.announcements.empty.title')}</Text>
+            <Text style={styles.emptyStateText}>{t('doctor.announcements.empty.subtitle')}</Text>
           </View>
         ) : (
           <>
@@ -300,7 +315,7 @@ export const AnnouncementsScreen = () => {
                           <Text style={styles.announcementTitle}>{announcement.title}</Text>
                           {!announcement.isRead && (
                             <View style={styles.newBadge}>
-                              <Text style={styles.newBadgeText}>New</Text>
+                              <Text style={styles.newBadgeText}>{t('doctor.announcements.badges.new')}</Text>
                             </View>
                           )}
                         </View>
@@ -318,7 +333,7 @@ export const AnnouncementsScreen = () => {
                               { color: getTypeBadgeColor(announcement.announcementType) },
                             ]}
                           >
-                            {announcement.announcementType}
+                            {getTypeLabel(announcement.announcementType)}
                           </Text>
                         </View>
                         <View
@@ -328,12 +343,12 @@ export const AnnouncementsScreen = () => {
                           ]}
                         >
                           <Text style={[styles.priorityBadgeText, { color: getPriorityColor(announcement.priority) }]}>
-                            {announcement.priority}
+                            {getPriorityLabel(announcement.priority)}
                           </Text>
                         </View>
                         <Text style={styles.announcementDate}>
                           <Ionicons name="calendar-outline" size={12} color={colors.textSecondary} />{' '}
-                          {formatDate(announcement.createdAt)} at {formatTime(announcement.createdAt)}
+                          {formatDate(announcement.createdAt)} {t('doctor.announcements.meta.at')} {formatTime(announcement.createdAt)}
                         </Text>
                       </View>
                       <Text style={styles.announcementMessage}>{announcement.message}</Text>
@@ -345,7 +360,9 @@ export const AnnouncementsScreen = () => {
                           disabled={markAsReadMutation.isPending}
                         >
                           <Text style={styles.markReadButtonText}>
-                            {markAsReadMutation.isPending ? 'Marking...' : 'Mark as Read'}
+                            {markAsReadMutation.isPending
+                              ? t('doctor.announcements.actions.marking')
+                              : t('doctor.announcements.actions.markAsRead')}
                           </Text>
                         </TouchableOpacity>
                       )}
@@ -366,11 +383,11 @@ export const AnnouncementsScreen = () => {
                   <Text
                     style={[styles.paginationButtonText, page === 1 && styles.paginationButtonTextDisabled]}
                   >
-                    Previous
+                    {t('doctor.announcements.pagination.previous')}
                   </Text>
                 </TouchableOpacity>
                 <Text style={styles.paginationText}>
-                  Page {page} of {pagination.pages}
+                  {t('doctor.announcements.pagination.pageOf', { page, pages: pagination.pages })}
                 </Text>
                 <TouchableOpacity
                   style={[styles.paginationButton, page === pagination.pages && styles.paginationButtonDisabled]}
@@ -383,7 +400,7 @@ export const AnnouncementsScreen = () => {
                       page === pagination.pages && styles.paginationButtonTextDisabled,
                     ]}
                   >
-                    Next
+                    {t('doctor.announcements.pagination.next')}
                   </Text>
                 </TouchableOpacity>
               </View>
@@ -395,10 +412,9 @@ export const AnnouncementsScreen = () => {
         <View style={styles.infoCard}>
           <Ionicons name="information-circle" size={24} color={colors.primary} />
           <View style={styles.infoContent}>
-            <Text style={styles.infoTitle}>About Announcements</Text>
+            <Text style={styles.infoTitle}>{t('doctor.announcements.info.title')}</Text>
             <Text style={styles.infoText}>
-              Important announcements from the platform will appear here. Pinned announcements stay at the top, and
-              urgent announcements are highlighted. Make sure to read all announcements to stay updated.
+              {t('doctor.announcements.info.text')}
             </Text>
           </View>
         </View>

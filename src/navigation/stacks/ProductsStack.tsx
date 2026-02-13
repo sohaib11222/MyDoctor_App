@@ -6,10 +6,12 @@ import { AddProductScreen } from '../../screens/pharmacy-admin/AddProductScreen'
 import { EditProductScreen } from '../../screens/pharmacy-admin/EditProductScreen';
 import { ProductDetailsScreen } from '../../screens/pharmacy-admin/ProductDetailsScreen';
 import { CustomHeader } from '../../components/common/CustomHeader';
+import { useTranslation } from 'react-i18next';
 
 const Stack = createNativeStackNavigator<ProductsStackParamList>();
 
 export const ProductsStack = () => {
+  const { t } = useTranslation();
   return (
     <Stack.Navigator
       screenOptions={{
@@ -25,22 +27,22 @@ export const ProductsStack = () => {
       <Stack.Screen 
         name="ProductList" 
         component={ProductListScreen}
-        options={{ title: 'Products', headerShown: true }}
+        options={{ title: t('screens.products'), headerShown: true }}
       />
       <Stack.Screen 
         name="AddProduct" 
         component={AddProductScreen}
-        options={{ title: 'Add Product' }}
+        options={{ title: t('screens.addProduct') }}
       />
       <Stack.Screen 
         name="EditProduct" 
         component={EditProductScreen}
-        options={{ title: 'Edit Product' }}
+        options={{ title: t('screens.editProduct') }}
       />
       <Stack.Screen 
         name="ProductDetails" 
         component={ProductDetailsScreen}
-        options={{ title: 'Product Details' }}
+        options={{ title: t('screens.productDetails') }}
       />
     </Stack.Navigator>
   );

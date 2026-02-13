@@ -33,6 +33,7 @@ import { AddTimingsModal } from '../../components/common/AddTimingsModal';
 import { BuySubscriptionModal } from '../../components/common/BuySubscriptionModal';
 import { API_BASE_URL } from '../../config/api';
 import { NotificationBell } from '../../components/common/NotificationBell';
+import { useTranslation } from 'react-i18next';
 
 type HomeScreenNavigationProp = NativeStackNavigationProp<HomeStackParamList>;
 
@@ -106,6 +107,7 @@ const formatCurrency = (amount: number): string => {
 export const HomeScreen = () => {
   const navigation = useNavigation<HomeScreenNavigationProp>();
   const { user } = useAuth();
+  const { t } = useTranslation();
   const isDoctor = user?.role === 'doctor';
   const userId = user?._id || user?.id;
   const [refreshing, setRefreshing] = React.useState(false);
@@ -233,35 +235,35 @@ export const HomeScreen = () => {
   const doctorStats = useMemo(() => {
     if (!dashboard) {
       return [
-        { id: '1', title: 'Total Patients', value: '0', change: '0 This Week', icon: 'people' },
-        { id: '2', title: "Today's Appointments", value: '0', change: 'No appointments', icon: 'calendar' },
-        { id: '3', title: 'Revenue', value: '€0', change: 'From Appointments', icon: 'cash' },
+        { id: '1', title: t('home.doctor.stats.totalPatients'), value: '0', change: t('home.doctor.stats.thisWeek', { count: 0 }), icon: 'people' },
+        { id: '2', title: t('home.doctor.stats.todaysAppointments'), value: '0', change: t('home.doctor.stats.noAppointments'), icon: 'calendar' },
+        { id: '3', title: t('home.doctor.stats.revenue'), value: '€0', change: t('home.doctor.stats.fromAppointments'), icon: 'cash' },
       ];
     }
     return [
       {
         id: '1',
-        title: 'Total Patients',
+        title: t('home.doctor.stats.totalPatients'),
         value: String(dashboard.totalPatients || 0),
-        change: `${dashboard.weeklyAppointments?.count || 0} This Week`,
+        change: t('home.doctor.stats.thisWeek', { count: dashboard.weeklyAppointments?.count || 0 }),
         icon: 'people',
       },
       {
         id: '2',
-        title: "Today's Appointments",
+        title: t('home.doctor.stats.todaysAppointments'),
         value: String(dashboard.todayAppointments?.count || 0),
-        change: (dashboard.todayAppointments?.count || 0) > 0 ? 'Active' : 'No appointments',
+        change: (dashboard.todayAppointments?.count || 0) > 0 ? t('home.doctor.stats.active') : t('home.doctor.stats.noAppointments'),
         icon: 'calendar',
       },
       {
         id: '3',
-        title: 'Revenue',
+        title: t('home.doctor.stats.revenue'),
         value: formatCurrency(dashboard.earningsFromAppointments || 0),
-        change: 'From Appointments',
+        change: t('home.doctor.stats.fromAppointments'),
         icon: 'cash',
       },
     ];
-  }, [dashboard]);
+  }, [dashboard, t]);
 
   const todayAppointments = useMemo(() => {
     return dashboard?.todayAppointments?.appointments || [];
@@ -313,7 +315,7 @@ export const HomeScreen = () => {
       return (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={colors.primary} />
-          <Text style={styles.loadingText}>Loading...</Text>
+          <Text style={styles.loadingText}>{t('common.loadingDots')}</Text>
         </View>
       );
     }
@@ -338,9 +340,9 @@ export const HomeScreen = () => {
               <View style={styles.warningBannerContent}>
                 <Ionicons name="warning" size={20} color={colors.warning} />
                 <View style={styles.warningBannerText}>
-                  <Text style={styles.warningBannerTitle}>Profile Incomplete!</Text>
+                  <Text style={styles.warningBannerTitle}>{t('home.doctor.profileIncompleteTitle')}</Text>
                   <Text style={styles.warningBannerMessage}>
-                    Your profile is not complete. Please complete your profile to start accepting appointments.
+                    {t('home.doctor.profileIncompleteMessage')}
                   </Text>
                 </View>
               </View>
@@ -359,7 +361,7 @@ export const HomeScreen = () => {
                   }
                 }}
               >
-                <Text style={styles.warningBannerButtonText}>Complete Profile Now</Text>
+                <Text style={styles.warningBannerButtonText}>{t('home.doctor.completeProfileNow')}</Text>
               </TouchableOpacity>
             </View>
           )}
@@ -368,9 +370,9 @@ export const HomeScreen = () => {
           <View style={styles.header}>
           <View style={styles.headerRow}>
             <View style={styles.headerContent}>
-              <Text style={styles.greeting}>Hello, Dr. {user?.name?.split(' ')[0] || 'Doctor'}</Text>
-              <Text style={styles.title}>My Patients</Text>
-              <Text style={styles.subtitle}>Manage your patients and appointments</Text>
+              <Text style={styles.greeting}>{t('home.doctor.greeting', { name: user?.name?.split(' ')[0] || t('common.doctor') })}</Text>
+              <Text style={styles.title}>{t('home.doctor.myPatientsTitle')}</Text>
+              <Text style={styles.subtitle}>{t('home.doctor.myPatientsSubtitle')}</Text>
             </View>
             <View style={styles.headerBell}>
               <NotificationBell />
@@ -393,7 +395,7 @@ export const HomeScreen = () => {
             <View style={styles.searchIconWrap}>
               <Ionicons name="search-outline" size={18} color={colors.textSecondary} />
             </View>
-            <Text style={styles.searchPlaceholder}>Search patients...</Text>
+            <Text style={styles.searchPlaceholder}>{t('home.doctor.searchPatientsPlaceholder')}</Text>
             <Ionicons name="chevron-forward" size={18} color={colors.textSecondary} />
           </TouchableOpacity>
         </View>
@@ -424,7 +426,7 @@ export const HomeScreen = () => {
         {/* Today's Appointments */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Today's Appointments</Text>
+            <Text style={styles.sectionTitle}>{t('home.doctor.todayAppointments')}</Text>
             <TouchableOpacity
               onPress={() => {
                 const tabNavigator = navigation.getParent();
@@ -433,19 +435,19 @@ export const HomeScreen = () => {
                 }
               }}
             >
-              <Text style={styles.seeAll}>View All</Text>
+              <Text style={styles.seeAll}>{t('common.viewAll')}</Text>
             </TouchableOpacity>
           </View>
 
           {todayAppointments.length === 0 ? (
             <View style={styles.emptyState}>
-              <Text style={styles.emptyStateText}>No appointments scheduled for today</Text>
+              <Text style={styles.emptyStateText}>{t('home.doctor.noAppointmentsToday')}</Text>
             </View>
           ) : (
             todayAppointments.slice(0, 5).map((apt: any, index: number) => {
               const patient = typeof apt.patientId === 'object' ? apt.patientId : null;
               const patientId = patient?._id || (typeof apt.patientId === 'string' ? apt.patientId : '');
-              const patientName = patient?.fullName || 'Unknown Patient';
+              const patientName = patient?.fullName || t('common.unknownPatient');
               const patientImage = patient?.profileImage ? normalizeImageUrl(patient.profileImage) : null;
 
               return (
@@ -494,7 +496,7 @@ export const HomeScreen = () => {
         {upcomingAppointments.length > 0 && (
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>Upcoming Appointments</Text>
+              <Text style={styles.sectionTitle}>{t('home.doctor.upcomingAppointments')}</Text>
               <TouchableOpacity
                 onPress={() => {
                   const tabNavigator = navigation.getParent();
@@ -503,13 +505,13 @@ export const HomeScreen = () => {
                   }
                 }}
               >
-                <Text style={styles.seeAll}>View All</Text>
+                <Text style={styles.seeAll}>{t('common.viewAll')}</Text>
               </TouchableOpacity>
             </View>
 
             {upcomingAppointments.slice(0, 3).map((apt: any, index: number) => {
               const patient = typeof apt.patientId === 'object' ? apt.patientId : null;
-              const patientName = patient?.fullName || 'Unknown Patient';
+              const patientName = patient?.fullName || t('common.unknownPatient');
               const patientImage = patient?.profileImage ? normalizeImageUrl(patient.profileImage) : null;
 
               return (
@@ -526,7 +528,7 @@ export const HomeScreen = () => {
                     </View>
                   </View>
                   <View style={styles.typeBadge}>
-                    <Text style={styles.typeText}>{apt.bookingType === 'ONLINE' ? 'Online' : 'Visit'}</Text>
+                    <Text style={styles.typeText}>{apt.bookingType === 'ONLINE' ? t('common.online') : t('common.visit')}</Text>
                   </View>
                 </View>
               );
@@ -537,7 +539,7 @@ export const HomeScreen = () => {
         {/* Recent Invoices */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Recent Invoices</Text>
+            <Text style={styles.sectionTitle}>{t('home.doctor.recentInvoices')}</Text>
             <TouchableOpacity
               onPress={() => {
                 const tabNavigator = navigation.getParent();
@@ -546,18 +548,18 @@ export const HomeScreen = () => {
                 }
               }}
             >
-              <Text style={styles.seeAll}>View All</Text>
+              <Text style={styles.seeAll}>{t('common.viewAll')}</Text>
             </TouchableOpacity>
           </View>
           <View style={styles.emptyState}>
-            <Text style={styles.emptyStateText}>No recent invoices</Text>
+            <Text style={styles.emptyStateText}>{t('home.doctor.noRecentInvoices')}</Text>
           </View>
         </View>
 
         {/* Recent Patients Section */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Recent Patients</Text>
+            <Text style={styles.sectionTitle}>{t('home.doctor.recentPatients')}</Text>
             <TouchableOpacity
               onPress={() => {
                 // Navigate to More tab and then to MyPatients screen
@@ -567,18 +569,18 @@ export const HomeScreen = () => {
                 }
               }}
             >
-              <Text style={styles.seeAll}>View All</Text>
+              <Text style={styles.seeAll}>{t('common.viewAll')}</Text>
             </TouchableOpacity>
           </View>
           {allPatients.length === 0 ? (
             <View style={styles.emptyState}>
-              <Text style={styles.emptyStateText}>No patients found</Text>
+              <Text style={styles.emptyStateText}>{t('home.doctor.noPatientsFound')}</Text>
             </View>
           ) : (
             allPatients.map((item: any, index: number) => {
               const patient = item.patient;
               const patientId = item.patientId;
-              const patientName = patient?.fullName || 'Unknown Patient';
+              const patientName = patient?.fullName || t('common.unknownPatient');
               const patientImage = patient?.profileImage ? normalizeImageUrl(patient.profileImage) : null;
               
               return (
@@ -594,8 +596,8 @@ export const HomeScreen = () => {
                   />
                   <View style={styles.patientInfo}>
                     <Text style={styles.patientName}>{patientName}</Text>
-                    <Text style={styles.patientId}>ID: {patientId?.slice(-6).toUpperCase() || 'N/A'}</Text>
-                    <Text style={styles.lastAppointment}>Last Appointment: {formatDate(item.lastAppointment)}</Text>
+                    <Text style={styles.patientId}>{t('home.doctor.idPrefix')} {patientId?.slice(-6).toUpperCase() || t('common.na')}</Text>
+                    <Text style={styles.lastAppointment}>{t('home.doctor.lastAppointmentPrefix')} {formatDate(item.lastAppointment)}</Text>
                   </View>
                   <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
                 </TouchableOpacity>
@@ -726,9 +728,9 @@ export const HomeScreen = () => {
       <View style={styles.header}>
         <View style={styles.headerRow}>
           <View style={styles.headerContent}>
-            <Text style={styles.greeting}>Hello, {user?.name?.split(' ')[0] || 'Patient'}</Text>
-            <Text style={styles.title}>Find Your Doctor</Text>
-            <Text style={styles.subtitle}>Book appointments easily and quickly</Text>
+            <Text style={styles.greeting}>{t('home.patient.greeting', { name: user?.name?.split(' ')[0] || t('common.patient') })}</Text>
+            <Text style={styles.title}>{t('home.patient.findYourDoctorTitle')}</Text>
+            <Text style={styles.subtitle}>{t('home.patient.findYourDoctorSubtitle')}</Text>
           </View>
           <View style={styles.headerBell}>
             <NotificationBell />
@@ -743,14 +745,14 @@ export const HomeScreen = () => {
           onPress={() => navigation.navigate('Search')}
         >
           <Ionicons name="search-outline" size={20} color={colors.textSecondary} style={{ marginRight: 8 }} />
-          <Text style={styles.searchPlaceholder}>Search doctors, specialities...</Text>
+          <Text style={styles.searchPlaceholder}>{t('home.patient.searchDoctorsPlaceholder')}</Text>
         </TouchableOpacity>
       </View>
 
       {/* Quick Actions */}
       <View style={styles.quickActions}>
         <Button
-          title="Pharmacies"
+          title={t('home.patient.pharmacies')}
           onPress={() => {
             const tabNavigator = navigation.getParent();
             if (tabNavigator) {
@@ -760,7 +762,7 @@ export const HomeScreen = () => {
           style={styles.primaryButton}
         />
         <Button
-          title="Find Doctor"
+          title={t('home.patient.findDoctor')}
           onPress={() => navigation.navigate('Search')}
           variant="outline"
           style={styles.secondaryButton}
@@ -771,27 +773,27 @@ export const HomeScreen = () => {
       {upcomingAppointmentsForPatient.length > 0 && (
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Upcoming Appointments</Text>
+            <Text style={styles.sectionTitle}>{t('home.patient.upcomingAppointments')}</Text>
             <TouchableOpacity onPress={() => {
               const tabNavigator = navigation.getParent();
               if (tabNavigator) {
                 (tabNavigator as any).navigate('Appointments');
               }
             }}>
-              <Text style={styles.seeAll}>See All</Text>
+              <Text style={styles.seeAll}>{t('common.seeAll')}</Text>
             </TouchableOpacity>
           </View>
           {upcomingAppointmentsForPatient.slice(0, 2).map((appointment: any) => {
             const doctor = appointment.doctorId;
-            const doctorName = (doctor && typeof doctor === 'object' && doctor !== null) ? doctor.fullName : 'Unknown Doctor';
+            const doctorName = (doctor && typeof doctor === 'object' && doctor !== null) ? doctor.fullName : t('common.unknownDoctor');
             const doctorImage = (doctor && typeof doctor === 'object' && doctor !== null) ? doctor.profileImage : null;
             const normalizedImageUrl = normalizeImageUrl(doctorImage);
             const imageSource = normalizedImageUrl ? { uri: normalizedImageUrl } : defaultAvatar;
             const specialization = (doctor && typeof doctor === 'object' && doctor !== null) && doctor.doctorProfile?.specialization 
               ? (typeof doctor.doctorProfile.specialization === 'object' 
                   ? doctor.doctorProfile.specialization.name 
-                  : 'Specialist')
-              : 'Specialist';
+                  : t('common.specialist'))
+              : t('common.specialist');
             const doctorId = (doctor && typeof doctor === 'object' && doctor !== null) ? doctor._id : appointment.doctorId;
             
             return (
@@ -827,28 +829,28 @@ export const HomeScreen = () => {
       {patientFavorites.length > 0 && (
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Favorite Doctors</Text>
+            <Text style={styles.sectionTitle}>{t('home.patient.favouriteDoctors')}</Text>
             <TouchableOpacity onPress={() => {
               const tabNavigator = navigation.getParent();
               if (tabNavigator) {
                 (tabNavigator as any).navigate('More', { screen: 'Favourites' });
               }
             }}>
-              <Text style={styles.seeAll}>See All</Text>
+              <Text style={styles.seeAll}>{t('common.seeAll')}</Text>
             </TouchableOpacity>
           </View>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.doctorsScroll}>
             {patientFavorites.slice(0, 3).map((favorite: any) => {
               const doctor = favorite.doctorId;
-              const doctorName = (doctor && typeof doctor === 'object' && doctor !== null) ? doctor.fullName : 'Unknown Doctor';
+              const doctorName = (doctor && typeof doctor === 'object' && doctor !== null) ? doctor.fullName : t('common.unknownDoctor');
               const doctorImage = (doctor && typeof doctor === 'object' && doctor !== null) ? doctor.profileImage : null;
               const normalizedImageUrl = normalizeImageUrl(doctorImage);
               const imageSource = normalizedImageUrl ? { uri: normalizedImageUrl } : defaultAvatar;
               const specialization = (doctor && typeof doctor === 'object' && doctor !== null) && doctor.doctorProfile?.specialization 
                 ? (typeof doctor.doctorProfile.specialization === 'object' 
                     ? doctor.doctorProfile.specialization.name 
-                    : 'Specialist')
-                : 'Specialist';
+                    : t('common.specialist'))
+                : t('common.specialist');
               const doctorId = (doctor && typeof doctor === 'object' && doctor !== null) ? doctor._id : favorite.doctorId;
               
               return (
@@ -857,7 +859,7 @@ export const HomeScreen = () => {
                   <Text style={styles.doctorName}>{doctorName}</Text>
                   <Text style={styles.doctorSpecialty}>{specialization}</Text>
                   <Button
-                    title="Book"
+                    title={t('common.book')}
                     onPress={() => navigation.navigate('Booking', { doctorId: String(doctorId) })}
                     size="small"
                     style={styles.bookButton}
@@ -872,7 +874,7 @@ export const HomeScreen = () => {
       {/* Specialities Section */}
       {specializations.length > 0 && (
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Specialities</Text>
+          <Text style={styles.sectionTitle}>{t('home.patient.specialities')}</Text>
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
@@ -889,7 +891,7 @@ export const HomeScreen = () => {
                 <Text style={styles.specialityName} numberOfLines={2}>
                   {specialization.name}
                 </Text>
-                <Text style={styles.specialityCount}>View Doctors</Text>
+                <Text style={styles.specialityCount}>{t('home.patient.viewDoctors')}</Text>
               </TouchableOpacity>
             ))}
           </ScrollView>
@@ -900,9 +902,9 @@ export const HomeScreen = () => {
       {featuredDoctors.length > 0 && (
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Featured Doctors</Text>
+            <Text style={styles.sectionTitle}>{t('home.patient.featuredDoctors')}</Text>
             <TouchableOpacity onPress={() => navigation.navigate('Search')}>
-              <Text style={styles.seeAll}>See All</Text>
+              <Text style={styles.seeAll}>{t('common.seeAll')}</Text>
             </TouchableOpacity>
           </View>
           <ScrollView
@@ -912,7 +914,7 @@ export const HomeScreen = () => {
           >
             {featuredDoctors.slice(0, 5).map((doctor: any) => {
               const doctorId = doctor._id || doctor.userId?._id;
-              const doctorName = doctor.userId?.fullName || doctor.fullName || 'Unknown Doctor';
+              const doctorName = doctor.userId?.fullName || doctor.fullName || t('common.unknownDoctor');
               const doctorImage = doctor.userId?.profileImage || doctor.profileImage;
               const normalizedImageUrl = normalizeImageUrl(doctorImage);
               const imageSource = normalizedImageUrl ? { uri: normalizedImageUrl } : defaultAvatar;
@@ -922,10 +924,10 @@ export const HomeScreen = () => {
                     : doctor.doctorProfile.specialization)
                 : doctor.specialization 
                 ? (typeof doctor.specialization === 'object' ? doctor.specialization.name : doctor.specialization)
-                : 'Specialist';
+                : t('common.specialist');
               const location = doctor.doctorProfile?.clinics?.[0] 
-                ? `${doctor.doctorProfile.clinics[0].city || ''}, ${doctor.doctorProfile.clinics[0].state || ''}`.trim() || 'Location not available'
-                : 'Location not available';
+                ? `${doctor.doctorProfile.clinics[0].city || ''}, ${doctor.doctorProfile.clinics[0].state || ''}`.trim() || t('home.patient.locationNotAvailable')
+                : t('home.patient.locationNotAvailable');
               const consultationFee = doctor.doctorProfile?.consultationFee 
                 || doctor.doctorProfile?.consultationFees?.clinic 
                 || doctor.doctorProfile?.consultationFees?.online 
@@ -939,7 +941,7 @@ export const HomeScreen = () => {
                   <View style={styles.doctorHeader}>
                     <Image source={imageSource} style={styles.doctorAvatarImage} defaultSource={defaultAvatar} />
                     <View style={styles.availableBadge}>
-                      <Text style={styles.availableText}>Available</Text>
+                      <Text style={styles.availableText}>{t('common.available')}</Text>
                     </View>
                   </View>
                   <Text style={styles.doctorName}>{doctorName}</Text>
@@ -953,7 +955,7 @@ export const HomeScreen = () => {
                   <View style={styles.doctorFooter}>
                     <Text style={styles.doctorFee}>€{consultationFee}</Text>
                     <Button
-                      title="Book"
+                      title={t('common.book')}
                       onPress={() => navigation.navigate('DoctorProfile', { doctorId: String(doctorId) })}
                       size="small"
                       style={styles.bookButton}
@@ -968,26 +970,26 @@ export const HomeScreen = () => {
 
       {/* Why Choose Us Section */}
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Why Choose Us</Text>
+        <Text style={styles.sectionTitle}>{t('home.patient.whyChooseUs')}</Text>
         <Card style={styles.featureCard}>
           <Text style={styles.featureIcon}>🏥</Text>
-          <Text style={styles.featureTitle}>Qualified Doctors</Text>
+          <Text style={styles.featureTitle}>{t('home.patient.qualifiedDoctors')}</Text>
           <Text style={styles.featureDescription}>
-            Our team consists of highly qualified and experienced medical professionals.
+            {t('home.patient.qualifiedDoctorsDesc')}
           </Text>
         </Card>
         <Card style={styles.featureCard}>
           <Text style={styles.featureIcon}>⏰</Text>
-          <Text style={styles.featureTitle}>24/7 Availability</Text>
+          <Text style={styles.featureTitle}>{t('home.patient.availability247')}</Text>
           <Text style={styles.featureDescription}>
-            Book appointments anytime, anywhere with our easy-to-use platform.
+            {t('home.patient.availability247Desc')}
           </Text>
         </Card>
         <Card style={styles.featureCard}>
           <Text style={styles.featureIcon}>💬</Text>
-          <Text style={styles.featureTitle}>Easy Communication</Text>
+          <Text style={styles.featureTitle}>{t('home.patient.easyCommunication')}</Text>
           <Text style={styles.featureDescription}>
-            Chat with your doctor directly through our secure messaging system.
+            {t('home.patient.easyCommunicationDesc')}
           </Text>
         </Card>
       </View>

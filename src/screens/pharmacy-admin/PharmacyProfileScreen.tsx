@@ -25,6 +25,7 @@ import * as uploadApi from '../../services/upload';
 import { API_BASE_URL } from '../../config/api';
 import { copyImageToCacheUri, deleteCacheFiles } from '../../utils/imageUpload';
 import Toast from 'react-native-toast-message';
+import { useTranslation } from 'react-i18next';
 
 type PharmacyProfileScreenNavigationProp = NativeStackNavigationProp<MoreStackParamList>;
 
@@ -32,6 +33,7 @@ export const PharmacyProfileScreen = () => {
   const navigation = useNavigation<PharmacyProfileScreenNavigationProp>();
   const { user } = useAuth();
   const queryClient = useQueryClient();
+  const { t } = useTranslation();
   const isPharmacy = user?.role === 'pharmacy' || (user as any)?.role === 'PHARMACY';
   const isParapharmacy = user?.role === 'parapharmacy' || (user as any)?.role === 'PARAPHARMACY';
   const isPharmacyUser = isPharmacy || isParapharmacy;
@@ -109,12 +111,17 @@ export const PharmacyProfileScreen = () => {
     mutationFn: (data: pharmacyApi.CreatePharmacyData) => pharmacyApi.createPharmacy(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['my-pharmacy'] });
-      Toast.show({ type: 'success', text1: 'Success', text2: 'Pharmacy created successfully' });
+      Toast.show({
+        type: 'success',
+        text1: t('common.success'),
+        text2: t('pharmacyAdmin.pharmacyProfile.toasts.created'),
+      });
       refetchMyPharmacy();
     },
     onError: (error: any) => {
-      const errorMessage = error?.response?.data?.message || error?.message || 'Failed to save pharmacy';
-      Toast.show({ type: 'error', text1: 'Error', text2: errorMessage });
+      const errorMessage =
+        error?.response?.data?.message || error?.message || t('pharmacyAdmin.pharmacyProfile.errors.failedToSave');
+      Toast.show({ type: 'error', text1: t('common.error'), text2: errorMessage });
     },
   });
 
@@ -123,12 +130,17 @@ export const PharmacyProfileScreen = () => {
       pharmacyApi.updatePharmacy(id, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['my-pharmacy'] });
-      Toast.show({ type: 'success', text1: 'Success', text2: 'Pharmacy updated successfully' });
+      Toast.show({
+        type: 'success',
+        text1: t('common.success'),
+        text2: t('pharmacyAdmin.pharmacyProfile.toasts.updated'),
+      });
       refetchMyPharmacy();
     },
     onError: (error: any) => {
-      const errorMessage = error?.response?.data?.message || error?.message || 'Failed to save pharmacy';
-      Toast.show({ type: 'error', text1: 'Error', text2: errorMessage });
+      const errorMessage =
+        error?.response?.data?.message || error?.message || t('pharmacyAdmin.pharmacyProfile.errors.failedToSave');
+      Toast.show({ type: 'error', text1: t('common.error'), text2: errorMessage });
     },
   });
 
@@ -136,7 +148,10 @@ export const PharmacyProfileScreen = () => {
     if (!isPharmacyUser) return;
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') {
-      Alert.alert('Permission Required', 'Please grant camera roll permissions.');
+      Alert.alert(
+        t('pharmacyAdmin.pharmacyProfile.alerts.permissionRequiredTitle'),
+        t('pharmacyAdmin.pharmacyProfile.alerts.permissionRequiredBody')
+      );
       return;
     }
 
@@ -172,7 +187,7 @@ export const PharmacyProfileScreen = () => {
           const url = uploadResult?.data?.url || uploadResult?.url;
 
           if (!url) {
-            throw new Error('Upload succeeded but no URL returned');
+            throw new Error(t('pharmacyAdmin.pharmacyProfile.errors.uploadNoUrl'));
           }
 
           setLogoUri(url);
@@ -181,7 +196,10 @@ export const PharmacyProfileScreen = () => {
             updatePharmacyMutation.mutate({ id: pharmacy._id, data: { logo: logoForSave || url } as any });
           }
         } catch (e: any) {
-          Alert.alert('Error', e?.message || 'Failed to upload logo');
+          Alert.alert(
+            t('common.error'),
+            e?.message || t('pharmacyAdmin.pharmacyProfile.errors.failedToUploadLogo')
+          );
         } finally {
           setLoading(false);
           if (tempFileUris.length > 0) {
@@ -190,14 +208,14 @@ export const PharmacyProfileScreen = () => {
         }
       }
     } catch (error) {
-      Alert.alert('Error', 'Failed to pick image');
+      Alert.alert(t('common.error'), t('pharmacyAdmin.pharmacyProfile.errors.failedToPickImage'));
     }
   };
 
   const handleSave = async () => {
     if (!isPharmacyUser) return;
     if (!form.name.trim()) {
-      Alert.alert('Required', 'Pharmacy name is required');
+      Alert.alert(t('common.required'), t('pharmacyAdmin.pharmacyProfile.validation.pharmacyNameRequired'));
       return;
     }
 
@@ -238,7 +256,7 @@ export const PharmacyProfileScreen = () => {
       <SafeAreaView style={styles.container}>
         <View style={styles.loadingContainer}>
           <Ionicons name="alert-circle-outline" size={48} color={colors.error} />
-          <Text style={styles.loadingText}>This section is available for pharmacy accounts only.</Text>
+          <Text style={styles.loadingText}>{t('pharmacyAdmin.common.pharmacyAccountsOnly')}</Text>
         </View>
       </SafeAreaView>
     );
@@ -249,7 +267,7 @@ export const PharmacyProfileScreen = () => {
       <SafeAreaView style={styles.container}>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={colors.primary} />
-          <Text style={styles.loadingText}>Loading profile...</Text>
+          <Text style={styles.loadingText}>{t('pharmacyAdmin.pharmacyProfile.loading')}</Text>
         </View>
       </SafeAreaView>
     );
@@ -270,12 +288,13 @@ export const PharmacyProfileScreen = () => {
           </View>
         </TouchableOpacity>
         <View style={styles.profileInfo}>
-          <Text style={styles.profileName}>{form.name || pharmacy?.name || 'Pharmacy'}</Text>
+          <Text style={styles.profileName}>{form.name || pharmacy?.name || t('pharmacyAdmin.common.pharmacy')}</Text>
           <Text style={styles.profileEmail}>{user?.email || ''}</Text>
           <View style={styles.locationRow}>
             <Ionicons name="location-outline" size={14} color={colors.textSecondary} />
             <Text style={styles.locationText}>
-              {form.city || pharmacy?.address?.city || 'N/A'}{form.state || pharmacy?.address?.state ? `, ${form.state || pharmacy?.address?.state}` : ''}
+              {form.city || pharmacy?.address?.city || t('common.na')}
+              {form.state || pharmacy?.address?.state ? `, ${form.state || pharmacy?.address?.state}` : ''}
             </Text>
           </View>
           {!!logoUri && <Text style={styles.aboutText} numberOfLines={2}>{logoUri}</Text>}
@@ -286,87 +305,91 @@ export const PharmacyProfileScreen = () => {
         <View style={styles.tabContent}>
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>Pharmacy Details</Text>
+              <Text style={styles.sectionTitle}>{t('pharmacyAdmin.pharmacyProfile.sections.details')}</Text>
             </View>
 
             <Input
-              label="Pharmacy Name"
+              label={t('pharmacyAdmin.pharmacyProfile.fields.pharmacyName.label')}
               value={form.name}
               onChangeText={(text) => setForm({ ...form, name: text })}
-              placeholder="Enter pharmacy name"
+              placeholder={t('pharmacyAdmin.pharmacyProfile.fields.pharmacyName.placeholder')}
             />
             <Input
-              label="Phone"
+              label={t('pharmacyAdmin.pharmacyProfile.fields.phone.label')}
               value={form.phone}
               onChangeText={(text) => setForm({ ...form, phone: text })}
-              placeholder="Enter phone number"
+              placeholder={t('pharmacyAdmin.pharmacyProfile.fields.phone.placeholder')}
               keyboardType="phone-pad"
             />
             <Input
-              label="Address Line 1"
+              label={t('pharmacyAdmin.pharmacyProfile.fields.addressLine1.label')}
               value={form.addressLine1}
               onChangeText={(text) => setForm({ ...form, addressLine1: text })}
-              placeholder="Street address"
+              placeholder={t('pharmacyAdmin.pharmacyProfile.fields.addressLine1.placeholder')}
             />
             <Input
-              label="Address Line 2"
+              label={t('pharmacyAdmin.pharmacyProfile.fields.addressLine2.label')}
               value={form.addressLine2}
               onChangeText={(text) => setForm({ ...form, addressLine2: text })}
-              placeholder="Apartment, suite, etc."
+              placeholder={t('pharmacyAdmin.pharmacyProfile.fields.addressLine2.placeholder')}
             />
             <View style={styles.row}>
               <Input
-                label="City"
+                label={t('pharmacyAdmin.pharmacyProfile.fields.city.label')}
                 value={form.city}
                 onChangeText={(text) => setForm({ ...form, city: text })}
-                placeholder="City"
+                placeholder={t('pharmacyAdmin.pharmacyProfile.fields.city.placeholder')}
                 style={styles.halfInput}
               />
               <Input
-                label="State"
+                label={t('pharmacyAdmin.pharmacyProfile.fields.state.label')}
                 value={form.state}
                 onChangeText={(text) => setForm({ ...form, state: text })}
-                placeholder="State"
+                placeholder={t('pharmacyAdmin.pharmacyProfile.fields.state.placeholder')}
                 style={styles.halfInput}
               />
             </View>
             <View style={styles.row}>
               <Input
-                label="Zip Code"
+                label={t('pharmacyAdmin.pharmacyProfile.fields.zip.label')}
                 value={form.zip}
                 onChangeText={(text) => setForm({ ...form, zip: text })}
-                placeholder="Zip"
+                placeholder={t('pharmacyAdmin.pharmacyProfile.fields.zip.placeholder')}
                 style={styles.halfInput}
               />
               <Input
-                label="Country"
+                label={t('pharmacyAdmin.pharmacyProfile.fields.country.label')}
                 value={form.country}
                 onChangeText={(text) => setForm({ ...form, country: text })}
-                placeholder="Country"
+                placeholder={t('pharmacyAdmin.pharmacyProfile.fields.country.placeholder')}
                 style={styles.halfInput}
               />
             </View>
             <View style={styles.row}>
               <Input
-                label="Latitude"
+                label={t('pharmacyAdmin.pharmacyProfile.fields.latitude.label')}
                 value={form.lat}
                 onChangeText={(text) => setForm({ ...form, lat: text })}
-                placeholder="Latitude"
+                placeholder={t('pharmacyAdmin.pharmacyProfile.fields.latitude.placeholder')}
                 keyboardType="decimal-pad"
                 style={styles.halfInput}
               />
               <Input
-                label="Longitude"
+                label={t('pharmacyAdmin.pharmacyProfile.fields.longitude.label')}
                 value={form.lng}
                 onChangeText={(text) => setForm({ ...form, lng: text })}
-                placeholder="Longitude"
+                placeholder={t('pharmacyAdmin.pharmacyProfile.fields.longitude.placeholder')}
                 keyboardType="decimal-pad"
                 style={styles.halfInput}
               />
             </View>
 
             <Button
-              title={loading || createPharmacyMutation.isPending || updatePharmacyMutation.isPending ? 'Saving...' : 'Save Changes'}
+              title={
+                loading || createPharmacyMutation.isPending || updatePharmacyMutation.isPending
+                  ? t('common.saving')
+                  : t('common.saveChanges')
+              }
               onPress={handleSave}
               loading={loading || createPharmacyMutation.isPending || updatePharmacyMutation.isPending}
               style={styles.saveButton}

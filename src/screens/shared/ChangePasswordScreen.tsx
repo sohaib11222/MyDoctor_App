@@ -18,11 +18,13 @@ import { colors } from '../../constants/colors';
 import { Ionicons } from '@expo/vector-icons';
 import * as authApi from '../../services/auth';
 import Toast from 'react-native-toast-message';
+import { useTranslation } from 'react-i18next';
 
 type ChangePasswordScreenNavigationProp = NativeStackNavigationProp<MoreStackParamList>;
 
 export const ChangePasswordScreen = () => {
   const navigation = useNavigation<ChangePasswordScreenNavigationProp>();
+  const { t } = useTranslation();
   const [formData, setFormData] = useState({
     oldPassword: '',
     newPassword: '',
@@ -39,10 +41,11 @@ export const ChangePasswordScreen = () => {
     mutationFn: ({ oldPassword, newPassword }: { oldPassword: string; newPassword: string }) =>
       authApi.changePassword(oldPassword, newPassword),
     onSuccess: (response) => {
-      const message = response?.data?.message || response?.message || 'Password changed successfully!';
+      const message =
+        response?.data?.message || response?.message || t('more.changePassword.successFallback');
       Toast.show({
         type: 'success',
-        text1: 'Success',
+        text1: t('common.success'),
         text2: message,
       });
       // Reset form
@@ -58,10 +61,10 @@ export const ChangePasswordScreen = () => {
     },
     onError: (error: any) => {
       const errorMessage =
-        error?.response?.data?.message || error?.message || 'Failed to change password';
+        error?.response?.data?.message || error?.message || t('more.changePassword.errorFailedToChange');
       Toast.show({
         type: 'error',
-        text1: 'Error',
+        text1: t('common.error'),
         text2: errorMessage,
       });
     },
@@ -79,8 +82,8 @@ export const ChangePasswordScreen = () => {
     if (!formData.oldPassword.trim()) {
       Toast.show({
         type: 'error',
-        text1: 'Required',
-        text2: 'Please enter your current password',
+        text1: t('common.required'),
+        text2: t('more.changePassword.requiredCurrentPassword'),
       });
       return;
     }
@@ -88,8 +91,8 @@ export const ChangePasswordScreen = () => {
     if (!formData.newPassword.trim()) {
       Toast.show({
         type: 'error',
-        text1: 'Required',
-        text2: 'Please enter a new password',
+        text1: t('common.required'),
+        text2: t('more.changePassword.requiredNewPassword'),
       });
       return;
     }
@@ -97,8 +100,8 @@ export const ChangePasswordScreen = () => {
     if (formData.newPassword.length < 6) {
       Toast.show({
         type: 'error',
-        text1: 'Invalid Password',
-        text2: 'New password must be at least 6 characters',
+        text1: t('more.changePassword.invalidPasswordTitle'),
+        text2: t('more.changePassword.invalidPasswordMinLength'),
       });
       return;
     }
@@ -106,8 +109,8 @@ export const ChangePasswordScreen = () => {
     if (formData.newPassword !== formData.confirmPassword) {
       Toast.show({
         type: 'error',
-        text1: 'Mismatch',
-        text2: 'New password and confirm password do not match',
+        text1: t('more.changePassword.mismatchTitle'),
+        text2: t('more.changePassword.mismatchBody'),
       });
       return;
     }
@@ -115,8 +118,8 @@ export const ChangePasswordScreen = () => {
     if (formData.oldPassword === formData.newPassword) {
       Toast.show({
         type: 'error',
-        text1: 'Invalid Password',
-        text2: 'New password must be different from current password',
+        text1: t('more.changePassword.invalidPasswordTitle'),
+        text2: t('more.changePassword.differentFromCurrentBody'),
       });
       return;
     }
@@ -133,9 +136,9 @@ export const ChangePasswordScreen = () => {
       <ScrollView showsVerticalScrollIndicator={false}>
         <View style={styles.content}>
           <View style={styles.header}>
-            <Text style={styles.headerTitle}>Change Password</Text>
+            <Text style={styles.headerTitle}>{t('screens.changePassword')}</Text>
             <Text style={styles.headerSubtitle}>
-              Enter your current password and choose a new password
+              {t('more.changePassword.subtitle')}
             </Text>
           </View>
 
@@ -143,11 +146,11 @@ export const ChangePasswordScreen = () => {
             {/* Current Password */}
             <View style={styles.inputContainer}>
               <Text style={styles.label}>
-                Current Password <Text style={styles.required}>*</Text>
+                {t('more.changePassword.currentPassword')} <Text style={styles.required}>*</Text>
               </Text>
               <View style={styles.passwordContainer}>
                 <Input
-                  placeholder="Enter current password"
+                  placeholder={t('more.changePassword.currentPasswordPlaceholder')}
                   value={formData.oldPassword}
                   onChangeText={(text) => setFormData({ ...formData, oldPassword: text })}
                   secureTextEntry={!showPassword.old}
@@ -170,11 +173,11 @@ export const ChangePasswordScreen = () => {
             {/* New Password */}
             <View style={styles.inputContainer}>
               <Text style={styles.label}>
-                New Password <Text style={styles.required}>*</Text>
+                {t('more.changePassword.newPassword')} <Text style={styles.required}>*</Text>
               </Text>
               <View style={styles.passwordContainer}>
                 <Input
-                  placeholder="Enter new password"
+                  placeholder={t('more.changePassword.newPasswordPlaceholder')}
                   value={formData.newPassword}
                   onChangeText={(text) => setFormData({ ...formData, newPassword: text })}
                   secureTextEntry={!showPassword.new}
@@ -192,17 +195,17 @@ export const ChangePasswordScreen = () => {
                   />
                 </TouchableOpacity>
               </View>
-              <Text style={styles.hint}>Password must be at least 6 characters</Text>
+              <Text style={styles.hint}>{t('more.changePassword.passwordMinHint')}</Text>
             </View>
 
             {/* Confirm Password */}
             <View style={styles.inputContainer}>
               <Text style={styles.label}>
-                Confirm Password <Text style={styles.required}>*</Text>
+                {t('more.changePassword.confirmPassword')} <Text style={styles.required}>*</Text>
               </Text>
               <View style={styles.passwordContainer}>
                 <Input
-                  placeholder="Confirm new password"
+                  placeholder={t('more.changePassword.confirmPasswordPlaceholder')}
                   value={formData.confirmPassword}
                   onChangeText={(text) => setFormData({ ...formData, confirmPassword: text })}
                   secureTextEntry={!showPassword.confirm}
@@ -233,10 +236,12 @@ export const ChangePasswordScreen = () => {
           activeOpacity={0.7}
           disabled={changePasswordMutation.isPending}
         >
-          <Text style={styles.cancelButtonText}>Cancel</Text>
+          <Text style={styles.cancelButtonText}>{t('common.cancel')}</Text>
         </TouchableOpacity>
         <Button
-          title={changePasswordMutation.isPending ? 'Changing...' : 'Save Changes'}
+          title={
+            changePasswordMutation.isPending ? t('more.changePassword.changing') : t('common.saveChanges')
+          }
           onPress={handleSubmit}
           loading={changePasswordMutation.isPending}
           style={styles.saveButton}

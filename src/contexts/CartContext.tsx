@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Toast from 'react-native-toast-message';
+import i18n from '../i18n/appI18n';
 
 interface CartItem {
   _id: string;
@@ -76,8 +77,8 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (product.stock && newQuantity > product.stock) {
           Toast.show({
             type: 'warning',
-            text1: 'Stock Limit',
-            text2: `Only ${product.stock} items available in stock`,
+            text1: i18n.t('pharmacy.cartToast.stockLimitTitle'),
+            text2: i18n.t('pharmacy.cartToast.stockLimitBody', { count: product.stock }),
           });
           return prevItems;
         }
@@ -89,23 +90,23 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (product.stock === 0) {
           Toast.show({
             type: 'error',
-            text1: 'Out of Stock',
-            text2: 'This product is currently out of stock',
+            text1: i18n.t('pharmacy.cartToast.outOfStockTitle'),
+            text2: i18n.t('pharmacy.cartToast.outOfStockBody'),
           });
           return prevItems;
         }
         if (product.stock && quantity > product.stock) {
           Toast.show({
             type: 'warning',
-            text1: 'Stock Limit',
-            text2: `Only ${product.stock} items available in stock`,
+            text1: i18n.t('pharmacy.cartToast.stockLimitTitle'),
+            text2: i18n.t('pharmacy.cartToast.stockLimitBody', { count: product.stock }),
           });
           return prevItems;
         }
         Toast.show({
           type: 'success',
-          text1: 'Added to Cart',
-          text2: `${product.name} added to cart!`,
+          text1: i18n.t('pharmacy.cartToast.addedToCartTitle'),
+          text2: i18n.t('pharmacy.cartToast.addedToCartBody', { name: product.name }),
         });
         return [
           ...prevItems,
@@ -139,8 +140,8 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (item && item.stock && quantity > item.stock) {
         Toast.show({
           type: 'warning',
-          text1: 'Stock Limit',
-          text2: `Only ${item.stock} items available in stock`,
+          text1: i18n.t('pharmacy.cartToast.stockLimitTitle'),
+          text2: i18n.t('pharmacy.cartToast.stockLimitBody', { count: item.stock }),
         });
         return prevItems;
       }

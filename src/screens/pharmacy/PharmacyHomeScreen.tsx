@@ -19,6 +19,7 @@ import { PharmacyStackParamList } from '../../navigation/types';
 import { Button } from '../../components/common/Button';
 import { colors } from '../../constants/colors';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import * as productApi from '../../services/product';
 import { useCart } from '../../contexts/CartContext';
 import { API_BASE_URL } from '../../config/api';
@@ -62,6 +63,7 @@ const normalizeImageUrl = (imageUri: string | undefined | null): string | null =
 export const PharmacyHomeScreen = () => {
   const navigation = useNavigation<PharmacyHomeScreenNavigationProp>();
   const { addToCart } = useCart();
+  const { t } = useTranslation();
 
   // Fetch featured products
   const { data: productsData, isLoading: productsLoading } = useQuery({
@@ -88,7 +90,7 @@ export const PharmacyHomeScreen = () => {
         {/* Banner Section */}
         <View style={styles.bannerSection}>
           <View style={styles.bannerHeader}>
-            <Text style={styles.bannerHeaderTitle}>Pharmacy</Text>
+            <Text style={styles.bannerHeaderTitle}>{t('pharmacy.nav.pharmacy')}</Text>
             <View style={styles.headerRight}>
               <NotificationBell />
               <TouchableOpacity
@@ -106,24 +108,24 @@ export const PharmacyHomeScreen = () => {
             </View>
           </View>
           <View style={styles.bannerContent}>
-            <Text style={styles.bannerTitle}>From the Leading Online Pharmacy</Text>
-            <Text style={styles.bannerSubtitle}>& Healthcare Platform Company</Text>
+            <Text style={styles.bannerTitle}>{t('pharmacy.home.bannerTitle')}</Text>
+            <Text style={styles.bannerSubtitle}>{t('pharmacy.home.bannerSubtitle')}</Text>
             <Text style={styles.bannerDescription}>
-              Essentials Nutrition & Supplements from all over the suppliers around the World
+              {t('pharmacy.home.bannerDescription')}
             </Text>
             <View style={styles.bannerButtons}>
               <TouchableOpacity
                 style={styles.shopNowButton}
                 onPress={() => navigation.navigate('ProductCatalog')}
               >
-                <Text style={styles.shopNowText}>Shop Now</Text>
+                <Text style={styles.shopNowText}>{t('pharmacy.home.shopNow')}</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.searchPharmaciesButton}
                 onPress={() => navigation.navigate('PharmacySearch')}
               >
                 <Ionicons name="search" size={18} color={colors.textWhite} />
-                <Text style={styles.searchPharmaciesText}>Find Pharmacies</Text>
+                <Text style={styles.searchPharmaciesText}>{t('pharmacy.home.findPharmacies')}</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -133,7 +135,7 @@ export const PharmacyHomeScreen = () => {
         {/* Categories Section */}
         {categories.length > 0 && (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Shop Popular Categories</Text>
+            <Text style={styles.sectionTitle}>{t('pharmacy.home.shopPopularCategories')}</Text>
             <ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}
@@ -163,20 +165,20 @@ export const PharmacyHomeScreen = () => {
         {/* Featured Products Section */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Featured Products</Text>
+            <Text style={styles.sectionTitle}>{t('pharmacy.home.featuredProducts')}</Text>
             <TouchableOpacity onPress={() => navigation.navigate('ProductCatalog')}>
-              <Text style={styles.viewAllText}>View All</Text>
+              <Text style={styles.viewAllText}>{t('common.viewAll')}</Text>
             </TouchableOpacity>
           </View>
           {productsLoading ? (
             <View style={styles.loadingContainer}>
               <ActivityIndicator size="small" color={colors.primary} />
-              <Text style={styles.loadingText}>Loading products...</Text>
+              <Text style={styles.loadingText}>{t('pharmacy.home.loadingProducts')}</Text>
             </View>
           ) : products.length === 0 ? (
             <View style={styles.emptyContainer}>
               <Ionicons name="cube-outline" size={48} color={colors.textLight} />
-              <Text style={styles.emptyText}>No products available</Text>
+              <Text style={styles.emptyText}>{t('pharmacy.home.noProductsAvailable')}</Text>
             </View>
           ) : (
             <View style={styles.productsGrid}>

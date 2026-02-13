@@ -17,12 +17,14 @@ import PatientRescheduleRequestsScreen from '../../screens/patient/PatientResche
 import DoctorRescheduleRequestsScreen from '../../screens/doctor/DoctorRescheduleRequestsScreen';
 import { CustomHeader } from '../../components/common/CustomHeader';
 import { useAuth } from '../../contexts/AuthContext';
+import { useTranslation } from 'react-i18next';
 
 const Stack = createNativeStackNavigator<AppointmentsStackParamList>();
 
 export const AppointmentsStack = () => {
   const { user } = useAuth();
   const isDoctor = user?.role === 'doctor';
+  const { t } = useTranslation();
 
   return (
     <Stack.Navigator
@@ -45,53 +47,53 @@ export const AppointmentsStack = () => {
         name="AppointmentDetails" 
         component={AppointmentDetailsScreen}
         // headerShown={false}
-        options={{ title: 'Appointment Details' }}
+        options={{ title: t('appointments.nav.appointmentDetails') }}
       />
       <Stack.Screen
         name="Prescription"
         component={PrescriptionScreen}
-        options={{ title: 'Prescription', headerShown: false }}
+        options={{ title: t('screens.prescription'), headerShown: false }}
       />
       <Stack.Screen 
         name="Booking" 
         component={BookingScreen}
-        options={{ title: 'Book Appointment' }}
+        options={{ title: t('appointments.nav.bookAppointment') }}
       />
       <Stack.Screen 
         name="Checkout" 
         component={CheckoutScreen}
-        options={{ title: 'Checkout' }}
+        options={{ title: t('appointments.nav.checkout') }}
       />
       <Stack.Screen 
         name="BookingSuccess" 
         component={BookingSuccessScreen}
-        options={{ title: 'Booking Confirmed', headerShown: false }}
+        options={{ title: t('appointments.nav.bookingConfirmed'), headerShown: false }}
       />
       <Stack.Screen 
         name="StartAppointment" 
         component={StartAppointmentScreen}
-        options={{ title: 'Appointment Session' }}
+        options={{ title: t('appointments.nav.appointmentSession') }}
       />
       <Stack.Screen 
         name="AvailableTimings" 
         component={AvailableTimingsScreen}
-        options={{ title: 'Available Timings' }}
+        options={{ title: t('appointments.nav.availableTimings') }}
       />
       <Stack.Screen 
         name="AppointmentRequests" 
         component={AppointmentRequestsScreen}
-        options={{ title: 'Appointment Requests' }}
+        options={{ title: t('appointments.nav.appointmentRequests') }}
       />
       <Stack.Screen 
         name="MyPatients" 
         component={MyPatientsScreen}
-        options={{ title: 'My Patients' }}
+        options={{ title: t('menu.myPatients') }}
       />
       <Stack.Screen 
         name="VideoCall" 
         component={VideoCallScreen}
         options={{ 
-          title: 'Video Call',
+          title: t('appointments.nav.videoCall'),
           headerShown: false,
           presentation: 'fullScreenModal',
           animation: 'slide_from_bottom'
@@ -100,20 +102,20 @@ export const AppointmentsStack = () => {
       <Stack.Screen 
         name="RequestReschedule" 
         component={RequestRescheduleScreen}
-        options={{ title: 'Request Reschedule' }}
+        options={{ title: t('appointments.nav.requestReschedule') }}
       />
       {!isDoctor && (
         <Stack.Screen 
           name="PatientRescheduleRequests" 
           component={PatientRescheduleRequestsScreen}
-          options={{ title: 'My Reschedule Requests' }}
+          options={{ title: t('screens.patientRescheduleRequestsTitle') }}
         />
       )}
       {isDoctor && (
         <Stack.Screen 
           name="DoctorRescheduleRequests" 
           component={DoctorRescheduleRequestsScreen}
-          options={{ title: 'Reschedule Requests' }}
+          options={{ title: t('screens.doctorRescheduleRequestsTitle') }}
         />
       )}
     </Stack.Navigator>

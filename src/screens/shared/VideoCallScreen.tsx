@@ -56,23 +56,66 @@ const VideoCallScreen = () => {
   const checkAppointmentTime = () => {
     if (!appointment) return { isValid: false, message: 'Appointment not found' };
 
+    const tzOffsetMinutes =
+      typeof appointment.timezoneOffset === 'number' && Number.isFinite(appointment.timezoneOffset)
+        ? appointment.timezoneOffset
+        : null;
+
+    // If the appointment doesn't have a timezone offset, avoid doing client-side blocking.
+    // Backend has the authoritative timezone-aware validation.
+    if (tzOffsetMinutes === null) {
+      return {
+        isValid: true,
+        message: null,
+        startTime: null,
+        endTime: null,
+      };
+    }
+
     const now = new Date();
-    const appointmentStartDateTime = new Date(appointment.appointmentDate);
-    const [startHours, startMinutes] = appointment.appointmentTime.split(':').map(Number);
-    appointmentStartDateTime.setHours(startHours, startMinutes, 0, 0);
+
+    const appointmentDateUTC = new Date(appointment.appointmentDate);
+    const appointmentDateInTz = new Date(appointmentDateUTC.getTime() + tzOffsetMinutes * 60 * 1000);
+    const year = appointmentDateInTz.getUTCFullYear();
+    const month = appointmentDateInTz.getUTCMonth() + 1;
+    const day = appointmentDateInTz.getUTCDate();
+
+    const [startHours, startMinutes] = String(appointment.appointmentTime).split(':').map(Number);
+    const appointmentStartDateTimeUTC = new Date(Date.UTC(year, month - 1, day, startHours, startMinutes, 0, 0));
+    const appointmentStartDateTime = new Date(
+      appointmentStartDateTimeUTC.getTime() - tzOffsetMinutes * 60 * 1000
+    );
     
     // Calculate end time
     const duration = appointment.appointmentDuration || 30;
     let appointmentEndDateTime: Date;
     if (appointment.appointmentEndTime) {
       const [endHours, endMinutes] = appointment.appointmentEndTime.split(':').map(Number);
-      appointmentEndDateTime = new Date(appointment.appointmentDate);
-      appointmentEndDateTime.setHours(endHours, endMinutes, 0, 0);
+
+      const startTimeMinutes = startHours * 60 + startMinutes;
+      const endTimeMinutes = endHours * 60 + endMinutes;
+      let endYear = year;
+      let endMonth = month - 1;
+      let endDay = day;
+      if (endTimeMinutes < startTimeMinutes && startTimeMinutes - endTimeMinutes > 12 * 60) {
+        const nextDay = new Date(Date.UTC(year, month - 1, day + 1));
+        endYear = nextDay.getUTCFullYear();
+        endMonth = nextDay.getUTCMonth();
+        endDay = nextDay.getUTCDate();
+      }
+
+      const appointmentEndDateTimeUTC = new Date(Date.UTC(endYear, endMonth, endDay, endHours, endMinutes, 0, 0));
+      appointmentEndDateTime = new Date(
+        appointmentEndDateTimeUTC.getTime() - tzOffsetMinutes * 60 * 1000
+      );
     } else {
       appointmentEndDateTime = new Date(appointmentStartDateTime.getTime() + duration * 60 * 1000);
     }
 
-    if (now < appointmentStartDateTime) {
+    const bufferTime = 2 * 60 * 1000;
+    const earliestAllowedTime = new Date(appointmentStartDateTime.getTime() - bufferTime);
+
+    if (now < earliestAllowedTime) {
       return {
         isValid: false,
         message: `Video call is only available during the scheduled appointment time. Your appointment starts at ${appointmentStartDateTime.toLocaleString()}.`,
@@ -360,12 +403,28 @@ const VideoCallContent = ({
   currentUserId?: string;
   currentUserRole: string;
 }) => {
-  const { useCallCallingState, useParticipants } = useCallStateHooks();
+  const { useCallCallingState, useParticipants, useCameraState } = useCallStateHooks();
   const callingState = useCallCallingState();
   const participants = useParticipants();
+  const cameraState = useCameraState();
 
   console.log('📹 [VideoCallContent] Call state:', callingState);
   console.log('👥 [VideoCallContent] Participants:', participants.length);
+
+  useEffect(() => {
+    const enableCameraIfNeeded = async () => {
+      try {
+        if (callingState !== 'joined') return;
+        if (!cameraState?.camera?.enabled) {
+          await cameraState?.camera?.enable?.();
+        }
+      } catch (e) {
+        console.warn('⚠️ [VideoCallContent] Could not auto-enable camera:', e);
+      }
+    };
+
+    enableCameraIfNeeded();
+  }, [callingState, cameraState?.camera?.enabled]);
 
   // Don't render if call is not joined
   if (callingState !== 'joined') {
@@ -381,7 +440,9 @@ const VideoCallContent = ({
   }
 
   // Separate local and remote participants
-  const localParticipant = participants.find(p => p.isLocalParticipant);
+  const localParticipant =
+    (currentUserId ? participants.find((p) => String(p.userId) === String(currentUserId)) : undefined) ||
+    participants.find((p) => p.isLocalParticipant);
   const remoteParticipants = participants.filter(p => !p.isLocalParticipant);
 
   // Get unique participants by userId

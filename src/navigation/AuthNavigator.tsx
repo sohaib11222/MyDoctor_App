@@ -7,6 +7,7 @@ import { RegisterScreen } from '../screens/auth/RegisterScreen';
 import { ForgotPasswordScreen } from '../screens/auth/ForgotPasswordScreen';
 import { DoctorRegisterScreen } from '../screens/auth/DoctorRegisterScreen';
 import { DoctorVerificationUploadScreen } from '../screens/auth/DoctorVerificationUploadScreen';
+import { PharmacyPhoneVerificationScreen } from '../screens/auth/PharmacyPhoneVerificationScreen';
 import { PharmacyVerificationUploadScreen } from '../screens/auth/PharmacyVerificationUploadScreen';
 import { PendingApprovalScreen } from '../screens/auth/PendingApprovalScreen';
 import { useAuth } from '../contexts/AuthContext';
@@ -41,6 +42,8 @@ export const AuthNavigator = () => {
         const documentsSubmitted = await AsyncStorage.getItem(PHARMACY_DOCUMENTS_SUBMITTED_KEY);
         if (documentsSubmitted === 'true') {
           setInitialRoute('PendingApproval');
+        } else if (!(user as any)?.isPhoneVerified) {
+          setInitialRoute('PharmacyPhoneVerification');
         } else {
           setInitialRoute('PharmacyVerificationUpload');
         }
@@ -69,6 +72,7 @@ export const AuthNavigator = () => {
       <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
       <Stack.Screen name="DoctorRegister" component={DoctorRegisterScreen} />
       <Stack.Screen name="DoctorVerificationUpload" component={DoctorVerificationUploadScreen} />
+      <Stack.Screen name="PharmacyPhoneVerification" component={PharmacyPhoneVerificationScreen} />
       <Stack.Screen name="PharmacyVerificationUpload" component={PharmacyVerificationUploadScreen} />
       <Stack.Screen name="PendingApproval" component={PendingApprovalScreen} />
     </Stack.Navigator>

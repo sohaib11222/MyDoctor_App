@@ -11,12 +11,14 @@ import { CustomHeader } from '../../components/common/CustomHeader';
 import { useAuth } from '../../contexts/AuthContext';
 import { colors } from '../../constants/colors';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 
 const Stack = createNativeStackNavigator<ChatStackParamList>();
 
 export const ChatStack = () => {
   const { user } = useAuth();
   const isDoctor = user?.role === 'doctor';
+  const { t } = useTranslation();
 
   return (
     <Stack.Navigator
@@ -27,7 +29,7 @@ export const ChatStack = () => {
             const params = route.params as ChatStackParamList['ChatDetail'];
             return (
               <CustomHeader
-                title={params?.recipientName || 'Chat'}
+                title={params?.recipientName || t('chat.nav.chat')}
                 showBack={true}
                 leftComponent={
                   <View style={styles.headerLeftContent}>
@@ -36,7 +38,7 @@ export const ChatStack = () => {
                       style={styles.headerAvatar}
                     />
                     <Text style={styles.headerName} numberOfLines={1}>
-                      {params?.recipientName || 'Chat'}
+                      {params?.recipientName || t('chat.nav.chat')}
                     </Text>
                   </View>
                 }
@@ -56,7 +58,7 @@ export const ChatStack = () => {
       <Stack.Screen 
         name="ChatList" 
         component={ChatListScreen}
-        options={{ title: 'Messages', headerShown: false }}
+        options={{ title: t('chat.nav.messages'), headerShown: false }}
       />
       <Stack.Screen 
         name="ChatDetail" 
@@ -68,7 +70,7 @@ export const ChatStack = () => {
       <Stack.Screen 
         name="AdminChat" 
         component={AdminChatScreen}
-        options={{ title: 'Admin Messages', headerShown: false }}
+        options={{ title: t('chat.nav.adminMessages'), headerShown: false }}
       />
     </Stack.Navigator>
   );

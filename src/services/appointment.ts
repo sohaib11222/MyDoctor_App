@@ -31,6 +31,10 @@ export interface Appointment {
   };
   appointmentDate: string; // ISO string
   appointmentTime: string; // e.g., "10:30"
+  appointmentDuration?: number;
+  appointmentEndTime?: string;
+  timezone?: string | null;
+  timezoneOffset?: number | null;
   bookingType: 'VISIT' | 'ONLINE';
   status: 'PENDING' | 'CONFIRMED' | 'CANCELLED' | 'COMPLETED' | 'NO_SHOW' | 'REJECTED';
   paymentStatus: 'UNPAID' | 'PAID' | 'REFUNDED';
@@ -123,6 +127,8 @@ export const createAppointment = async (data: {
   patientId: string;
   appointmentDate: string; // ISO string
   appointmentTime: string; // e.g., "10:30"
+  timezone?: string;
+  timezoneOffset?: number;
   bookingType: 'VISIT' | 'ONLINE';
   patientNotes?: string;
   clinicName?: string;

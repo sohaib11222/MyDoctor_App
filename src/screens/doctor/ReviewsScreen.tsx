@@ -15,8 +15,8 @@ import { useAuth } from '../../contexts/AuthContext';
 import { colors } from '../../constants/colors';
 import { Ionicons } from '@expo/vector-icons';
 import * as reviewApi from '../../services/review';
-import * as profileApi from '../../services/user';
 import { API_BASE_URL } from '../../config/api';
+import { useTranslation } from 'react-i18next';
 
 const defaultAvatar = require('../../../assets/avatar.png');
 
@@ -80,24 +80,22 @@ const renderStars = (rating: number) => {
   );
 };
 
-/**
- * Format date
- */
-const formatDate = (dateString: string): string => {
-  if (!dateString) return '';
-  const date = new Date(dateString);
-  return date.toLocaleDateString('en-US', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-  });
-};
-
 export const ReviewsScreen = () => {
   const { user } = useAuth();
+  const { t, i18n } = useTranslation();
   const [page, setPage] = useState(1);
   const limit = 10;
   const [refreshing, setRefreshing] = useState(false);
+
+  const formatDate = (dateString: string): string => {
+    if (!dateString) return '';
+    const date = new Date(dateString);
+    return date.toLocaleDateString(i18n.language, {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+    });
+  };
 
   // Fetch doctor profile for overall rating
   const { data: doctorProfile, refetch: refetchProfile } = useQuery({
@@ -199,7 +197,7 @@ export const ReviewsScreen = () => {
       <SafeAreaView style={styles.container}>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={colors.primary} />
-          <Text style={styles.loadingText}>Loading reviews...</Text>
+          <Text style={styles.loadingText}>{t('more.reviews.loading')}</Text>
         </View>
       </SafeAreaView>
     );
@@ -210,9 +208,11 @@ export const ReviewsScreen = () => {
       <SafeAreaView style={styles.container}>
         <View style={styles.errorContainer}>
           <Ionicons name="alert-circle-outline" size={48} color={colors.error} />
-          <Text style={styles.errorTitle}>Error Loading Reviews</Text>
+          <Text style={styles.errorTitle}>{t('more.reviews.error.title')}</Text>
           <Text style={styles.errorText}>
-            {(error as any)?.response?.data?.message || (error as any)?.message || 'Failed to load reviews'}
+            {(error as any)?.response?.data?.message ||
+              (error as any)?.message ||
+              t('more.reviews.error.failedToLoad')}
           </Text>
         </View>
       </SafeAreaView>
@@ -229,12 +229,12 @@ export const ReviewsScreen = () => {
         <View style={styles.overallSection}>
           <View style={styles.overallContent}>
             <View style={styles.ratingSection}>
-              <Text style={styles.overallTitle}>Overall Rating</Text>
+              <Text style={styles.overallTitle}>{t('more.reviews.overallRating')}</Text>
               <View style={styles.overallStars}>
                 <Text style={styles.ratingValue}>{overallRating.toFixed(1)}</Text>
                 {renderStars(overallRating)}
                 <Text style={styles.ratingCount}>
-                  ({ratingCount} {ratingCount === 1 ? 'review' : 'reviews'})
+                  ({t('more.reviews.reviewCount', { count: ratingCount })})
                 </Text>
               </View>
             </View>
@@ -246,8 +246,8 @@ export const ReviewsScreen = () => {
           {reviews.length === 0 ? (
             <View style={styles.emptyContainer}>
               <Ionicons name="star-outline" size={64} color={colors.textLight} />
-              <Text style={styles.emptyTitle}>No reviews yet</Text>
-              <Text style={styles.emptyText}>Reviews from patients will appear here</Text>
+              <Text style={styles.emptyTitle}>{t('more.reviews.empty.title')}</Text>
+              <Text style={styles.emptyText}>{t('more.reviews.empty.body')}</Text>
             </View>
           ) : (
             <>
@@ -263,11 +263,11 @@ export const ReviewsScreen = () => {
                         />
                         <View>
                           <Text style={styles.patientName}>
-                            {review.patientId?.fullName || 'Anonymous'}
+                            {review.patientId?.fullName || t('more.reviews.anonymous')}
                           </Text>
                           <Text style={styles.reviewDate}>{formatDate(review.createdAt)}</Text>
                           {review.reviewType === 'APPOINTMENT' && (
-                            <Text style={styles.reviewType}>Appointment Review</Text>
+                            <Text style={styles.reviewType}>{t('more.reviews.reviewTypes.appointment')}</Text>
                           )}
                         </View>
                       </View>
@@ -278,7 +278,7 @@ export const ReviewsScreen = () => {
                         <Text style={styles.reviewText}>{review.reviewText}</Text>
                       ) : (
                         <Text style={[styles.reviewText, styles.noCommentText]}>
-                          No comment provided
+                          {t('more.reviews.noCommentProvided')}
                         </Text>
                       )}
                     </View>
@@ -297,7 +297,7 @@ export const ReviewsScreen = () => {
                     <Text
                       style={[styles.paginationButtonText, page === 1 && styles.paginationButtonTextDisabled]}
                     >
-                      Previous
+                      {t('common.prev')}
                     </Text>
                   </TouchableOpacity>
                   <View style={styles.paginationNumbers}>
@@ -345,7 +345,7 @@ export const ReviewsScreen = () => {
                         page === pagination.pages && styles.paginationButtonTextDisabled,
                       ]}
                     >
-                      Next
+                      {t('common.next')}
                     </Text>
                   </TouchableOpacity>
                 </View>

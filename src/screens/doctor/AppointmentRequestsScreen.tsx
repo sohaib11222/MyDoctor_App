@@ -11,6 +11,7 @@ import {
   ActivityIndicator,
   RefreshControl,
 } from 'react-native';
+import { Platform } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -19,6 +20,7 @@ import { colors } from '../../constants/colors';
 import { Ionicons } from '@expo/vector-icons';
 import * as appointmentApi from '../../services/appointment';
 import Toast from 'react-native-toast-message';
+import { useTranslation } from 'react-i18next';
 
 type AppointmentRequestsScreenNavigationProp = StackNavigationProp<AppointmentsStackParamList, 'AppointmentRequests'>;
 
@@ -37,7 +39,8 @@ interface UIAppointmentRequest {
 export const AppointmentRequestsScreen = () => {
   const navigation = useNavigation<AppointmentRequestsScreenNavigationProp>();
   const queryClient = useQueryClient();
-  const [selectedPeriod, setSelectedPeriod] = useState('Last 7 Days');
+  const { t } = useTranslation();
+  const [selectedPeriod, setSelectedPeriod] = useState<'last7Days'>('last7Days');
   const [refreshing, setRefreshing] = useState(false);
 
   // Fetch pending appointments (requests)
@@ -62,15 +65,18 @@ export const AppointmentRequestsScreen = () => {
       queryClient.invalidateQueries({ queryKey: ['appointments'] });
       Toast.show({
         type: 'success',
-        text1: 'Appointment Accepted',
-        text2: 'The appointment has been accepted successfully',
+        text1: t('appointments.requests.accept.toastTitle'),
+        text2: t('appointments.requests.accept.toastBody'),
       });
     },
     onError: (error: any) => {
-      const errorMessage = error?.response?.data?.message || error?.message || 'Failed to accept appointment';
+      const errorMessage =
+        error?.response?.data?.message ||
+        error?.message ||
+        t('appointments.requests.accept.failedFallback');
       Toast.show({
         type: 'error',
-        text1: 'Accept Failed',
+        text1: t('appointments.requests.accept.failedToastTitle'),
         text2: errorMessage,
       });
     },
@@ -85,15 +91,18 @@ export const AppointmentRequestsScreen = () => {
       queryClient.invalidateQueries({ queryKey: ['appointments'] });
       Toast.show({
         type: 'success',
-        text1: 'Appointment Rejected',
-        text2: 'The appointment has been rejected',
+        text1: t('appointments.requests.reject.toastTitle'),
+        text2: t('appointments.requests.reject.toastBody'),
       });
     },
     onError: (error: any) => {
-      const errorMessage = error?.response?.data?.message || error?.message || 'Failed to reject appointment';
+      const errorMessage =
+        error?.response?.data?.message ||
+        error?.message ||
+        t('appointments.requests.reject.failedFallback');
       Toast.show({
         type: 'error',
-        text1: 'Reject Failed',
+        text1: t('appointments.requests.reject.failedToastTitle'),
         text2: errorMessage,
       });
     },
@@ -117,30 +126,27 @@ export const AppointmentRequestsScreen = () => {
       const isNew = new Date(apt.createdAt).getTime() > Date.now() - 24 * 60 * 60 * 1000; // Within last 24 hours
       
       // Get appointment type display
-      let appointmentType = 'Online';
-      if (apt.bookingType === 'VISIT') {
-        appointmentType = 'Direct Visit';
-      }
+      const appointmentType = apt.bookingType;
       
       return {
         appointmentId: apt._id,
         id: apt.appointmentNumber || apt._id,
-        patientName: apt.patientId?.fullName || 'Unknown Patient',
+        patientName: apt.patientId?.fullName || t('common.unknownPatient'),
         patientImageUri: apt.patientId?.profileImage,
         date: dateTimeString,
-        visitType: apt.patientNotes || 'General Visit',
+        visitType: apt.patientNotes || t('appointments.details.generalVisit'),
         appointmentType,
         clinicLocation: apt.clinicName,
         isNew,
       } as UIAppointmentRequest;
     });
-  }, [appointmentsData]);
+  }, [appointmentsData, t]);
 
   const handleAccept = (appointmentId: string) => {
-    Alert.alert('Accept Appointment', 'Are you sure you want to accept this appointment?', [
-      { text: 'Cancel', style: 'cancel' },
+    Alert.alert(t('appointments.requests.accept.alertTitle'), t('appointments.requests.accept.alertBody'), [
+      { text: t('common.cancel'), style: 'cancel' },
       {
-        text: 'Accept',
+        text: t('appointments.requests.accept.alertConfirm'),
         onPress: () => {
           acceptMutation.mutate(appointmentId);
         },
@@ -149,21 +155,35 @@ export const AppointmentRequestsScreen = () => {
   };
 
   const handleReject = (appointmentId: string) => {
-    Alert.prompt(
-      'Reject Appointment',
-      'Are you sure you want to reject this appointment? (Optional: Enter a reason)',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Reject',
-          style: 'destructive',
-          onPress: (reason) => {
-            rejectMutation.mutate({ appointmentId, reason: reason || undefined });
+    if (Platform.OS === 'ios') {
+      Alert.prompt(
+        t('appointments.requests.reject.alertTitle'),
+        t('appointments.requests.reject.alertBody'),
+        [
+          { text: t('common.cancel'), style: 'cancel' },
+          {
+            text: t('appointments.requests.reject.alertConfirm'),
+            style: 'destructive',
+            onPress: (reason?: string) => {
+              rejectMutation.mutate({ appointmentId, reason: reason || undefined });
+            },
           },
+        ],
+        'plain-text'
+      );
+      return;
+    }
+
+    Alert.alert(t('appointments.requests.reject.alertTitle'), t('appointments.requests.reject.alertBody'), [
+      { text: t('common.cancel'), style: 'cancel' },
+      {
+        text: t('appointments.requests.reject.alertConfirm'),
+        style: 'destructive',
+        onPress: () => {
+          rejectMutation.mutate({ appointmentId });
         },
-      ],
-      'plain-text'
-    );
+      },
+    ]);
   };
 
   const handleRefresh = async () => {
@@ -174,24 +194,32 @@ export const AppointmentRequestsScreen = () => {
 
   const getAppointmentTypeIcon = (type: string) => {
     switch (type) {
-      case 'Online':
+      case 'ONLINE':
         return { name: 'calendar-outline', color: colors.info };
-      case 'Audio Call':
-        return { name: 'call-outline', color: colors.primary };
-      case 'Direct Visit':
+      case 'VISIT':
         return { name: 'medical-outline', color: colors.success };
       default:
         return { name: 'chatbubble-outline', color: colors.textSecondary };
     }
   };
 
+  const getAppointmentTypeLabel = (type: string) => {
+    if (type === 'VISIT') return t('appointments.bookingType.directVisit');
+    if (type === 'ONLINE') return t('appointments.bookingType.online');
+    return type;
+  };
+
   return (
     <SafeAreaView style={styles.container}>
       {/* Header with Period Selector */}
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Requests</Text>
+        <Text style={styles.headerTitle}>{t('appointments.requests.title')}</Text>
         <TouchableOpacity style={styles.periodSelector}>
-          <Text style={styles.periodText}>{selectedPeriod}</Text>
+          <Text style={styles.periodText}>
+            {selectedPeriod === 'last7Days'
+              ? t('appointments.requests.periodLast7Days')
+              : selectedPeriod}
+          </Text>
           <Ionicons name="chevron-down" size={16} color={colors.textSecondary} />
         </TouchableOpacity>
       </View>
@@ -200,20 +228,20 @@ export const AppointmentRequestsScreen = () => {
       {isLoading ? (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={colors.primary} />
-          <Text style={styles.loadingText}>Loading requests...</Text>
+          <Text style={styles.loadingText}>{t('appointments.requests.loading')}</Text>
         </View>
       ) : error ? (
         <View style={styles.emptyContainer}>
           <Ionicons name="alert-circle-outline" size={64} color={colors.error} />
-          <Text style={styles.emptyText}>Failed to load requests</Text>
+          <Text style={styles.emptyText}>{t('appointments.requests.failedToLoad')}</Text>
           <TouchableOpacity style={styles.retryButton} onPress={() => refetch()}>
-            <Text style={styles.retryButtonText}>Retry</Text>
+            <Text style={styles.retryButtonText}>{t('common.retry')}</Text>
           </TouchableOpacity>
         </View>
       ) : uiRequests.length === 0 ? (
         <View style={styles.emptyContainer}>
           <Ionicons name="checkmark-circle-outline" size={64} color={colors.textLight} />
-          <Text style={styles.emptyText}>No pending requests</Text>
+          <Text style={styles.emptyText}>{t('appointments.requests.empty')}</Text>
         </View>
       ) : (
         <ScrollView
@@ -245,7 +273,7 @@ export const AppointmentRequestsScreen = () => {
                         <Text style={styles.patientId}>{request.id}</Text>
                         {request.isNew && (
                           <View style={styles.newBadge}>
-                            <Text style={styles.newBadgeText}>New</Text>
+                            <Text style={styles.newBadgeText}>{t('appointments.badgeNew')}</Text>
                           </View>
                         )}
                       </View>
@@ -270,10 +298,10 @@ export const AppointmentRequestsScreen = () => {
                 </View>
 
                 <View style={styles.appointmentTypeSection}>
-                  <Text style={styles.typeLabel}>Type of Appointment</Text>
+                  <Text style={styles.typeLabel}>{t('appointments.details.typeOfAppointment')}</Text>
                   <View style={styles.typeContainer}>
                     <Ionicons name={icon.name as any} size={16} color={icon.color} />
-                    <Text style={styles.typeText}>{request.appointmentType}</Text>
+                    <Text style={styles.typeText}>{getAppointmentTypeLabel(request.appointmentType)}</Text>
                     {request.clinicLocation && (
                       <>
                         <Ionicons name="information-circle-outline" size={14} color={colors.textSecondary} style={{ marginLeft: 4 }} />
@@ -295,7 +323,7 @@ export const AppointmentRequestsScreen = () => {
                     ) : (
                       <>
                         <Ionicons name="checkmark" size={18} color={colors.textWhite} />
-                        <Text style={styles.acceptButtonText}>Accept</Text>
+                        <Text style={styles.acceptButtonText}>{t('appointments.requests.accept.alertConfirm')}</Text>
                       </>
                     )}
                   </TouchableOpacity>
@@ -310,7 +338,7 @@ export const AppointmentRequestsScreen = () => {
                     ) : (
                       <>
                         <Ionicons name="close" size={18} color={colors.error} />
-                        <Text style={styles.rejectButtonText}>Reject</Text>
+                        <Text style={styles.rejectButtonText}>{t('appointments.requests.reject.alertConfirm')}</Text>
                       </>
                     )}
                   </TouchableOpacity>

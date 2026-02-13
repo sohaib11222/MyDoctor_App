@@ -20,6 +20,7 @@ import { colors } from '../../constants/colors';
 import { Ionicons } from '@expo/vector-icons';
 import * as notificationApi from '../../services/notification';
 import Toast from 'react-native-toast-message';
+import { useTranslation } from 'react-i18next';
 
 type NotificationsScreenNavigationProp = NativeStackNavigationProp<MoreStackParamList>;
 
@@ -28,6 +29,7 @@ type FilterType = 'all' | 'unread' | 'read';
 export const NotificationsScreen = () => {
   const navigation = useNavigation<NotificationsScreenNavigationProp>();
   const queryClient = useQueryClient();
+  const { t, i18n } = useTranslation();
   const [filter, setFilter] = useState<FilterType>('all');
   const [refreshing, setRefreshing] = useState(false);
 
@@ -57,14 +59,15 @@ export const NotificationsScreen = () => {
       queryClient.invalidateQueries({ queryKey: ['notifications', 'unread', 'count'] });
       Toast.show({
         type: 'success',
-        text1: 'Notification marked as read',
+        text1: t('more.notifications.markedAsRead'),
       });
     },
     onError: (error: any) => {
-      const errorMessage = error?.response?.data?.message || error?.message || 'Failed to mark notification as read';
+      const errorMessage =
+        error?.response?.data?.message || error?.message || t('more.notifications.failedToMarkAsRead');
       Toast.show({
         type: 'error',
-        text1: 'Error',
+        text1: t('common.error'),
         text2: errorMessage,
       });
     },
@@ -78,14 +81,15 @@ export const NotificationsScreen = () => {
       queryClient.invalidateQueries({ queryKey: ['notifications', 'unread', 'count'] });
       Toast.show({
         type: 'success',
-        text1: 'All notifications marked as read',
+        text1: t('more.notifications.allMarkedAsRead'),
       });
     },
     onError: (error: any) => {
-      const errorMessage = error?.response?.data?.message || error?.message || 'Failed to mark all notifications as read';
+      const errorMessage =
+        error?.response?.data?.message || error?.message || t('more.notifications.failedToMarkAllAsRead');
       Toast.show({
         type: 'error',
-        text1: 'Error',
+        text1: t('common.error'),
         text2: errorMessage,
       });
     },
@@ -140,17 +144,23 @@ export const NotificationsScreen = () => {
 
   // Format time ago
   const formatTimeAgo = (dateString: string): string => {
-    if (!dateString) return 'Just now';
+    if (!dateString) return t('more.notifications.timeAgo.justNow');
     const date = new Date(dateString);
     const now = new Date();
     const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000);
 
-    if (diffInSeconds < 60) return 'Just now';
-    if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)} minutes ago`;
-    if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)} hours ago`;
-    if (diffInSeconds < 604800) return `${Math.floor(diffInSeconds / 86400)} days ago`;
+    if (diffInSeconds < 60) return t('more.notifications.timeAgo.justNow');
+    if (diffInSeconds < 3600) {
+      return t('more.notifications.timeAgo.minutesAgo', { count: Math.floor(diffInSeconds / 60) });
+    }
+    if (diffInSeconds < 86400) {
+      return t('more.notifications.timeAgo.hoursAgo', { count: Math.floor(diffInSeconds / 3600) });
+    }
+    if (diffInSeconds < 604800) {
+      return t('more.notifications.timeAgo.daysAgo', { count: Math.floor(diffInSeconds / 86400) });
+    }
     
-    return date.toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' });
+    return date.toLocaleDateString(i18n.language, { day: 'numeric', month: 'short', year: 'numeric' });
   };
 
   // Handle mark as read
@@ -208,7 +218,7 @@ export const NotificationsScreen = () => {
         >
           <Ionicons name="arrow-back" size={24} color={colors.text} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Notifications</Text>
+        <Text style={styles.headerTitle}>{t('screens.notifications')}</Text>
         {unreadCount > 0 && (
           <TouchableOpacity
             style={styles.markAllButton}
@@ -217,7 +227,7 @@ export const NotificationsScreen = () => {
             activeOpacity={0.7}
           >
             <Text style={styles.markAllText}>
-              {markAllAsReadMutation.isPending ? 'Marking...' : 'Mark All Read'}
+              {markAllAsReadMutation.isPending ? t('more.notifications.marking') : t('more.notifications.markAllRead')}
             </Text>
           </TouchableOpacity>
         )}
@@ -231,14 +241,14 @@ export const NotificationsScreen = () => {
             onPress={() => setFilter('all')}
             activeOpacity={0.7}
           >
-            <Text style={[styles.tabText, filter === 'all' && styles.tabTextActive]}>All</Text>
+            <Text style={[styles.tabText, filter === 'all' && styles.tabTextActive]}>{t('more.notifications.filters.all')}</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.tab, filter === 'unread' && styles.tabActive]}
             onPress={() => setFilter('unread')}
             activeOpacity={0.7}
           >
-            <Text style={[styles.tabText, filter === 'unread' && styles.tabTextActive]}>Unread</Text>
+            <Text style={[styles.tabText, filter === 'unread' && styles.tabTextActive]}>{t('more.notifications.filters.unread')}</Text>
             {filter !== 'unread' && unreadCount > 0 && (
               <View style={styles.tabBadge}>
                 <Text style={styles.tabBadgeText}>{unreadCount}</Text>
@@ -250,7 +260,7 @@ export const NotificationsScreen = () => {
             onPress={() => setFilter('read')}
             activeOpacity={0.7}
           >
-            <Text style={[styles.tabText, filter === 'read' && styles.tabTextActive]}>Read</Text>
+            <Text style={[styles.tabText, filter === 'read' && styles.tabTextActive]}>{t('more.notifications.filters.read')}</Text>
           </TouchableOpacity>
         </ScrollView>
       </View>
@@ -259,7 +269,7 @@ export const NotificationsScreen = () => {
       {isLoading ? (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={colors.primary} />
-          <Text style={styles.loadingText}>Loading notifications...</Text>
+          <Text style={styles.loadingText}>{t('more.notifications.loading')}</Text>
         </View>
       ) : (
         <FlatList
@@ -274,7 +284,13 @@ export const NotificationsScreen = () => {
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
               <Ionicons name="notifications-outline" size={64} color={colors.textLight} />
-              <Text style={styles.emptyText}>No {filter === 'all' ? '' : filter} notifications</Text>
+              <Text style={styles.emptyText}>
+                {filter === 'unread'
+                  ? t('more.notifications.empty.unread')
+                  : filter === 'read'
+                  ? t('more.notifications.empty.read')
+                  : t('more.notifications.empty.all')}
+              </Text>
             </View>
           }
         />

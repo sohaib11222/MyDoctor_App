@@ -76,6 +76,13 @@ const formatCurrency = (amount: number | undefined): string => {
   }).format(amount);
 };
 
+const getRealOrderTotal = (order: Partial<orderApi.Order> | undefined | null): number => {
+  if (!order) return 0;
+  const subtotal = Number((order as any).subtotal) || 0;
+  const shipping = Number((order as any).shipping) || 0;
+  return subtotal + shipping;
+};
+
 const getStatusBadgeColor = (status: orderApi.Order['status']) => {
   switch (status) {
     case 'DELIVERED':
@@ -303,7 +310,7 @@ export const PharmacyOrdersScreen = () => {
               <Text style={styles.deliveredDate}>Delivered on {formatDate(order.deliveredAt)}</Text>
             )}
           </View>
-          <Text style={styles.orderTotal}>{formatCurrency(order.total)}</Text>
+          <Text style={styles.orderTotal}>{formatCurrency(realTotal)}</Text>
         </View>
         {/* Shipping Fee Status Alert */}
         {order.paymentStatus === 'PENDING' && (
@@ -573,7 +580,6 @@ export const PharmacyOrdersScreen = () => {
                     />
                     <Text style={styles.modalNote}>
                       Subtotal: {formatCurrency(selectedOrderForShipping.subtotal || 0)}{' '}
-                      + Tax: {formatCurrency(selectedOrderForShipping.tax || 0)}{' '}
                       + Shipping = New Total
                     </Text>
                   </View>
@@ -582,7 +588,7 @@ export const PharmacyOrdersScreen = () => {
                     <View style={styles.newTotalContainer}>
                       <Text style={styles.newTotalLabel}>New Total:</Text>
                       <Text style={styles.newTotalValue}>
-                        {formatCurrency((selectedOrderForShipping.subtotal || 0) + (selectedOrderForShipping.tax || 0) + parseFloat(shippingFee))}
+                        {formatCurrency((selectedOrderForShipping.subtotal || 0) + parseFloat(shippingFee))}
                       </Text>
                     </View>
                   )}

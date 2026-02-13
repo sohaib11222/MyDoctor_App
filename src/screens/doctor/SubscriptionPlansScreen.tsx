@@ -17,16 +17,18 @@ import { Button } from '../../components/common/Button';
 import * as subscriptionApi from '../../services/subscription';
 import * as paymentApi from '../../services/payment';
 import Toast from 'react-native-toast-message';
+import { useTranslation } from 'react-i18next';
 
 export const SubscriptionPlansScreen = () => {
   const queryClient = useQueryClient();
+  const { t, i18n } = useTranslation();
   const [selectedPlan, setSelectedPlan] = useState<subscriptionApi.SubscriptionPlan | null>(null);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState('DUMMY'); // DUMMY, CARD, PAYPAL, BANK
   const [refreshing, setRefreshing] = useState(false);
 
   const formatLimit = (value: number | null | undefined): string => {
-    if (value === null || value === undefined) return 'Unlimited';
+    if (value === null || value === undefined) return t('common.unlimited');
     return value.toString();
   };
 
@@ -60,18 +62,19 @@ export const SubscriptionPlansScreen = () => {
       queryClient.invalidateQueries({ queryKey: ['doctorDashboard'] });
       Toast.show({
         type: 'success',
-        text1: 'Success',
-        text2: 'Subscription plan purchased successfully!',
+        text1: t('common.success'),
+        text2: t('more.subscriptionPlans.toasts.purchasedSuccessfully'),
       });
       setShowPaymentModal(false);
       setSelectedPlan(null);
       setPaymentMethod('DUMMY');
     },
     onError: (error: any) => {
-      const errorMessage = error?.response?.data?.message || error?.message || 'Failed to purchase subscription';
+      const errorMessage =
+        error?.response?.data?.message || error?.message || t('more.subscriptionPlans.errors.failedToPurchase');
       Toast.show({
         type: 'error',
-        text1: 'Error',
+        text1: t('common.error'),
         text2: errorMessage,
       });
     },
@@ -79,22 +82,25 @@ export const SubscriptionPlansScreen = () => {
 
   // Format price for display
   const formatPrice = (price: number): string => {
-    return `€${price}`;
+    return new Intl.NumberFormat(i18n.language, {
+      style: 'currency',
+      currency: 'EUR',
+    }).format(price);
   };
 
   // Format duration for display
   const formatDuration = (days: number): string => {
-    if (days === 30) return 'per month';
-    if (days === 90) return 'per 3 months';
-    if (days === 365) return 'per year';
-    return `per ${days} days`;
+    if (days === 30) return t('more.subscriptionPlans.duration.perMonth');
+    if (days === 90) return t('more.subscriptionPlans.duration.perThreeMonths');
+    if (days === 365) return t('more.subscriptionPlans.duration.perYear');
+    return t('more.subscriptionPlans.duration.perDays', { count: days });
   };
 
   // Format expiration date
   const formatDate = (dateString: string | null | undefined): string => {
-    if (!dateString) return 'N/A';
+    if (!dateString) return t('common.na');
     const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+    return date.toLocaleDateString(i18n.language, { year: 'numeric', month: 'short', day: 'numeric' });
   };
 
   // Get current plan ID
@@ -125,16 +131,16 @@ export const SubscriptionPlansScreen = () => {
     if (isCurrentPlan(plan._id)) {
       Toast.show({
         type: 'info',
-        text1: 'Info',
-        text2: 'This is your current plan',
+        text1: t('common.info'),
+        text2: t('more.subscriptionPlans.toasts.currentPlan'),
       });
       return;
     }
     if (plan.status !== 'ACTIVE') {
       Toast.show({
         type: 'error',
-        text1: 'Error',
-        text2: 'This plan is not available for purchase',
+        text1: t('common.error'),
+        text2: t('more.subscriptionPlans.errors.planNotAvailable'),
       });
       return;
     }
@@ -167,7 +173,7 @@ export const SubscriptionPlansScreen = () => {
       <SafeAreaView style={styles.container}>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={colors.primary} />
-          <Text style={styles.loadingText}>Loading subscription plans...</Text>
+          <Text style={styles.loadingText}>{t('more.subscriptionPlans.loading')}</Text>
         </View>
       </SafeAreaView>
     );
@@ -178,9 +184,11 @@ export const SubscriptionPlansScreen = () => {
       <SafeAreaView style={styles.container}>
         <View style={styles.errorContainer}>
           <Ionicons name="alert-circle-outline" size={48} color={colors.error} />
-          <Text style={styles.errorTitle}>Error Loading Plans</Text>
+          <Text style={styles.errorTitle}>{t('more.subscriptionPlans.error.title')}</Text>
           <Text style={styles.errorText}>
-            {(plansError as any)?.response?.data?.message || (plansError as any)?.message || 'Failed to load subscription plans'}
+            {(plansError as any)?.response?.data?.message ||
+              (plansError as any)?.message ||
+              t('more.subscriptionPlans.error.failedToLoad')}
           </Text>
         </View>
       </SafeAreaView>
@@ -199,43 +207,54 @@ export const SubscriptionPlansScreen = () => {
             <View style={styles.currentPlanContent}>
               <View>
                 <Text style={styles.currentPlanTitle}>
-                  Current Plan: {typeof currentSubscription.subscriptionPlan === 'object' 
-                    ? currentSubscription.subscriptionPlan.name 
-                    : 'N/A'}
+                  {t('more.subscriptionPlans.currentPlan.label')}{' '}
+                  {typeof currentSubscription.subscriptionPlan === 'object'
+                    ? currentSubscription.subscriptionPlan.name
+                    : t('common.na')}
                 </Text>
                 <Text style={styles.currentPlanSubtitle}>
                   {currentSubscription.hasActiveSubscription ? (
-                    <>Renews on: {formatDate(currentSubscription.subscriptionExpiresAt)}</>
+                    <>
+                      {t('more.subscriptionPlans.currentPlan.renewsOn', {
+                        date: formatDate(currentSubscription.subscriptionExpiresAt),
+                      })}
+                    </>
                   ) : (
-                    <>Expired on: {formatDate(currentSubscription.subscriptionExpiresAt)}</>
+                    <>
+                      {t('more.subscriptionPlans.currentPlan.expiredOn', {
+                        date: formatDate(currentSubscription.subscriptionExpiresAt),
+                      })}
+                    </>
                   )}
                 </Text>
               </View>
               <View style={[styles.activeBadge, !currentSubscription.hasActiveSubscription && styles.expiredBadge]}>
                 <Text style={styles.activeBadgeText}>
-                  {currentSubscription.hasActiveSubscription ? 'Active' : 'Expired'}
+                  {currentSubscription.hasActiveSubscription
+                    ? t('more.subscriptionPlans.currentPlan.status.active')
+                    : t('more.subscriptionPlans.currentPlan.status.expired')}
                 </Text>
               </View>
             </View>
 
             {(currentSubscription as any)?.usage && (currentSubscription as any)?.remaining && (
               <View style={styles.usageCard}>
-                <Text style={styles.usageTitle}>Usage This Period</Text>
+                <Text style={styles.usageTitle}>{t('more.subscriptionPlans.usage.title')}</Text>
                 <View style={styles.usageGrid}>
                   <View style={styles.usageItem}>
-                    <Text style={styles.usageLabel}>Private Consultations</Text>
+                    <Text style={styles.usageLabel}>{t('more.subscriptionPlans.usage.privateConsultations')}</Text>
                     <Text style={styles.usageValue}>
                       {(currentSubscription as any).usage.privateConsultations} / {formatLimit((currentSubscription as any).subscriptionPlan?.limits?.privateConsultations)}
                     </Text>
                   </View>
                   <View style={styles.usageItem}>
-                    <Text style={styles.usageLabel}>Video Consultations</Text>
+                    <Text style={styles.usageLabel}>{t('more.subscriptionPlans.usage.videoConsultations')}</Text>
                     <Text style={styles.usageValue}>
                       {(currentSubscription as any).usage.videoConsultations} / {formatLimit((currentSubscription as any).subscriptionPlan?.limits?.videoConsultations)}
                     </Text>
                   </View>
                   <View style={styles.usageItem}>
-                    <Text style={styles.usageLabel}>Chat Sessions</Text>
+                    <Text style={styles.usageLabel}>{t('more.subscriptionPlans.usage.chatSessions')}</Text>
                     <Text style={styles.usageValue}>
                       {(currentSubscription as any).usage.chatSessions} / {formatLimit((currentSubscription as any).subscriptionPlan?.limits?.chatSessions)}
                     </Text>
@@ -251,8 +270,8 @@ export const SubscriptionPlansScreen = () => {
           <View style={styles.warningCard}>
             <Ionicons name="warning-outline" size={24} color={colors.warning} />
             <View style={styles.warningContent}>
-              <Text style={styles.warningTitle}>No Active Subscription</Text>
-              <Text style={styles.warningText}>You don't have an active subscription. Please select a plan below.</Text>
+              <Text style={styles.warningTitle}>{t('more.subscriptionPlans.noActiveSubscription.title')}</Text>
+              <Text style={styles.warningText}>{t('more.subscriptionPlans.noActiveSubscription.body')}</Text>
             </View>
           </View>
         )}
@@ -261,8 +280,8 @@ export const SubscriptionPlansScreen = () => {
         {plans.length === 0 ? (
           <View style={styles.emptyContainer}>
             <Ionicons name="card-outline" size={64} color={colors.textLight} />
-            <Text style={styles.emptyTitle}>No subscription plans available</Text>
-            <Text style={styles.emptyText}>Please check back later for available plans.</Text>
+            <Text style={styles.emptyTitle}>{t('more.subscriptionPlans.empty.title')}</Text>
+            <Text style={styles.emptyText}>{t('more.subscriptionPlans.empty.body')}</Text>
           </View>
         ) : (
           <View style={styles.plansContainer}>
@@ -281,12 +300,12 @@ export const SubscriptionPlansScreen = () => {
                 >
                   {isPopular && (
                     <View style={styles.popularBadge}>
-                      <Text style={styles.popularBadgeText}>Most Popular</Text>
+                      <Text style={styles.popularBadgeText}>{t('more.subscriptionPlans.badges.mostPopular')}</Text>
                     </View>
                   )}
                   {isCurrent && (
                     <View style={styles.currentBadge}>
-                      <Text style={styles.currentBadgeText}>Current Plan</Text>
+                      <Text style={styles.currentBadgeText}>{t('more.subscriptionPlans.badges.currentPlan')}</Text>
                     </View>
                   )}
                   <View style={styles.planContent}>
@@ -298,18 +317,26 @@ export const SubscriptionPlansScreen = () => {
 
                     {plan.limits && (
                       <View style={styles.limitsContainer}>
-                        <Text style={styles.limitsTitle}>Plan Limits</Text>
+                        <Text style={styles.limitsTitle}>{t('more.subscriptionPlans.limits.title')}</Text>
                         <Text style={styles.limitsText}>
-                          Private Consultations: {formatLimit(plan.limits.privateConsultations)}
+                          {t('more.subscriptionPlans.limits.privateConsultations', {
+                            value: formatLimit(plan.limits.privateConsultations),
+                          })}
                         </Text>
                         <Text style={styles.limitsText}>
-                          Video Consultations: {formatLimit(plan.limits.videoConsultations)}
+                          {t('more.subscriptionPlans.limits.videoConsultations', {
+                            value: formatLimit(plan.limits.videoConsultations),
+                          })}
                         </Text>
                         <Text style={styles.limitsText}>
-                          Chat Sessions: {formatLimit(plan.limits.chatSessions)}
+                          {t('more.subscriptionPlans.limits.chatSessions', {
+                            value: formatLimit(plan.limits.chatSessions),
+                          })}
                         </Text>
                         <Text style={styles.limitsText}>
-                          CRM Access: {plan.crmAccess ? 'Yes' : 'No'}
+                          {t('more.subscriptionPlans.limits.crmAccess', {
+                            value: plan.crmAccess ? t('common.yes') : t('common.no'),
+                          })}
                         </Text>
                       </View>
                     )}
@@ -323,12 +350,12 @@ export const SubscriptionPlansScreen = () => {
                           </View>
                         ))
                       ) : (
-                        <Text style={styles.noFeaturesText}>No features listed</Text>
+                        <Text style={styles.noFeaturesText}>{t('more.subscriptionPlans.features.noneListed')}</Text>
                       )}
                     </View>
                     {isCurrent ? (
                       <TouchableOpacity style={styles.currentPlanButton} disabled>
-                        <Text style={styles.currentPlanButtonText}>Current Plan</Text>
+                        <Text style={styles.currentPlanButtonText}>{t('more.subscriptionPlans.badges.currentPlan')}</Text>
                       </TouchableOpacity>
                     ) : (
                       <TouchableOpacity
@@ -343,7 +370,9 @@ export const SubscriptionPlansScreen = () => {
                             isPopular && styles.popularUpgradeButtonText,
                           ]}
                         >
-                          {plan.status === 'ACTIVE' ? 'Subscribe Now' : 'Not Available'}
+                          {plan.status === 'ACTIVE'
+                            ? t('more.subscriptionPlans.actions.subscribeNow')
+                            : t('more.subscriptionPlans.actions.notAvailable')}
                         </Text>
                       </TouchableOpacity>
                     )}
@@ -358,11 +387,8 @@ export const SubscriptionPlansScreen = () => {
         <View style={styles.infoCard}>
           <Ionicons name="information-circle" size={24} color={colors.primary} />
           <View style={styles.infoContent}>
-            <Text style={styles.infoTitle}>Subscription Information</Text>
-            <Text style={styles.infoText}>
-              You can upgrade or downgrade your plan at any time. Changes will be reflected immediately, and billing
-              will be prorated. Cancel anytime with no long-term commitment.
-            </Text>
+            <Text style={styles.infoTitle}>{t('more.subscriptionPlans.info.title')}</Text>
+            <Text style={styles.infoText}>{t('more.subscriptionPlans.info.body')}</Text>
           </View>
         </View>
       </ScrollView>
@@ -372,7 +398,7 @@ export const SubscriptionPlansScreen = () => {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Subscribe to Plan</Text>
+              <Text style={styles.modalTitle}>{t('more.subscriptionPlans.paymentModal.title')}</Text>
               <TouchableOpacity
                 onPress={() => {
                   setShowPaymentModal(false);
@@ -388,13 +414,18 @@ export const SubscriptionPlansScreen = () => {
                 {selectedPlan && (
                   <>
                     <View style={styles.selectedPlanInfo}>
-                      <Text style={styles.selectedPlanName}>Selected Plan: {selectedPlan.name}</Text>
+                      <Text style={styles.selectedPlanName}>
+                        {t('more.subscriptionPlans.paymentModal.selectedPlan', { name: selectedPlan.name })}
+                      </Text>
                       <Text style={styles.selectedPlanPrice}>
-                        Price: {formatPrice(selectedPlan.price)} {formatDuration(selectedPlan.durationInDays)}
+                        {t('more.subscriptionPlans.paymentModal.price', {
+                          price: formatPrice(selectedPlan.price),
+                          duration: formatDuration(selectedPlan.durationInDays),
+                        })}
                       </Text>
                     </View>
 
-                    <Text style={styles.paymentMethodTitle}>Payment Method</Text>
+                    <Text style={styles.paymentMethodTitle}>{t('more.subscriptionPlans.paymentModal.paymentMethod')}</Text>
                     <View style={styles.paymentMethods}>
                       <TouchableOpacity
                         style={[
@@ -405,7 +436,7 @@ export const SubscriptionPlansScreen = () => {
                         activeOpacity={0.7}
                       >
                         <Ionicons name="card" size={20} color={colors.primary} />
-                        <Text style={styles.paymentMethodText}>Dummy Payment</Text>
+                        <Text style={styles.paymentMethodText}>{t('more.subscriptionPlans.paymentMethods.dummy')}</Text>
                       </TouchableOpacity>
                       <TouchableOpacity
                         style={[
@@ -416,7 +447,7 @@ export const SubscriptionPlansScreen = () => {
                         activeOpacity={0.7}
                       >
                         <Ionicons name="card" size={20} color={colors.primary} />
-                        <Text style={styles.paymentMethodText}>Credit/Debit Card</Text>
+                        <Text style={styles.paymentMethodText}>{t('more.subscriptionPlans.paymentMethods.card')}</Text>
                       </TouchableOpacity>
                       <TouchableOpacity
                         style={[
@@ -427,7 +458,7 @@ export const SubscriptionPlansScreen = () => {
                         activeOpacity={0.7}
                       >
                         <Ionicons name="logo-paypal" size={20} color={colors.primary} />
-                        <Text style={styles.paymentMethodText}>PayPal</Text>
+                        <Text style={styles.paymentMethodText}>{t('more.subscriptionPlans.paymentMethods.paypal')}</Text>
                       </TouchableOpacity>
                       <TouchableOpacity
                         style={[
@@ -438,7 +469,7 @@ export const SubscriptionPlansScreen = () => {
                         activeOpacity={0.7}
                       >
                         <Ionicons name="business" size={20} color={colors.primary} />
-                        <Text style={styles.paymentMethodText}>Bank Transfer</Text>
+                        <Text style={styles.paymentMethodText}>{t('more.subscriptionPlans.paymentMethods.bank')}</Text>
                       </TouchableOpacity>
                     </View>
                   </>
@@ -455,10 +486,14 @@ export const SubscriptionPlansScreen = () => {
                 activeOpacity={0.7}
                 disabled={buySubscriptionMutation.isPending}
               >
-                <Text style={styles.cancelButtonText}>Cancel</Text>
+                <Text style={styles.cancelButtonText}>{t('common.cancel')}</Text>
               </TouchableOpacity>
               <Button
-                title={buySubscriptionMutation.isPending ? 'Processing...' : 'Pay Now'}
+                title={
+                  buySubscriptionMutation.isPending
+                    ? t('common.processing')
+                    : t('more.subscriptionPlans.actions.payNow')
+                }
                 onPress={handlePayment}
                 style={styles.payButton}
                 disabled={buySubscriptionMutation.isPending}

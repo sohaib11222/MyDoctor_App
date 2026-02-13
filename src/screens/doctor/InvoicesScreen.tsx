@@ -17,8 +17,8 @@ import { useAuth } from '../../contexts/AuthContext';
 import { colors } from '../../constants/colors';
 import { Ionicons } from '@expo/vector-icons';
 import * as paymentApi from '../../services/payment';
-import * as appointmentApi from '../../services/appointment';
 import { API_BASE_URL } from '../../config/api';
+import { useTranslation } from 'react-i18next';
 
 const defaultAvatar = require('../../../assets/avatar.png');
 
@@ -63,43 +63,6 @@ const normalizeImageUrl = (imageUri: string | undefined | null): string | null =
 /**
  * Format date
  */
-const formatDate = (date: string | null | undefined): string => {
-  if (!date) return 'N/A';
-  const d = new Date(date);
-  return d.toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' });
-};
-
-/**
- * Format date and time
- */
-const formatDateTime = (date: string | null | undefined, time?: string): string => {
-  if (!date) return 'N/A';
-  const d = new Date(date);
-  const dateStr = d.toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' });
-  return time ? `${dateStr} ${time}` : dateStr;
-};
-
-/**
- * Format currency
- */
-const formatCurrency = (amount: number | null | undefined, currency: string = 'USD'): string => {
-  if (amount === null || amount === undefined) return 'N/A';
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: currency || 'USD',
-  }).format(amount);
-};
-
-/**
- * Get transaction type
- */
-const getTransactionType = (transaction: paymentApi.Transaction): string => {
-  if (transaction.relatedAppointmentId) return 'Appointment';
-  if (transaction.relatedSubscriptionId) return 'Subscription';
-  if (transaction.relatedProductId) return 'Product';
-  return 'Other';
-};
-
 /**
  * Get status color
  */
@@ -120,12 +83,50 @@ const getStatusColor = (status: string): string => {
 
 export const InvoicesScreen = () => {
   const { user } = useAuth();
+  const { t, i18n } = useTranslation();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedTransaction, setSelectedTransaction] = useState<paymentApi.Transaction | null>(null);
   const [showInvoiceModal, setShowInvoiceModal] = useState(false);
   const [page, setPage] = useState(1);
   const limit = 10;
   const [refreshing, setRefreshing] = useState(false);
+
+  const formatDate = (date: string | null | undefined): string => {
+    if (!date) return t('common.na');
+    const d = new Date(date);
+    return d.toLocaleDateString(i18n.language, { day: 'numeric', month: 'short', year: 'numeric' });
+  };
+
+  const formatDateTime = (date: string | null | undefined, time?: string): string => {
+    if (!date) return t('common.na');
+    const d = new Date(date);
+    const dateStr = d.toLocaleDateString(i18n.language, { day: 'numeric', month: 'short', year: 'numeric' });
+    return time ? `${dateStr} ${time}` : dateStr;
+  };
+
+  const formatCurrency = (amount: number | null | undefined, currency: string = 'USD'): string => {
+    if (amount === null || amount === undefined) return t('common.na');
+    return new Intl.NumberFormat(i18n.language, {
+      style: 'currency',
+      currency: currency || 'USD',
+    }).format(amount);
+  };
+
+  const getTransactionType = (transaction: paymentApi.Transaction): string => {
+    if (transaction.relatedAppointmentId) return t('more.invoices.transactionTypes.appointment');
+    if (transaction.relatedSubscriptionId) return t('more.invoices.transactionTypes.subscription');
+    if (transaction.relatedProductId) return t('more.invoices.transactionTypes.product');
+    return t('more.invoices.transactionTypes.other');
+  };
+
+  const getStatusLabel = (status: string | undefined | null): string => {
+    const s = String(status || '').toUpperCase();
+    if (s === 'SUCCESS') return t('more.invoices.status.success');
+    if (s === 'PENDING') return t('more.invoices.status.pending');
+    if (s === 'FAILED') return t('more.invoices.status.failed');
+    if (s === 'REFUNDED') return t('more.invoices.status.refunded');
+    return status ? String(status) : t('common.na');
+  };
 
   // Fetch transactions (subscription payments where userId = doctorId)
   const { data: transactionsData, isLoading, error, refetch } = useQuery({
@@ -196,7 +197,7 @@ export const InvoicesScreen = () => {
       <SafeAreaView style={styles.container}>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={colors.primary} />
-          <Text style={styles.loadingText}>Loading invoices...</Text>
+          <Text style={styles.loadingText}>{t('more.invoices.loading')}</Text>
         </View>
       </SafeAreaView>
     );
@@ -207,9 +208,9 @@ export const InvoicesScreen = () => {
       <SafeAreaView style={styles.container}>
         <View style={styles.errorContainer}>
           <Ionicons name="alert-circle-outline" size={48} color={colors.error} />
-          <Text style={styles.errorTitle}>Error Loading Invoices</Text>
+          <Text style={styles.errorTitle}>{t('more.invoices.errorTitle')}</Text>
           <Text style={styles.errorText}>
-            {(error as any)?.response?.data?.message || (error as any)?.message || 'Failed to load invoices'}
+            {(error as any)?.response?.data?.message || (error as any)?.message || t('more.invoices.errorBody')}
           </Text>
         </View>
       </SafeAreaView>
@@ -220,12 +221,12 @@ export const InvoicesScreen = () => {
     <SafeAreaView style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Invoices</Text>
+        <Text style={styles.headerTitle}>{t('screens.invoices')}</Text>
         <View style={styles.searchContainer}>
           <Ionicons name="search" size={20} color={colors.textSecondary} style={styles.searchIcon} />
           <TextInput
             style={styles.searchInput}
-            placeholder="Search by ID, Patient, Appointment Number..."
+            placeholder={t('more.invoices.doctorSearchPlaceholder')}
             placeholderTextColor={colors.textLight}
             value={searchQuery}
             onChangeText={setSearchQuery}
@@ -242,9 +243,9 @@ export const InvoicesScreen = () => {
         {filteredTransactions.length === 0 ? (
           <View style={styles.emptyContainer}>
             <Ionicons name="receipt-outline" size={64} color={colors.textLight} />
-            <Text style={styles.emptyTitle}>No invoices found</Text>
+            <Text style={styles.emptyTitle}>{t('more.invoices.empty')}</Text>
             <Text style={styles.emptyText}>
-              {searchQuery ? 'Try adjusting your search' : 'Your invoices will appear here'}
+              {searchQuery ? t('more.invoices.emptySearchHint') : t('more.invoices.emptyHint')}
             </Text>
           </View>
         ) : (
@@ -254,9 +255,9 @@ export const InvoicesScreen = () => {
                 transaction.relatedAppointmentId?.patientId?.profileImage
               );
               const patientName =
-                transaction.relatedAppointmentId?.patientId?.fullName || 'N/A';
+                transaction.relatedAppointmentId?.patientId?.fullName || t('common.na');
               const appointmentNumber =
-                transaction.relatedAppointmentId?.appointmentNumber || 'N/A';
+                transaction.relatedAppointmentId?.appointmentNumber || t('common.na');
 
               return (
                 <TouchableOpacity
@@ -276,7 +277,7 @@ export const InvoicesScreen = () => {
                         <Text
                           style={[styles.statusText, { color: getStatusColor(transaction.status) }]}
                         >
-                          {transaction.status}
+                          {getStatusLabel(transaction.status)}
                         </Text>
                       </View>
                     </View>
@@ -292,7 +293,7 @@ export const InvoicesScreen = () => {
                       <View style={styles.patientDetails}>
                         <Text style={styles.patientName}>{patientName}</Text>
                         <Text style={styles.appointmentNumber}>
-                          Appointment: {appointmentNumber}
+                          {t('more.invoices.labels.appointmentLabel')} {appointmentNumber}
                         </Text>
                         {transaction.relatedAppointmentId.appointmentDate && (
                           <Text style={styles.appointmentDate}>
@@ -308,11 +309,11 @@ export const InvoicesScreen = () => {
 
                   <View style={styles.transactionFooter}>
                     <View>
-                      <Text style={styles.footerLabel}>Transaction Date</Text>
+                      <Text style={styles.footerLabel}>{t('more.invoices.labels.transactionDate')}</Text>
                       <Text style={styles.footerValue}>{formatDate(transaction.createdAt)}</Text>
                     </View>
                     <View style={styles.amountContainer}>
-                      <Text style={styles.amountLabel}>Amount</Text>
+                      <Text style={styles.amountLabel}>{t('more.invoices.labels.amountNoColon')}</Text>
                       <Text style={styles.amountValue}>
                         {formatCurrency(transaction.amount, transaction.currency)}
                       </Text>
@@ -333,11 +334,11 @@ export const InvoicesScreen = () => {
                   <Text
                     style={[styles.paginationButtonText, page === 1 && styles.paginationButtonTextDisabled]}
                   >
-                    Previous
+                    {t('common.prev')}
                   </Text>
                 </TouchableOpacity>
                 <Text style={styles.paginationText}>
-                  Page {page} of {pagination.pages}
+                  {t('more.invoices.pagination.pageOf', { current: page, total: pagination.pages })}
                 </Text>
                 <TouchableOpacity
                   style={[
@@ -353,7 +354,7 @@ export const InvoicesScreen = () => {
                       page === pagination.pages && styles.paginationButtonTextDisabled,
                     ]}
                   >
-                    Next
+                    {t('common.next')}
                   </Text>
                 </TouchableOpacity>
               </View>
@@ -372,7 +373,7 @@ export const InvoicesScreen = () => {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Invoice Details</Text>
+              <Text style={styles.modalTitle}>{t('more.invoices.invoiceDetails')}</Text>
               <TouchableOpacity onPress={() => setShowInvoiceModal(false)}>
                 <Ionicons name="close" size={24} color={colors.text} />
               </TouchableOpacity>
@@ -380,15 +381,15 @@ export const InvoicesScreen = () => {
             {selectedTransaction && (
               <ScrollView style={styles.modalBody} showsVerticalScrollIndicator={false}>
                 <View style={styles.invoiceSection}>
-                  <Text style={styles.invoiceLabel}>Transaction ID</Text>
+                  <Text style={styles.invoiceLabel}>{t('more.invoices.labels.transactionIdNoColon')}</Text>
                   <Text style={styles.invoiceValue}>#{selectedTransaction._id.slice(-8).toUpperCase()}</Text>
                 </View>
                 <View style={styles.invoiceSection}>
-                  <Text style={styles.invoiceLabel}>Type</Text>
+                  <Text style={styles.invoiceLabel}>{t('more.invoices.labels.type')}</Text>
                   <Text style={styles.invoiceValue}>{getTransactionType(selectedTransaction)}</Text>
                 </View>
                 <View style={styles.invoiceSection}>
-                  <Text style={styles.invoiceLabel}>Status</Text>
+                  <Text style={styles.invoiceLabel}>{t('more.invoices.labels.statusNoColon')}</Text>
                   <View
                     style={[
                       styles.statusBadge,
@@ -401,43 +402,43 @@ export const InvoicesScreen = () => {
                         { color: getStatusColor(selectedTransaction.status) },
                       ]}
                     >
-                      {selectedTransaction.status}
+                      {getStatusLabel(selectedTransaction.status)}
                     </Text>
                   </View>
                 </View>
                 <View style={styles.invoiceSection}>
-                  <Text style={styles.invoiceLabel}>Amount</Text>
+                  <Text style={styles.invoiceLabel}>{t('more.invoices.labels.amountNoColon')}</Text>
                   <Text style={styles.invoiceValue}>
                     {formatCurrency(selectedTransaction.amount, selectedTransaction.currency)}
                   </Text>
                 </View>
                 <View style={styles.invoiceSection}>
-                  <Text style={styles.invoiceLabel}>Payment Provider</Text>
-                  <Text style={styles.invoiceValue}>{selectedTransaction.provider || 'N/A'}</Text>
+                  <Text style={styles.invoiceLabel}>{t('more.invoices.labels.paymentProvider')}</Text>
+                  <Text style={styles.invoiceValue}>{selectedTransaction.provider || t('common.na')}</Text>
                 </View>
                 {selectedTransaction.providerReference && (
                   <View style={styles.invoiceSection}>
-                    <Text style={styles.invoiceLabel}>Provider Reference</Text>
+                    <Text style={styles.invoiceLabel}>{t('more.invoices.labels.providerReferenceNoColon')}</Text>
                     <Text style={styles.invoiceValue}>{selectedTransaction.providerReference}</Text>
                   </View>
                 )}
                 {selectedTransaction.relatedAppointmentId && (
                   <>
                     <View style={styles.invoiceSection}>
-                      <Text style={styles.invoiceLabel}>Appointment Number</Text>
+                      <Text style={styles.invoiceLabel}>{t('more.invoices.labels.appointmentNumberOnly')}</Text>
                       <Text style={styles.invoiceValue}>
                         {selectedTransaction.relatedAppointmentId.appointmentNumber}
                       </Text>
                     </View>
                     <View style={styles.invoiceSection}>
-                      <Text style={styles.invoiceLabel}>Patient</Text>
+                      <Text style={styles.invoiceLabel}>{t('more.invoices.labels.patient')}</Text>
                       <Text style={styles.invoiceValue}>
-                        {selectedTransaction.relatedAppointmentId.patientId?.fullName || 'N/A'}
+                        {selectedTransaction.relatedAppointmentId.patientId?.fullName || t('common.na')}
                       </Text>
                     </View>
                     {selectedTransaction.relatedAppointmentId.appointmentDate && (
                       <View style={styles.invoiceSection}>
-                        <Text style={styles.invoiceLabel}>Appointment Date</Text>
+                        <Text style={styles.invoiceLabel}>{t('more.invoices.labels.appointmentDate')}</Text>
                         <Text style={styles.invoiceValue}>
                           {formatDateTime(
                             selectedTransaction.relatedAppointmentId.appointmentDate,
@@ -449,7 +450,7 @@ export const InvoicesScreen = () => {
                   </>
                 )}
                 <View style={styles.invoiceSection}>
-                  <Text style={styles.invoiceLabel}>Transaction Date</Text>
+                  <Text style={styles.invoiceLabel}>{t('more.invoices.labels.transactionDate')}</Text>
                   <Text style={styles.invoiceValue}>{formatDate(selectedTransaction.createdAt)}</Text>
                 </View>
               </ScrollView>

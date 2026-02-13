@@ -21,25 +21,16 @@ import * as orderApi from '../../services/order';
 import { useAuth } from '../../contexts/AuthContext';
 import * as pharmacySubscriptionApi from '../../services/pharmacySubscription';
 import { Button } from '../../components/common/Button';
+import { useTranslation } from 'react-i18next';
 
 type OrdersListScreenNavigationProp = NativeStackNavigationProp<OrdersStackParamList>;
-
-const statusFilters: Array<{ label: string; value?: orderApi.Order['status'] }> = [
-  { label: 'All' },
-  { label: 'Pending', value: 'PENDING' },
-  { label: 'Confirmed', value: 'CONFIRMED' },
-  { label: 'Processing', value: 'PROCESSING' },
-  { label: 'Shipped', value: 'SHIPPED' },
-  { label: 'Delivered', value: 'DELIVERED' },
-  { label: 'Cancelled', value: 'CANCELLED' },
-  { label: 'Refunded', value: 'REFUNDED' },
-];
 
 export const OrdersListScreen = () => {
   const navigation = useNavigation<OrdersListScreenNavigationProp>();
   const { user } = useAuth();
+  const { t, i18n } = useTranslation();
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedFilter, setSelectedFilter] = useState(statusFilters[0]);
+  const [selectedStatus, setSelectedStatus] = useState<'ALL' | orderApi.Order['status']>('ALL');
   const [refreshing, setRefreshing] = useState(false);
 
   const userId = user?._id || user?.id;
@@ -79,6 +70,24 @@ export const OrdersListScreen = () => {
     }
   };
 
+  const statusFilters = useMemo(
+    () => [
+      { key: 'ALL' as const, value: undefined, label: t('pharmacyAdmin.orders.filters.all') },
+      { key: 'PENDING' as const, value: 'PENDING' as const, label: t('pharmacyAdmin.orders.filters.pending') },
+      { key: 'CONFIRMED' as const, value: 'CONFIRMED' as const, label: t('pharmacyAdmin.orders.filters.confirmed') },
+      { key: 'PROCESSING' as const, value: 'PROCESSING' as const, label: t('pharmacyAdmin.orders.filters.processing') },
+      { key: 'SHIPPED' as const, value: 'SHIPPED' as const, label: t('pharmacyAdmin.orders.filters.shipped') },
+      { key: 'DELIVERED' as const, value: 'DELIVERED' as const, label: t('pharmacyAdmin.orders.filters.delivered') },
+      { key: 'CANCELLED' as const, value: 'CANCELLED' as const, label: t('pharmacyAdmin.orders.filters.cancelled') },
+      { key: 'REFUNDED' as const, value: 'REFUNDED' as const, label: t('pharmacyAdmin.orders.filters.refunded') },
+    ],
+    [t]
+  );
+
+  const selectedFilter = useMemo(() => {
+    return statusFilters.find((f) => f.key === selectedStatus) || statusFilters[0];
+  }, [selectedStatus, statusFilters]);
+
   const getStatusColor = (status: orderApi.Order['status']) => {
     switch (status) {
       case 'PENDING':
@@ -100,15 +109,15 @@ export const OrdersListScreen = () => {
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
-    return date.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+    return date.toLocaleDateString(i18n.language, { day: '2-digit', month: 'short', year: 'numeric' });
   };
 
   const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'EUR' }).format(amount || 0);
+    return new Intl.NumberFormat(i18n.language, { style: 'currency', currency: 'EUR' }).format(amount || 0);
   };
 
   const { data: ordersResponse, isLoading, error, refetch } = useQuery({
-    queryKey: ['pharmacyOrders', selectedFilter.value || 'ALL', userId],
+    queryKey: ['pharmacyOrders', selectedStatus, userId],
     queryFn: () =>
       orderApi.getPharmacyOrders({
         status: selectedFilter.value,
@@ -150,9 +159,11 @@ export const OrdersListScreen = () => {
 
   const renderOrder = ({ item }: { item: orderApi.Order }) => {
     const patient = typeof item.patientId === 'object' ? item.patientId : null;
-    const customerName = patient?.fullName || 'Customer';
+    const customerName = patient?.fullName || t('pharmacyAdmin.common.customer');
     const customerEmail = patient?.email || '';
     const itemCount = item.items?.reduce((sum, it) => sum + (it.quantity || 0), 0) || 0;
+
+    const statusLabel = t(`pharmacy.checkout.orders.status.${item.status}` as any, { defaultValue: item.status });
 
     return (
     <TouchableOpacity
@@ -167,7 +178,7 @@ export const OrdersListScreen = () => {
         </View>
         <View style={[styles.statusBadge, { backgroundColor: `${getStatusColor(item.status)}20` }]}>
           <Text style={[styles.statusText, { color: getStatusColor(item.status) }]}>
-            {item.status}
+            {statusLabel}
           </Text>
         </View>
       </View>
@@ -185,11 +196,11 @@ export const OrdersListScreen = () => {
 
       <View style={styles.orderFooter}>
         <View style={styles.footerInfo}>
-          <Text style={styles.footerLabel}>Items:</Text>
+          <Text style={styles.footerLabel}>{t('pharmacyAdmin.orders.labels.items')}</Text>
           <Text style={styles.footerValue}>{itemCount}</Text>
         </View>
         <View style={styles.footerInfo}>
-          <Text style={styles.footerLabel}>Total:</Text>
+          <Text style={styles.footerLabel}>{t('pharmacyAdmin.orders.labels.total')}</Text>
           <Text style={styles.footerTotal}>{formatCurrency(item.total)}</Text>
         </View>
       </View>
@@ -202,15 +213,15 @@ export const OrdersListScreen = () => {
       {requiresSubscription && subscriptionLoading ? (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={colors.primary} />
-          <Text style={styles.loadingText}>Loading subscription...</Text>
+          <Text style={styles.loadingText}>{t('pharmacyAdmin.dashboard.banners.loadingSubscription')}</Text>
         </View>
       ) : requiresSubscription && !hasActiveSubscription ? (
         <View style={styles.emptyState}>
           <Ionicons name="card-outline" size={64} color={colors.warning} />
-          <Text style={styles.emptyStateTitle}>Subscription Required</Text>
-          <Text style={styles.emptyStateText}>You need an active subscription to manage orders.</Text>
+          <Text style={styles.emptyStateTitle}>{t('pharmacyAdmin.orders.subscriptionRequired.title')}</Text>
+          <Text style={styles.emptyStateText}>{t('pharmacyAdmin.orders.subscriptionRequired.body')}</Text>
           <View style={{ width: '100%', marginTop: 16 }}>
-            <Button title="View Subscription Plans" onPress={goToSubscription} />
+            <Button title={t('pharmacyAdmin.orders.actions.viewSubscriptionPlans')} onPress={goToSubscription} />
           </View>
         </View>
       ) : (
@@ -218,21 +229,21 @@ export const OrdersListScreen = () => {
           {!isPharmacyUser ? (
             <View style={styles.emptyState}>
               <Ionicons name="receipt-outline" size={64} color={colors.textLight} />
-              <Text style={styles.emptyStateTitle}>Orders</Text>
-              <Text style={styles.emptyStateText}>This section is available for pharmacy accounts only.</Text>
+              <Text style={styles.emptyStateTitle}>{t('screens.orders')}</Text>
+              <Text style={styles.emptyStateText}>{t('pharmacyAdmin.common.pharmacyAccountsOnly')}</Text>
             </View>
           ) : isLoading && !refreshing ? (
             <View style={styles.loadingContainer}>
               <ActivityIndicator size="large" color={colors.primary} />
-              <Text style={styles.loadingText}>Loading orders...</Text>
+              <Text style={styles.loadingText}>{t('pharmacyAdmin.orders.loadingOrders')}</Text>
             </View>
           ) : error ? (
             <View style={styles.emptyState}>
               <Ionicons name="alert-circle-outline" size={64} color={colors.error} />
-              <Text style={styles.emptyStateTitle}>Error loading orders</Text>
-              <Text style={styles.emptyStateText}>{(error as any)?.message || 'Please try again'}</Text>
+              <Text style={styles.emptyStateTitle}>{t('pharmacyAdmin.orders.errorLoadingOrdersTitle')}</Text>
+              <Text style={styles.emptyStateText}>{(error as any)?.message || t('pharmacyAdmin.orders.pleaseTryAgain')}</Text>
               <TouchableOpacity style={styles.retryButton} onPress={() => refetch()} activeOpacity={0.7}>
-                <Text style={styles.retryButtonText}>Retry</Text>
+                <Text style={styles.retryButtonText}>{t('common.retry')}</Text>
               </TouchableOpacity>
             </View>
           ) : (
@@ -242,7 +253,7 @@ export const OrdersListScreen = () => {
                 <Ionicons name="search-outline" size={20} color={colors.textSecondary} />
                 <TextInput
                   style={styles.searchInput}
-                  placeholder="Search orders..."
+                  placeholder={t('pharmacyAdmin.orders.placeholders.searchOrders')}
                   placeholderTextColor={colors.textLight}
                   value={searchQuery}
                   onChangeText={setSearchQuery}
@@ -261,15 +272,15 @@ export const OrdersListScreen = () => {
                     key={filter.label}
                     style={[
                       styles.filterChip,
-                      selectedFilter.label === filter.label && styles.filterChipActive,
+                      selectedFilter.key === filter.key && styles.filterChipActive,
                     ]}
-                    onPress={() => setSelectedFilter(filter)}
+                    onPress={() => setSelectedStatus(filter.key)}
                     activeOpacity={0.7}
                   >
                     <Text
                       style={[
                         styles.filterChipText,
-                        selectedFilter.label === filter.label && styles.filterChipTextActive,
+                        selectedFilter.key === filter.key && styles.filterChipTextActive,
                       ]}
                     >
                       {filter.label}
@@ -288,11 +299,11 @@ export const OrdersListScreen = () => {
                 ListEmptyComponent={
                   <View style={styles.emptyState}>
                     <Ionicons name="receipt-outline" size={64} color={colors.textLight} />
-                    <Text style={styles.emptyStateTitle}>No orders found</Text>
+                    <Text style={styles.emptyStateTitle}>{t('pharmacyAdmin.orders.empty.title')}</Text>
                     <Text style={styles.emptyStateText}>
-                      {searchQuery || selectedFilter.label !== 'All'
-                        ? 'Try adjusting your filters'
-                        : 'No orders have been placed yet'}
+                      {searchQuery || selectedStatus !== 'ALL'
+                        ? t('pharmacyAdmin.orders.empty.tryAdjustingFilters')
+                        : t('pharmacyAdmin.orders.empty.noOrdersYet')}
                     </Text>
                   </View>
                 }

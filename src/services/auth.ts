@@ -192,3 +192,22 @@ export const resetPassword = async (email: string, code: string, newPassword: st
   return response;
 };
 
+/**
+ * Send phone OTP for authenticated pharmacy/parapharmacy user
+ * @param {string} phone - Phone number in E.164 format
+ */
+export const sendPhoneOtp = async (phone: string): Promise<any> => {
+  const response = await api.post('/auth/phone-otp/send', { phone });
+  return response;
+};
+
+/**
+ * Verify phone OTP for authenticated pharmacy/parapharmacy user
+ * @param {string} code - OTP code
+ * @param {string} phone - Phone number in E.164 format
+ */
+export const verifyPhoneOtp = async (code: string, phone: string): Promise<any> => {
+  const response = await api.post('/auth/phone-otp/verify', { code, phone });
+  return response;
+};
+

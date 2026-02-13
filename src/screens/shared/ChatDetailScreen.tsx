@@ -35,6 +35,7 @@ import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
 import * as uploadApi from '../../services/upload';
 import { copyImageToCacheUri, deleteCacheFiles } from '../../utils/imageUpload';
+import { useTranslation } from 'react-i18next';
 
 type ChatDetailScreenNavigationProp = StackNavigationProp<ChatStackParamList, 'ChatDetail'>;
 type ChatDetailRouteProp = RouteProp<ChatStackParamList, 'ChatDetail'>;
@@ -110,7 +111,10 @@ const formatTime = (dateString: string): string => {
 /**
  * Format date for separator
  */
-const formatDate = (dateString: string): string => {
+const formatDate = (
+  dateString: string,
+  t: (key: string, options?: any) => string
+): string => {
   if (!dateString) return '';
   const date = new Date(dateString);
   const today = new Date();
@@ -118,9 +122,9 @@ const formatDate = (dateString: string): string => {
   yesterday.setDate(yesterday.getDate() - 1);
   
   if (date.toDateString() === today.toDateString()) {
-    return 'Today';
+    return t('chat.date.today');
   } else if (date.toDateString() === yesterday.toDateString()) {
-    return 'Yesterday';
+    return t('chat.date.yesterday');
   } else {
     return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
   }
@@ -132,6 +136,7 @@ const ChatDetailScreen = () => {
   const { user } = useAuth();
   const isDoctor = user?.role === 'doctor';
   const queryClient = useQueryClient();
+  const { t } = useTranslation();
   const { recipientName, chatId, conversationId, appointmentId, patientId, doctorId } = route.params;
   const [message, setMessage] = useState('');
   const [refreshing, setRefreshing] = useState(false);
@@ -223,7 +228,7 @@ const ChatDetailScreen = () => {
     queryKey: ['conversationMessages', actualConversationId],
     queryFn: () => {
       if (!actualConversationId) {
-        throw new Error('Conversation ID is required');
+        throw new Error(t('chat.admin.conversationIdNotFound'));
       }
       return chatApi.getMessages(actualConversationId, { page: 1, limit: 100 });
     },
@@ -276,19 +281,19 @@ const ChatDetailScreen = () => {
     const backendMessage =
       (conversationSetupError as any)?.response?.data?.message ||
       (conversationSetupError as any)?.message ||
-      'Unable to open chat.';
+      t('chat.detail.unableToOpenChat');
 
     if (status === 403) {
-      Alert.alert('Chat not available', backendMessage, [
+      Alert.alert(t('chat.list.chatNotAvailableTitle'), backendMessage, [
         {
-          text: 'OK',
+          text: t('common.ok'),
           onPress: () => {
             if (navigation.canGoBack()) navigation.goBack();
           },
         },
       ]);
     }
-  }, [conversationSetupError, navigation]);
+  }, [conversationSetupError, navigation, t]);
 
   // Transform backend messages to UI format
   const messages = useMemo(() => {
@@ -296,7 +301,7 @@ const ChatDetailScreen = () => {
     
     return messagesResponse.data.messages.map((msg: chatApi.ChatMessage): Message => {
       const isSent = msg.senderId._id === user?.id;
-      const senderName = msg.senderId.fullName || 'Unknown';
+      const senderName = msg.senderId.fullName || t('chat.common.unknown');
       const senderImage = msg.senderId.profileImage;
       
       // Determine message type based on attachments
@@ -381,16 +386,16 @@ const ChatDetailScreen = () => {
         fileInfo,
       };
     });
-  }, [messagesResponse, user?.id]);
+  }, [messagesResponse, t, user?.id]);
 
   // Send message mutation
   const sendMessageMutation = useMutation({
     mutationFn: async (messageText: string) => {
-      if (!user) throw new Error('User not found');
+      if (!user) throw new Error(t('chat.send.failedFallback'));
       
       if (isDoctor && patientId && appointmentId) {
         // Doctor sending to patient
-        if (!user.id) throw new Error('User ID not found');
+        if (!user.id) throw new Error(t('chat.send.failedFallback'));
         return await chatApi.sendMessageToPatient(
           user.id,
           patientId,
@@ -407,7 +412,7 @@ const ChatDetailScreen = () => {
           user.id
         );
       } else {
-        throw new Error('Invalid conversation parameters');
+        throw new Error(t('chat.send.failedFallback'));
       }
     },
     onSuccess: async () => {
@@ -421,10 +426,10 @@ const ChatDetailScreen = () => {
       }, 100);
     },
     onError: (error: any) => {
-      const errorMessage = error?.response?.data?.message || error?.message || 'Failed to send message';
+      const errorMessage = error?.response?.data?.message || error?.message || t('chat.send.failedFallback');
       Toast.show({
         type: 'error',
-        text1: 'Error',
+        text1: t('common.error'),
         text2: errorMessage,
       });
     },
@@ -478,8 +483,8 @@ const ChatDetailScreen = () => {
     if (!permissionResult.granted) {
       Toast.show({
         type: 'error',
-        text1: 'Permission Required',
-        text2: 'Please grant permission to access your photos.',
+        text1: t('chat.permissions.requiredTitle'),
+        text2: t('chat.permissions.photosBody'),
       });
       return;
     }
@@ -497,8 +502,8 @@ const ChatDetailScreen = () => {
       if (oversizedFiles.length > 0) {
         Toast.show({
           type: 'error',
-          text1: 'File Too Large',
-          text2: 'Some files are too large. Maximum size is 50MB.',
+          text1: t('chat.files.fileTooLargeTitle'),
+          text2: t('chat.files.fileTooLargeBody'),
         });
         return;
       }
@@ -540,8 +545,8 @@ const ChatDetailScreen = () => {
         if (oversizedFiles.length > 0) {
           Toast.show({
             type: 'error',
-            text1: 'File Too Large',
-            text2: 'Some files are too large. Maximum size is 50MB.',
+            text1: t('chat.files.fileTooLargeTitle'),
+            text2: t('chat.files.fileTooLargeBody'),
           });
           return;
         }
@@ -569,8 +574,8 @@ const ChatDetailScreen = () => {
       console.error('Error picking document:', error);
       Toast.show({
         type: 'error',
-        text1: 'Error',
-        text2: 'Failed to pick document',
+        text1: t('common.error'),
+        text2: t('chat.files.failedToPickDocument'),
       });
     }
   };
@@ -627,11 +632,14 @@ const ChatDetailScreen = () => {
           }
         } catch (uploadError: any) {
           console.error('Error uploading file:', uploadError);
-          const errorMsg = (uploadError as any)?.response?.data?.message || uploadError?.message || 'Upload failed';
+          const errorMsg =
+            (uploadError as any)?.response?.data?.message ||
+            uploadError?.message ||
+            t('chat.files.uploadFailed');
           Toast.show({
             type: 'error',
-            text1: 'Upload Failed',
-            text2: `Failed to upload ${file.name}: ${errorMsg}`,
+            text1: t('chat.files.uploadFailedTitle'),
+            text2: t('chat.files.failedToUploadNameWithError', { name: file.name, error: errorMsg }),
           });
         }
       }
@@ -643,14 +651,14 @@ const ChatDetailScreen = () => {
 
       // Send message with attachments if any were uploaded, or send text message
       if (uploadedAttachments.length > 0 || message.trim()) {
-        if (!user) throw new Error('User not found');
+        if (!user) throw new Error(t('chat.send.failedFallback'));
         
         // Prepare message data - ensure we don't send empty message when we have attachments
         const messageText = message.trim();
         
         if (isDoctor && patientId && appointmentId) {
           // Doctor sending to patient
-          if (!user.id) throw new Error('User ID not found');
+          if (!user.id) throw new Error(t('chat.send.failedFallback'));
           await chatApi.sendMessageToPatient(
             user.id,
             patientId,
@@ -668,7 +676,7 @@ const ChatDetailScreen = () => {
             user.id
           );
         } else {
-          throw new Error('Invalid conversation parameters');
+          throw new Error(t('chat.send.failedFallback'));
         }
 
         // Clear pending files and message
@@ -684,10 +692,10 @@ const ChatDetailScreen = () => {
         }, 100);
       }
     } catch (error: any) {
-      const errorMessage = (error as any)?.response?.data?.message || error?.message || 'Failed to send message';
+      const errorMessage = (error as any)?.response?.data?.message || error?.message || t('chat.send.failedFallback');
       Toast.show({
         type: 'error',
-        text1: 'Error',
+        text1: t('common.error'),
         text2: errorMessage,
       });
     } finally {
@@ -720,8 +728,8 @@ const ChatDetailScreen = () => {
       if (!normalizedUrl) {
         Toast.show({
           type: 'error',
-          text1: 'Error',
-          text2: 'Invalid file URL',
+          text1: t('common.error'),
+          text2: t('chat.files.invalidFileUrl'),
         });
         return;
       }
@@ -743,8 +751,8 @@ const ChatDetailScreen = () => {
       console.error('Error opening file:', error);
       Toast.show({
         type: 'error',
-        text1: 'Error',
-        text2: error?.message || 'Failed to open file',
+        text1: t('common.error'),
+        text2: error?.message || t('chat.files.failedToOpenFile'),
       });
     }
   };
@@ -754,8 +762,8 @@ const ChatDetailScreen = () => {
     try {
       Toast.show({
         type: 'info',
-        text1: 'Downloading',
-        text2: 'Please wait...',
+        text1: t('chat.files.downloadingTitle'),
+        text2: t('chat.files.pleaseWaitDots'),
       });
 
       // Create a file path in the cache directory
@@ -778,9 +786,9 @@ const ChatDetailScreen = () => {
             } else {
               // Fallback: show success message
               Alert.alert(
-                'Download Complete',
-                `File downloaded: ${sanitizedFileName}`,
-                [{ text: 'OK' }]
+                t('chat.files.downloadCompleteTitle'),
+                t('chat.files.fileDownloaded', { name: sanitizedFileName }),
+                [{ text: t('common.ok') }]
               );
             }
           } else {
@@ -790,35 +798,35 @@ const ChatDetailScreen = () => {
               await Linking.openURL(downloadResult.uri);
             } else {
               Alert.alert(
-                'Download Complete',
-                `File downloaded: ${sanitizedFileName}`,
-                [{ text: 'OK' }]
+                t('chat.files.downloadCompleteTitle'),
+                t('chat.files.fileDownloaded', { name: sanitizedFileName }),
+                [{ text: t('common.ok') }]
               );
             }
           }
 
           Toast.show({
             type: 'success',
-            text1: 'Success',
-            text2: 'File downloaded and opened',
+            text1: t('common.success'),
+            text2: t('chat.files.fileDownloadedAndOpened'),
           });
         } catch (openError) {
           // If opening fails, at least the file is downloaded
           Alert.alert(
-            'Download Complete',
-            `File downloaded: ${sanitizedFileName}\n\nYou can find it in your device's file manager.`,
-            [{ text: 'OK' }]
+            t('chat.files.downloadCompleteTitle'),
+            t('chat.files.fileDownloadedFindInManager', { name: sanitizedFileName }),
+            [{ text: t('common.ok') }]
           );
         }
       } else {
-        throw new Error('Download failed');
+        throw new Error(t('chat.files.downloadFailedBody'));
       }
     } catch (error: any) {
       console.error('Error downloading file:', error);
       Toast.show({
         type: 'error',
-        text1: 'Download Failed',
-        text2: error?.message || 'Failed to download file. Please try again.',
+        text1: t('chat.files.downloadFailedTitle'),
+        text2: error?.message || t('chat.files.downloadFailedBody'),
       });
     }
   };
@@ -830,13 +838,13 @@ const ChatDetailScreen = () => {
     const prevMessageDate = messagesResponse?.data?.messages?.[index - 1]?.createdAt || '';
     
     const showDateSeparator = index === 0 || 
-      (index > 0 && formatDate(messageDate) !== formatDate(prevMessageDate));
+      (index > 0 && formatDate(messageDate, t) !== formatDate(prevMessageDate, t));
 
     return (
       <View>
         {showDateSeparator && (
           <View style={styles.dateSeparator}>
-            <Text style={styles.dateText}>{formatDate(messageDate)}</Text>
+            <Text style={styles.dateText}>{formatDate(messageDate, t)}</Text>
           </View>
         )}
         <View style={[styles.messageContainer, item.isSent ? styles.sentMessage : styles.receivedMessage]}>
@@ -921,8 +929,8 @@ const ChatDetailScreen = () => {
                   } else {
                     Toast.show({
                       type: 'error',
-                      text1: 'Error',
-                      text2: 'File URL not found',
+                      text1: t('common.error'),
+                      text2: t('chat.files.fileUrlNotFound'),
                     });
                   }
                 }}
@@ -981,7 +989,7 @@ const ChatDetailScreen = () => {
         <View style={styles.headerContent}>
           <Image source={recipientAvatar} style={styles.headerAvatar} />
           <Text style={styles.headerTitle} numberOfLines={1}>
-            {recipientName || 'Chat'}
+            {recipientName || t('chat.nav.chat')}
           </Text>
         </View>
         <View style={styles.headerRight} />
@@ -997,7 +1005,7 @@ const ChatDetailScreen = () => {
             <View style={styles.loadingContainer}>
               <ActivityIndicator size="large" color={colors.primary} />
               <Text style={styles.loadingText}>
-                {conversationLoading ? 'Setting up conversation...' : 'Loading messages...'}
+                {conversationLoading ? t('chat.detail.settingUpConversation') : t('chat.detail.loadingMessages')}
               </Text>
             </View>
           )}
@@ -1007,11 +1015,11 @@ const ChatDetailScreen = () => {
               <Ionicons name="alert-circle-outline" size={48} color={colors.error} />
               <Text style={styles.errorText}>
                 {isDoctor 
-                  ? 'Patient information is missing'
-                  : 'Doctor information is missing'}
+                  ? t('chat.detail.patientInfoMissing')
+                  : t('chat.detail.doctorInfoMissing')}
               </Text>
               <Text style={styles.errorSubtext}>
-                Please go back and try again
+                {t('chat.detail.pleaseGoBack')}
               </Text>
             </View>
           )}
@@ -1019,12 +1027,12 @@ const ChatDetailScreen = () => {
           {error && !conversationLoading && actualConversationId && (
             <View style={styles.errorContainer}>
               <Ionicons name="alert-circle-outline" size={48} color={colors.error} />
-              <Text style={styles.errorText}>Failed to load messages</Text>
+              <Text style={styles.errorText}>{t('chat.detail.failedToLoadMessages')}</Text>
               <Text style={styles.errorSubtext}>
-                {(error as any)?.response?.data?.message || (error as any)?.message || 'Please try again'}
+                {(error as any)?.response?.data?.message || (error as any)?.message || t('chat.detail.pleaseTryAgain')}
               </Text>
               <TouchableOpacity style={styles.retryButton} onPress={() => refetch()}>
-                <Text style={styles.retryButtonText}>Retry</Text>
+                <Text style={styles.retryButtonText}>{t('common.retry')}</Text>
               </TouchableOpacity>
             </View>
           )}
@@ -1032,9 +1040,9 @@ const ChatDetailScreen = () => {
           {conversationSetupError && !conversationLoading && !actualConversationId && (
             <View style={styles.errorContainer}>
               <Ionicons name="alert-circle-outline" size={48} color={colors.error} />
-              <Text style={styles.errorText}>Failed to open chat</Text>
+              <Text style={styles.errorText}>{t('chat.detail.failedToOpenChat')}</Text>
               <Text style={styles.errorSubtext}>
-                {(conversationSetupError as any)?.response?.data?.message || (conversationSetupError as any)?.message || 'Please try again'}
+                {(conversationSetupError as any)?.response?.data?.message || (conversationSetupError as any)?.message || t('chat.detail.pleaseTryAgain')}
               </Text>
               <TouchableOpacity
                 style={styles.retryButton}
@@ -1046,7 +1054,7 @@ const ChatDetailScreen = () => {
                   }
                 }}
               >
-                <Text style={styles.retryButtonText}>Retry</Text>
+                <Text style={styles.retryButtonText}>{t('common.retry')}</Text>
               </TouchableOpacity>
             </View>
           )}
@@ -1054,16 +1062,16 @@ const ChatDetailScreen = () => {
           {isWaitingForConversation && (
             <View style={styles.errorContainer}>
               <ActivityIndicator size="large" color={colors.primary} />
-              <Text style={styles.errorText}>Creating conversation...</Text>
-              <Text style={styles.errorSubtext}>Please wait</Text>
+              <Text style={styles.errorText}>{t('chat.detail.creatingConversation')}</Text>
+              <Text style={styles.errorSubtext}>{t('chat.detail.pleaseWait')}</Text>
             </View>
           )}
           
           {!isLoading && !error && messages.length === 0 && (
             <View style={styles.emptyContainer}>
               <Ionicons name="chatbubbles-outline" size={64} color={colors.textLight} />
-              <Text style={styles.emptyText}>No messages yet</Text>
-              <Text style={styles.emptySubtext}>Start the conversation</Text>
+              <Text style={styles.emptyText}>{t('chat.common.noMessagesYet')}</Text>
+              <Text style={styles.emptySubtext}>{t('chat.detail.startTheConversation')}</Text>
             </View>
           )}
           
@@ -1133,7 +1141,7 @@ const ChatDetailScreen = () => {
             </TouchableOpacity>
             <TextInput
               style={styles.input}
-              placeholder="Type your message here..."
+              placeholder={t('chat.detail.messagePlaceholder')}
               placeholderTextColor={colors.textLight}
               value={message}
               onChangeText={setMessage}

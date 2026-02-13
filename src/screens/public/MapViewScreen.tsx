@@ -24,6 +24,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as mappingApi from '../../services/mapping';
 import { API_BASE_URL } from '../../config/api';
 import Toast from 'react-native-toast-message';
+import { useTranslation } from 'react-i18next';
 
 type MapViewScreenNavigationProp = StackNavigationProp<HomeStackParamList, 'MapView'>;
 
@@ -36,6 +37,7 @@ interface ClinicMarker extends mappingApi.NearbyClinic {
 
 const MapViewScreen = () => {
   const navigation = useNavigation<MapViewScreenNavigationProp>();
+  const { t, i18n } = useTranslation();
   
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [selectedClinic, setSelectedClinic] = useState<ClinicMarker | null>(null);
@@ -56,8 +58,8 @@ const MapViewScreen = () => {
           setLocationPermission(false);
           Toast.show({
             type: 'error',
-            text1: 'Location Permission Denied',
-            text2: 'Please enable location services to see nearby clinics',
+            text1: t('map.locationPermissionDeniedTitle'),
+            text2: t('map.locationPermissionDeniedBody'),
           });
           // Set a default location (you can change this to your app's default location)
           setUserLocation({ lat: 40.7128, lng: -74.0060 }); // New York default
@@ -81,8 +83,8 @@ const MapViewScreen = () => {
         console.error('Error getting location:', error);
         Toast.show({
           type: 'error',
-          text1: 'Location Error',
-          text2: 'Could not get your location. Using default location.',
+          text1: t('map.locationErrorTitle'),
+          text2: t('map.locationErrorBody'),
         });
         // Set default location
         setUserLocation({ lat: 40.7128, lng: -74.0060 });
@@ -160,14 +162,14 @@ const MapViewScreen = () => {
       
       Toast.show({
         type: 'success',
-        text1: 'Location Updated',
-        text2: 'Nearby clinics refreshed',
+        text1: t('map.locationUpdatedTitle'),
+        text2: t('map.locationUpdatedBody'),
       });
     } catch (error) {
       Toast.show({
         type: 'error',
-        text1: 'Error',
-        text2: 'Could not update location',
+        text1: t('common.error'),
+        text2: t('map.couldNotUpdateLocationBody'),
       });
     }
   };
@@ -178,6 +180,10 @@ const MapViewScreen = () => {
     const centerLat = center.lat && !isNaN(center.lat) ? center.lat : 40.7128;
     const centerLng = center.lng && !isNaN(center.lng) ? center.lng : -74.0060;
     const zoom = userLocation ? 12 : 10;
+
+    const tYourLocation = JSON.stringify(t('map.yourLocation'));
+    const tClinic = JSON.stringify(t('map.clinic'));
+    const tKmAway = JSON.stringify(t('map.kmAway'));
     
     // Prepare clinics data for JavaScript
     const clinicsData = clinicMarkers.map(clinic => ({
@@ -235,7 +241,7 @@ const MapViewScreen = () => {
         });
         userMarker = L.marker([userLocation.lat, userLocation.lng], { icon: userIcon })
           .addTo(map)
-          .bindPopup('Your Location');
+          .bindPopup(JSON.parse(${tYourLocation}));
       }
 
       // Add clinic markers
@@ -253,10 +259,10 @@ const MapViewScreen = () => {
           .addTo(map)
           .bindPopup(\`
             <div style="min-width: 200px;">
-              <h6 style="margin: 0 0 5px 0; font-weight: 600;">\${clinic.clinicName || 'Clinic'}</h6>
+              <h6 style="margin: 0 0 5px 0; font-weight: 600;">\${clinic.clinicName || JSON.parse(${tClinic})}</h6>
               <p style="margin: 0; font-size: 13px; color: #666;">\${clinic.doctorName || ''}</p>
               <p style="margin: 5px 0; font-size: 13px; color: #666;">\${clinic.address || ''}, \${clinic.city || ''}</p>
-              \${clinic.distance ? '<p style="margin: 5px 0; font-size: 12px; color: #0d6efd; font-weight: 600;">' + clinic.distance.toFixed(1) + ' km away</p>' : ''}
+              \${clinic.distance ? '<p style="margin: 5px 0; font-size: 12px; color: #0d6efd; font-weight: 600;">' + clinic.distance.toFixed(1) + ' ' + JSON.parse(${tKmAway}) + '</p>' : ''}
             </div>
           \`);
 
@@ -316,7 +322,7 @@ const MapViewScreen = () => {
             });
             userMarker = L.marker([lat, lng], { icon: userIcon })
               .addTo(map)
-              .bindPopup('Your Location');
+              .bindPopup(JSON.parse(${tYourLocation}));
           }
           map.setView([lat, lng], 12);
         } else if (data.type === 'centerOnLocation' && map) {
@@ -342,10 +348,10 @@ const MapViewScreen = () => {
               .addTo(map)
               .bindPopup(\`
                 <div style="min-width: 200px;">
-                  <h6 style="margin: 0 0 5px 0; font-weight: 600;">\${clinic.clinicName || 'Clinic'}</h6>
+                  <h6 style="margin: 0 0 5px 0; font-weight: 600;">\${clinic.clinicName || JSON.parse(${tClinic})}</h6>
                   <p style="margin: 0; font-size: 13px; color: #666;">\${clinic.doctorName || ''}</p>
                   <p style="margin: 5px 0; font-size: 13px; color: #666;">\${clinic.address || ''}, \${clinic.city || ''}</p>
-                  \${clinic.distance ? '<p style="margin: 5px 0; font-size: 12px; color: #0d6efd; font-weight: 600;">' + clinic.distance.toFixed(1) + ' km away</p>' : ''}
+                  \${clinic.distance ? '<p style="margin: 5px 0; font-size: 12px; color: #0d6efd; font-weight: 600;">' + clinic.distance.toFixed(1) + ' ' + JSON.parse(${tKmAway}) + '</p>' : ''}
                 </div>
               \`);
 
@@ -385,7 +391,7 @@ const MapViewScreen = () => {
 </body>
 </html>
     `;
-  }, [userLocation, clinicMarkers]);
+  }, [userLocation, clinicMarkers, i18n.language, t]);
 
   // Handle messages from WebView
   const handleWebViewMessage = (event: any) => {
@@ -443,7 +449,7 @@ const MapViewScreen = () => {
             renderLoading={() => (
           <View style={styles.mapPlaceholder}>
                 <ActivityIndicator size="large" color={colors.primary} />
-                <Text style={styles.mapPlaceholderText}>Loading map...</Text>
+                <Text style={styles.mapPlaceholderText}>{t('map.loadingMap')}</Text>
           </View>
             )}
             onError={(syntheticEvent) => {
@@ -454,7 +460,7 @@ const MapViewScreen = () => {
         ) : (
           <View style={styles.mapPlaceholder}>
             <ActivityIndicator size="large" color={colors.primary} />
-            <Text style={styles.mapPlaceholderText}>Getting your location...</Text>
+            <Text style={styles.mapPlaceholderText}>{t('map.gettingLocation')}</Text>
           </View>
         )}
 
@@ -487,7 +493,7 @@ const MapViewScreen = () => {
 
         {/* Radius Selector */}
         <View style={styles.radiusSelector}>
-          <Text style={styles.radiusLabel}>Radius: {radius} km</Text>
+          <Text style={styles.radiusLabel}>{t('map.radiusLabel', { radius })}</Text>
           <View style={styles.radiusButtons}>
             {[5, 10, 15, 20, 25].map((r) => (
               <TouchableOpacity
@@ -507,7 +513,7 @@ const MapViewScreen = () => {
         {isLoadingClinics && (
           <View style={styles.loadingOverlay}>
             <ActivityIndicator size="small" color={colors.primary} />
-            <Text style={styles.loadingText}>Finding nearby clinics...</Text>
+            <Text style={styles.loadingText}>{t('map.findingNearbyClinics')}</Text>
           </View>
         )}
 
@@ -515,12 +521,12 @@ const MapViewScreen = () => {
         {clinicsError && (
           <View style={styles.errorOverlay}>
             <Ionicons name="alert-circle" size={24} color={colors.error} />
-            <Text style={styles.errorText}>Failed to load clinics</Text>
+            <Text style={styles.errorText}>{t('map.failedToLoadClinics')}</Text>
             <TouchableOpacity
               style={styles.retryButton}
               onPress={() => refetchClinics()}
             >
-              <Text style={styles.retryButtonText}>Retry</Text>
+              <Text style={styles.retryButtonText}>{t('common.retry')}</Text>
             </TouchableOpacity>
           </View>
         )}
@@ -530,12 +536,12 @@ const MapViewScreen = () => {
       <View style={styles.listContainer}>
         <View style={styles.listHeader}>
           <Text style={styles.listTitle}>
-            <Text style={styles.listCount}>{clinicMarkers.length}</Text> Nearby Clinics
+            <Text style={styles.listCount}>{clinicMarkers.length}</Text> {t('map.nearbyClinics')}
           </Text>
           {!locationPermission && (
             <View style={styles.permissionWarning}>
               <Ionicons name="warning" size={16} color={colors.warning} />
-              <Text style={styles.permissionText}>Location disabled</Text>
+              <Text style={styles.permissionText}>{t('map.locationDisabled')}</Text>
             </View>
           )}
         </View>
@@ -543,13 +549,13 @@ const MapViewScreen = () => {
         {isLoadingClinics ? (
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="small" color={colors.primary} />
-            <Text style={styles.loadingText}>Loading clinics...</Text>
+            <Text style={styles.loadingText}>{t('map.loadingClinics')}</Text>
           </View>
         ) : clinicMarkers.length === 0 ? (
           <View style={styles.emptyContainer}>
             <Ionicons name="location-outline" size={48} color={colors.textSecondary} />
-            <Text style={styles.emptyText}>No clinics found nearby</Text>
-            <Text style={styles.emptySubtext}>Try increasing the search radius</Text>
+            <Text style={styles.emptyText}>{t('map.noClinicsFoundNearby')}</Text>
+            <Text style={styles.emptySubtext}>{t('map.tryIncreasingRadius')}</Text>
           </View>
         ) : (
           <FlatList
@@ -575,7 +581,7 @@ const MapViewScreen = () => {
                   </View>
                   <View style={styles.distanceContainer}>
                     <Ionicons name="walk-outline" size={14} color={colors.primary} />
-                    <Text style={styles.distanceText}>{item.distance.toFixed(1)} km away</Text>
+                    <Text style={styles.distanceText}>{t('map.distanceAway', { distance: item.distance.toFixed(1) })}</Text>
                   </View>
                 </View>
                 <TouchableOpacity
@@ -616,12 +622,12 @@ const MapViewScreen = () => {
 
                 <View style={styles.modalBody}>
                   <View style={styles.modalSection}>
-                    <Text style={styles.modalSectionTitle}>Doctor</Text>
+                    <Text style={styles.modalSectionTitle}>{t('map.doctor')}</Text>
                     <Text style={styles.modalText}>{selectedClinic.doctorName}</Text>
                   </View>
 
                   <View style={styles.modalSection}>
-                    <Text style={styles.modalSectionTitle}>Address</Text>
+                    <Text style={styles.modalSectionTitle}>{t('map.address')}</Text>
                     <Text style={styles.modalText}>
                       {selectedClinic.address}, {selectedClinic.city}
                     </Text>
@@ -629,14 +635,14 @@ const MapViewScreen = () => {
 
                   {selectedClinic.phone && (
                     <View style={styles.modalSection}>
-                      <Text style={styles.modalSectionTitle}>Phone</Text>
+                      <Text style={styles.modalSectionTitle}>{t('map.phone')}</Text>
                       <Text style={styles.modalText}>{selectedClinic.phone}</Text>
                     </View>
                   )}
 
                   <View style={styles.modalSection}>
-                    <Text style={styles.modalSectionTitle}>Distance</Text>
-                    <Text style={styles.modalText}>{selectedClinic.distance.toFixed(1)} km away</Text>
+                    <Text style={styles.modalSectionTitle}>{t('map.distance')}</Text>
+                    <Text style={styles.modalText}>{t('map.distanceAway', { distance: selectedClinic.distance.toFixed(1) })}</Text>
                   </View>
                 </View>
 
@@ -646,14 +652,14 @@ const MapViewScreen = () => {
                     onPress={() => handleViewDoctor(selectedClinic)}
                   >
                     <Ionicons name="person-outline" size={18} color={colors.primary} />
-                    <Text style={[styles.modalButtonText, styles.viewButtonText]}>View Doctor</Text>
+                    <Text style={[styles.modalButtonText, styles.viewButtonText]}>{t('map.viewDoctor')}</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
                     style={[styles.modalButton, styles.bookButton]}
                     onPress={() => handleBookAppointment(selectedClinic)}
                   >
                     <Ionicons name="calendar-outline" size={18} color={colors.textWhite} />
-                    <Text style={[styles.modalButtonText, styles.bookButtonText]}>Book Appointment</Text>
+                    <Text style={[styles.modalButtonText, styles.bookButtonText]}>{t('map.bookAppointment')}</Text>
                   </TouchableOpacity>
                 </View>
               </>

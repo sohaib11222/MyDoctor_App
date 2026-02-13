@@ -22,34 +22,10 @@ import { colors } from '../../constants/colors';
 import { Feather } from '@expo/vector-icons';
 import Toast from 'react-native-toast-message';
 import * as authApi from '../../services/auth';
+import { useTranslation } from 'react-i18next';
 
 type ForgotPasswordScreenNavigationProp = NativeStackNavigationProp<AuthStackParamList>;
 
-// Step 1: Email validation schema
-const emailSchema = yup.object({
-  email: yup.string().email('Invalid email').required('Email is required'),
-});
-
-// Step 2: Code validation schema
-const codeSchema = yup.object({
-  code: yup
-    .string()
-    .required('Verification code is required')
-    .length(6, 'Code must be 6 digits')
-    .matches(/^\d+$/, 'Code must contain only numbers'),
-});
-
-// Step 3: Password validation schema
-const passwordSchema = yup.object({
-  newPassword: yup
-    .string()
-    .min(6, 'Password must be at least 6 characters')
-    .required('New password is required'),
-  confirmPassword: yup
-    .string()
-    .oneOf([yup.ref('newPassword')], 'Passwords must match')
-    .required('Please confirm your password'),
-});
 
 interface EmailFormData {
   email: string;
@@ -70,6 +46,36 @@ export const ForgotPasswordScreen = () => {
   const [email, setEmail] = useState('');
   const [code, setCode] = useState('');
   const [loading, setLoading] = useState(false);
+  const { t } = useTranslation();
+
+  // Step 1: Email validation schema
+  const emailSchema = yup.object({
+    email: yup
+      .string()
+      .email(t('auth.validation.invalidEmail'))
+      .required(t('auth.validation.emailRequired')),
+  });
+
+  // Step 2: Code validation schema
+  const codeSchema = yup.object({
+    code: yup
+      .string()
+      .required(t('auth.validation.verificationCodeRequired'))
+      .length(6, t('auth.validation.codeLength'))
+      .matches(/^\d+$/, t('auth.validation.codeNumbersOnly')),
+  });
+
+  // Step 3: Password validation schema
+  const passwordSchema = yup.object({
+    newPassword: yup
+      .string()
+      .min(6, t('auth.validation.passwordMin'))
+      .required(t('auth.validation.newPasswordRequired')),
+    confirmPassword: yup
+      .string()
+      .oneOf([yup.ref('newPassword')], t('auth.validation.passwordsMustMatch'))
+      .required(t('auth.validation.confirmPasswordPlease')),
+  });
 
   // Step 1: Email form
   const emailForm = useForm<EmailFormData>({
@@ -105,14 +111,14 @@ export const ForgotPasswordScreen = () => {
       setStep(2);
       Toast.show({
         type: 'success',
-        text1: 'Code Sent',
-        text2: 'Verification code sent to your email!',
+        text1: t('auth.forgotPassword.toastCodeSentTitle'),
+        text2: t('auth.forgotPassword.toastCodeSentBody'),
       });
     } catch (error: any) {
-      const errorMessage = error.response?.data?.message || error.message || 'Failed to send verification code';
+      const errorMessage = error.response?.data?.message || error.message || t('auth.forgotPassword.errorFailedToSendCode');
       Toast.show({
         type: 'error',
-        text1: 'Error',
+        text1: t('auth.forgotPassword.toastErrorTitle'),
         text2: errorMessage,
       });
       // If email is not registered, stay on step 1
@@ -133,14 +139,14 @@ export const ForgotPasswordScreen = () => {
       setStep(3);
       Toast.show({
         type: 'success',
-        text1: 'Code Verified',
-        text2: 'Code verified successfully!',
+        text1: t('auth.forgotPassword.toastCodeVerifiedTitle'),
+        text2: t('auth.forgotPassword.toastCodeVerifiedBody'),
       });
     } catch (error: any) {
       Toast.show({
         type: 'error',
-        text1: 'Error',
-        text2: error.response?.data?.message || 'Invalid or expired verification code',
+        text1: t('auth.forgotPassword.toastErrorTitle'),
+        text2: error.response?.data?.message || t('auth.forgotPassword.errorInvalidOrExpiredCode'),
       });
     } finally {
       setLoading(false);
@@ -154,8 +160,8 @@ export const ForgotPasswordScreen = () => {
       await authApi.resetPassword(email, code, data.newPassword);
       Toast.show({
         type: 'success',
-        text1: 'Success',
-        text2: 'Password reset successfully!',
+        text1: t('auth.forgotPassword.toastSuccessTitle'),
+        text2: t('auth.forgotPassword.toastPasswordResetSuccess'),
       });
       // Navigate to login after a short delay
       setTimeout(() => {
@@ -164,8 +170,8 @@ export const ForgotPasswordScreen = () => {
     } catch (error: any) {
       Toast.show({
         type: 'error',
-        text1: 'Error',
-        text2: error.response?.data?.message || 'Failed to reset password',
+        text1: t('auth.forgotPassword.toastErrorTitle'),
+        text2: error.response?.data?.message || t('auth.forgotPassword.errorFailedToResetPassword'),
       });
     } finally {
       setLoading(false);
@@ -179,14 +185,14 @@ export const ForgotPasswordScreen = () => {
       await authApi.requestPasswordReset(email);
       Toast.show({
         type: 'success',
-        text1: 'Code Resent',
-        text2: 'Verification code resent to your email!',
+        text1: t('auth.forgotPassword.toastCodeResentTitle'),
+        text2: t('auth.forgotPassword.toastCodeResentBody'),
       });
     } catch (error: any) {
       Toast.show({
         type: 'error',
-        text1: 'Error',
-        text2: error.response?.data?.message || 'Failed to resend code',
+        text1: t('auth.forgotPassword.toastErrorTitle'),
+        text2: error.response?.data?.message || t('auth.forgotPassword.errorFailedToResendCode'),
       });
     } finally {
       setLoading(false);
@@ -196,11 +202,11 @@ export const ForgotPasswordScreen = () => {
   const getStepTitle = () => {
     switch (step) {
       case 1:
-        return 'Enter your registered email address and we\'ll send you a verification code.';
+        return t('auth.forgotPassword.stepHelp1');
       case 2:
-        return 'Enter the 6-digit verification code sent to your email.';
+        return t('auth.forgotPassword.stepHelp2');
       case 3:
-        return 'Enter your new password.';
+        return t('auth.forgotPassword.stepHelp3');
       default:
         return '';
     }
@@ -229,7 +235,7 @@ export const ForgotPasswordScreen = () => {
 
         {/* Form Container */}
         <View style={styles.formContainer}>
-          <Text style={styles.title}>Forgot Password</Text>
+          <Text style={styles.title}>{t('auth.forgotPassword.title')}</Text>
           <Text style={styles.subtitle}>{getStepTitle()}</Text>
 
           {/* Progress Indicator */}
@@ -248,9 +254,9 @@ export const ForgotPasswordScreen = () => {
               </View>
             </View>
             <View style={styles.stepLabels}>
-              <Text style={[styles.stepLabel, step >= 1 && styles.stepLabelActive]}>Email</Text>
-              <Text style={[styles.stepLabel, step >= 2 && styles.stepLabelActive]}>Verify</Text>
-              <Text style={[styles.stepLabel, step >= 3 && styles.stepLabelActive]}>Reset</Text>
+              <Text style={[styles.stepLabel, step >= 1 && styles.stepLabelActive]}>{t('auth.forgotPassword.stepEmail')}</Text>
+              <Text style={[styles.stepLabel, step >= 2 && styles.stepLabelActive]}>{t('auth.forgotPassword.stepVerify')}</Text>
+              <Text style={[styles.stepLabel, step >= 3 && styles.stepLabelActive]}>{t('auth.forgotPassword.stepReset')}</Text>
             </View>
           </View>
 
@@ -262,8 +268,8 @@ export const ForgotPasswordScreen = () => {
                 name="email"
                 render={({ field: { onChange, onBlur, value } }) => (
                   <Input
-                    label="Email Address"
-                    placeholder="Enter your email"
+                    label={t('auth.forgotPassword.emailAddressLabel')}
+                    placeholder={t('auth.forgotPassword.emailPlaceholder')}
                     value={value}
                     onChangeText={onChange}
                     onBlur={onBlur}
@@ -276,7 +282,7 @@ export const ForgotPasswordScreen = () => {
               />
 
               <Button
-                title={loading ? 'Sending...' : 'Send Verification Code'}
+                title={loading ? t('auth.forgotPassword.sendCodeLoading') : t('auth.forgotPassword.sendCode')}
                 onPress={emailForm.handleSubmit(handleRequestReset)}
                 loading={loading}
                 style={styles.submitButton}
@@ -293,8 +299,8 @@ export const ForgotPasswordScreen = () => {
                 render={({ field: { onChange, onBlur, value } }) => (
                   <View>
                     <Input
-                      label="Verification Code"
-                      placeholder="Enter 6-digit code"
+                      label={t('auth.forgotPassword.verificationCodeLabel')}
+                      placeholder={t('auth.forgotPassword.verificationCodePlaceholder')}
                       value={value}
                       onChangeText={(text) => {
                         const numericValue = text.replace(/\D/g, '').slice(0, 6);
@@ -306,13 +312,13 @@ export const ForgotPasswordScreen = () => {
                       error={codeForm.formState.errors.code?.message}
                       style={styles.input}
                     />
-                    <Text style={styles.emailHint}>Code sent to: <Text style={styles.emailBold}>{email}</Text></Text>
+                    <Text style={styles.emailHint}>{t('auth.forgotPassword.codeSentTo')} <Text style={styles.emailBold}>{email}</Text></Text>
                   </View>
                 )}
               />
 
               <Button
-                title={loading ? 'Verifying...' : 'Verify Code'}
+                title={loading ? t('auth.forgotPassword.verifyCodeLoading') : t('auth.forgotPassword.verifyCode')}
                 onPress={codeForm.handleSubmit(handleVerifyCode)}
                 loading={loading}
                 style={styles.submitButton}
@@ -323,7 +329,7 @@ export const ForgotPasswordScreen = () => {
                 disabled={loading}
                 style={styles.resendButton}
               >
-                <Text style={styles.resendText}>Resend Code</Text>
+                <Text style={styles.resendText}>{t('auth.forgotPassword.resendCode')}</Text>
               </TouchableOpacity>
             </View>
           )}
@@ -336,8 +342,8 @@ export const ForgotPasswordScreen = () => {
                 name="newPassword"
                 render={({ field: { onChange, onBlur, value } }) => (
                   <Input
-                    label="New Password"
-                    placeholder="Enter new password"
+                    label={t('auth.forgotPassword.newPasswordLabel')}
+                    placeholder={t('auth.forgotPassword.newPasswordPlaceholder')}
                     value={value}
                     onChangeText={onChange}
                     onBlur={onBlur}
@@ -353,8 +359,8 @@ export const ForgotPasswordScreen = () => {
                 name="confirmPassword"
                 render={({ field: { onChange, onBlur, value } }) => (
                   <Input
-                    label="Confirm Password"
-                    placeholder="Confirm new password"
+                    label={t('auth.forgotPassword.confirmPasswordLabel')}
+                    placeholder={t('auth.forgotPassword.confirmPasswordPlaceholder')}
                     value={value}
                     onChangeText={onChange}
                     onBlur={onBlur}
@@ -366,7 +372,7 @@ export const ForgotPasswordScreen = () => {
               />
 
               <Button
-                title={loading ? 'Resetting...' : 'Reset Password'}
+                title={loading ? t('auth.forgotPassword.resetPasswordLoading') : t('auth.forgotPassword.resetPassword')}
                 onPress={passwordForm.handleSubmit(handleResetPassword)}
                 loading={loading}
                 style={styles.submitButton}
@@ -375,9 +381,9 @@ export const ForgotPasswordScreen = () => {
           )}
 
           <View style={styles.loginContainer}>
-            <Text style={styles.loginText}>Remember Password? </Text>
+            <Text style={styles.loginText}>{t('auth.forgotPassword.rememberPassword')} </Text>
             <TouchableOpacity onPress={() => navigation.navigate('Login')}>
-              <Text style={styles.loginLink}>Sign In</Text>
+              <Text style={styles.loginLink}>{t('auth.forgotPassword.signIn')}</Text>
             </TouchableOpacity>
           </View>
         </View>

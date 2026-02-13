@@ -21,6 +21,7 @@ import { Button } from '../../components/common/Button';
 import { useAuth, RegisterData } from '../../contexts/AuthContext';
 import { colors } from '../../constants/colors';
 import { Feather } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 
 type DoctorRegisterScreenNavigationProp = NativeStackNavigationProp<AuthStackParamList>;
 
@@ -32,33 +33,33 @@ interface DoctorRegisterFormData {
   gender?: 'MALE' | 'FEMALE' | 'OTHER';
 }
 
-const schema: yup.ObjectSchema<DoctorRegisterFormData> = yup.object({
-  fullName: yup
-    .string()
-    .min(2, 'Full name must be at least 2 characters')
-    .required('Full name is required'),
-  email: yup
-    .string()
-    .email('Invalid email')
-    .required('Email is required'),
-  phone: yup
-    .string()
-    .required('Phone is required'),
-  password: yup
-    .string()
-    .min(6, 'Password must be at least 6 characters')
-    .required('Password is required'),
-  gender: yup
-    .mixed<DoctorRegisterFormData['gender']>()
-    .oneOf(['MALE', 'FEMALE', 'OTHER'])
-    .optional(),
-});
 
 export const DoctorRegisterScreen = () => {
   const navigation = useNavigation<DoctorRegisterScreenNavigationProp>();
   const { register: registerUser, user } = useAuth();
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const { t } = useTranslation();
+
+  const schema: yup.ObjectSchema<DoctorRegisterFormData> = yup.object({
+    fullName: yup
+      .string()
+      .min(2, t('auth.validation.fullNameMin'))
+      .required(t('auth.validation.fullNameRequired')),
+    email: yup
+      .string()
+      .email(t('auth.validation.invalidEmail'))
+      .required(t('auth.validation.emailRequired')),
+    phone: yup.string().required(t('auth.validation.phoneRequiredShort')),
+    password: yup
+      .string()
+      .min(6, t('auth.validation.passwordMin'))
+      .required(t('auth.validation.passwordRequired')),
+    gender: yup
+      .mixed<DoctorRegisterFormData['gender']>()
+      .oneOf(['MALE', 'FEMALE', 'OTHER'])
+      .optional(),
+  });
 
   // Navigate to verification upload after successful registration
   useEffect(() => {
@@ -138,16 +139,16 @@ export const DoctorRegisterScreen = () => {
 
         {/* Form Container */}
         <View style={styles.formContainer}>
-          <Text style={styles.title}>Doctor Register</Text>
-          <Text style={styles.subtitle}>Create your doctor account</Text>
+          <Text style={styles.title}>{t('auth.doctorRegister.title')}</Text>
+          <Text style={styles.subtitle}>{t('auth.doctorRegister.subtitle')}</Text>
 
           <Controller
             control={control}
             name="fullName"
             render={({ field: { onChange, onBlur, value } }) => (
               <Input
-                label="Full Name"
-                placeholder="Enter your full name"
+                label={t('auth.doctorRegister.fullNameLabel')}
+                placeholder={t('auth.doctorRegister.fullNamePlaceholder')}
                 value={value}
                 onChangeText={onChange}
                 onBlur={onBlur}
@@ -162,8 +163,8 @@ export const DoctorRegisterScreen = () => {
             name="phone"
             render={({ field: { onChange, onBlur, value } }) => (
               <Input
-                label="Phone"
-                placeholder="Enter your phone number"
+                label={t('auth.doctorRegister.phoneLabel')}
+                placeholder={t('auth.doctorRegister.phonePlaceholder')}
                 value={value}
                 onChangeText={onChange}
                 onBlur={onBlur}
@@ -180,7 +181,7 @@ export const DoctorRegisterScreen = () => {
             render={({ field: { onChange, onBlur, value } }) => (
               <View>
                 <View style={styles.passwordHeader}>
-                  <Text style={styles.passwordLabel}>Create Password</Text>
+                  <Text style={styles.passwordLabel}>{t('auth.doctorRegister.createPasswordLabel')}</Text>
                   <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
                     <Feather
                       name={showPassword ? 'eye-off' : 'eye'}
@@ -190,7 +191,7 @@ export const DoctorRegisterScreen = () => {
                   </TouchableOpacity>
                 </View>
                 <Input
-                  placeholder="Enter your password"
+                  placeholder={t('auth.doctorRegister.passwordPlaceholder')}
                   value={value}
                   onChangeText={onChange}
                   onBlur={onBlur}
@@ -203,7 +204,7 @@ export const DoctorRegisterScreen = () => {
           />
 
           <Button
-            title={loading ? 'Signing Up...' : 'Sign Up'}
+            title={loading ? t('auth.doctorRegister.buttonLoading') : t('auth.doctorRegister.button')}
             onPress={handleSubmit(onSubmit)}
             loading={loading}
             style={styles.signUpButton}
@@ -212,22 +213,22 @@ export const DoctorRegisterScreen = () => {
           {/* Divider */}
           <View style={styles.divider}>
             <View style={styles.dividerLine} />
-            <Text style={styles.dividerText}>or</Text>
+            <Text style={styles.dividerText}>{t('auth.doctorRegister.dividerOr')}</Text>
             <View style={styles.dividerLine} />
           </View>
 
           {/* Register as Patient Button */}
           <Button
-            title="Register as Patient"
+            title={t('auth.doctorRegister.registerAsPatient')}
             onPress={() => navigation.navigate('Register')}
             variant="outline"
             style={styles.patientButton}
           />
 
           <View style={styles.loginContainer}>
-            <Text style={styles.loginText}>Already have account? </Text>
+            <Text style={styles.loginText}>{t('auth.doctorRegister.haveAccount')} </Text>
             <TouchableOpacity onPress={() => navigation.navigate('Login')}>
-              <Text style={styles.loginLink}>Sign In</Text>
+              <Text style={styles.loginLink}>{t('auth.doctorRegister.signIn')}</Text>
             </TouchableOpacity>
           </View>
         </View>

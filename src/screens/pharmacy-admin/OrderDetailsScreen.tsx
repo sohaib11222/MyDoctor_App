@@ -24,6 +24,7 @@ import { API_BASE_URL } from '../../config/api';
 import Toast from 'react-native-toast-message';
 import { useAuth } from '../../contexts/AuthContext';
 import * as pharmacySubscriptionApi from '../../services/pharmacySubscription';
+import { useTranslation } from 'react-i18next';
 
 type OrderDetailsScreenNavigationProp = NativeStackNavigationProp<OrdersStackParamList, 'OrderDetails'>;
 type OrderDetailsRouteProp = RouteProp<OrdersStackParamList, 'OrderDetails'>;
@@ -53,10 +54,10 @@ const normalizeImageUrl = (imageUri: string | undefined | null): string | null =
   return `${baseUrl}${imagePath}`;
 };
 
-const formatDate = (dateString: string | undefined | null): string => {
-  if (!dateString) return 'N/A';
+const formatDate = (dateString: string | undefined | null, language: string, fallback: string): string => {
+  if (!dateString) return fallback;
   const date = new Date(dateString);
-  return date.toLocaleDateString('en-GB', {
+  return date.toLocaleDateString(language || 'en-GB', {
     day: '2-digit',
     month: 'short',
     year: 'numeric',
@@ -65,12 +66,21 @@ const formatDate = (dateString: string | undefined | null): string => {
   });
 };
 
-const formatCurrency = (amount: number | undefined | null): string => {
-  if (amount === undefined || amount === null) return '€0.00';
-  return new Intl.NumberFormat('en-US', {
+const formatCurrency = (amount: number | undefined | null, language: string): string => {
+  if (amount === undefined || amount === null) {
+    return new Intl.NumberFormat(language || 'en', { style: 'currency', currency: 'EUR' }).format(0);
+  }
+  return new Intl.NumberFormat(language || 'en', {
     style: 'currency',
     currency: 'EUR',
   }).format(amount);
+};
+
+const getRealOrderTotal = (order: Partial<orderApi.Order> | undefined | null): number => {
+  if (!order) return 0;
+  const subtotal = Number((order as any).subtotal) || 0;
+  const shipping = Number((order as any).shipping) || 0;
+  return subtotal + shipping;
 };
 
 const getStatusBadgeColor = (status: orderApi.Order['status']) => {
@@ -98,6 +108,7 @@ export const OrderDetailsScreen = () => {
   const { orderId } = route.params;
   const queryClient = useQueryClient();
   const { user } = useAuth();
+  const { t, i18n } = useTranslation();
   const userId = user?._id || user?.id;
   const isPharmacy = user?.role === 'pharmacy' || (user as any)?.role === 'PHARMACY';
   const isParapharmacy = user?.role === 'parapharmacy' || (user as any)?.role === 'PARAPHARMACY';
@@ -141,7 +152,7 @@ export const OrderDetailsScreen = () => {
     return (
       <SafeAreaView style={styles.loadingContainer}>
         <ActivityIndicator size="large" color={colors.primary} />
-        <Text style={styles.loadingText}>Loading subscription...</Text>
+        <Text style={styles.loadingText}>{t('pharmacyAdmin.dashboard.banners.loadingSubscription')}</Text>
       </SafeAreaView>
     );
   }
@@ -150,10 +161,10 @@ export const OrderDetailsScreen = () => {
     return (
       <SafeAreaView style={styles.errorContainer}>
         <Ionicons name="card-outline" size={64} color={colors.warning} />
-        <Text style={styles.errorTitle}>Subscription Required</Text>
-        <Text style={styles.errorText}>You need an active subscription to manage order details.</Text>
+        <Text style={styles.errorTitle}>{t('pharmacyAdmin.orders.subscriptionRequired.title')}</Text>
+        <Text style={styles.errorText}>{t('pharmacyAdmin.orders.details.gates.subscriptionRequiredBody')}</Text>
         <View style={{ width: '100%', marginTop: 12 }}>
-          <Button title="View Plans" onPress={goToSubscription} />
+          <Button title={t('pharmacyAdmin.orders.actions.viewSubscriptionPlans')} onPress={goToSubscription} />
         </View>
       </SafeAreaView>
     );
@@ -167,6 +178,7 @@ export const OrderDetailsScreen = () => {
   });
 
   const order = orderResponse?.data;
+  const realTotal = getRealOrderTotal(order);
 
   // Update shipping fee mutation
   const updateShippingFeeMutation = useMutation({
@@ -179,14 +191,14 @@ export const OrderDetailsScreen = () => {
       setShippingFee('');
       Toast.show({
         type: 'success',
-        text1: 'Shipping fee updated successfully!',
+        text1: t('pharmacyAdmin.orders.details.toasts.shippingFeeUpdated'),
       });
     },
     onError: (err: any) => {
       Toast.show({
         type: 'error',
-        text1: 'Failed to update shipping fee',
-        text2: err.message || 'Please try again.',
+        text1: t('pharmacyAdmin.orders.details.toasts.failedToUpdateShippingFeeTitle'),
+        text2: err?.response?.data?.message || err?.message || t('pharmacyAdmin.orders.pleaseTryAgain'),
       });
     },
   });
@@ -200,14 +212,14 @@ export const OrderDetailsScreen = () => {
       queryClient.invalidateQueries({ queryKey: ['pharmacyOrders'] });
       Toast.show({
         type: 'success',
-        text1: 'Order status updated successfully!',
+        text1: t('pharmacyAdmin.orders.details.toasts.orderStatusUpdated'),
       });
     },
     onError: (err: any) => {
       Toast.show({
         type: 'error',
-        text1: 'Failed to update order status',
-        text2: err.message || 'Please try again.',
+        text1: t('pharmacyAdmin.orders.details.toasts.failedToUpdateOrderStatusTitle'),
+        text2: err?.response?.data?.message || err?.message || t('pharmacyAdmin.orders.pleaseTryAgain'),
       });
     },
   });
@@ -224,8 +236,8 @@ export const OrderDetailsScreen = () => {
     if (isNaN(fee) || fee < 0) {
       Toast.show({
         type: 'error',
-        text1: 'Invalid shipping fee',
-        text2: 'Please enter a valid non-negative number',
+        text1: t('pharmacyAdmin.orders.details.validation.invalidShippingFeeTitle'),
+        text2: t('pharmacyAdmin.orders.details.validation.invalidShippingFeeBody'),
       });
       return;
     }
@@ -240,7 +252,7 @@ export const OrderDetailsScreen = () => {
     return (
       <SafeAreaView style={styles.loadingContainer}>
         <ActivityIndicator size="large" color={colors.primary} />
-        <Text style={styles.loadingText}>Loading order details...</Text>
+        <Text style={styles.loadingText}>{t('pharmacyAdmin.orders.details.loading')}</Text>
       </SafeAreaView>
     );
   }
@@ -249,22 +261,25 @@ export const OrderDetailsScreen = () => {
     return (
       <SafeAreaView style={styles.errorContainer}>
         <Ionicons name="alert-circle-outline" size={64} color={colors.error} />
-        <Text style={styles.errorTitle}>Error Loading Order</Text>
+        <Text style={styles.errorTitle}>{t('pharmacyAdmin.orders.details.errorTitle')}</Text>
         <Text style={styles.errorText}>
-          {error instanceof Error ? error.message : 'Failed to load order details'}
+          {error instanceof Error ? error.message : t('pharmacyAdmin.orders.details.errorBody')}
         </Text>
         <TouchableOpacity style={styles.retryButton} onPress={() => refetch()}>
-          <Text style={styles.retryButtonText}>Retry</Text>
+          <Text style={styles.retryButtonText}>{t('common.retry')}</Text>
         </TouchableOpacity>
       </SafeAreaView>
     );
   }
 
   const patient = typeof order.patientId === 'object' ? order.patientId : null;
-  const patientName = patient?.fullName || 'Unknown Patient';
+  const patientName = patient?.fullName || t('common.unknownPatient');
   const patientEmail = patient?.email || '—';
   const patientPhone = patient?.phone || '—';
   const shippingAddress = order.shippingAddress;
+
+  const localizedOrderStatus = t(`pharmacyAdmin.orders.status.${order.status}` as any, { defaultValue: order.status });
+  const localizedPaymentStatus = t(`pharmacyAdmin.orders.paymentStatus.${order.paymentStatus}` as any, { defaultValue: order.paymentStatus });
 
   return (
     <SafeAreaView style={styles.container}>
@@ -274,23 +289,25 @@ export const OrderDetailsScreen = () => {
           <View style={styles.headerRow}>
             <View>
               <Text style={styles.orderNumber}>#{order.orderNumber}</Text>
-              <Text style={styles.orderDate}>Order Date: {formatDate(order.createdAt)}</Text>
+              <Text style={styles.orderDate}>
+                {t('pharmacyAdmin.orders.details.orderDateLabel')} {formatDate(order.createdAt, i18n.language, t('common.na'))}
+              </Text>
             </View>
             <View style={[styles.statusBadge, { backgroundColor: getStatusBadgeColor(order.status) + '20' }]}>
               <Text style={[styles.statusText, { color: getStatusBadgeColor(order.status) }]}>
-                {order.status}
+                {localizedOrderStatus}
               </Text>
             </View>
           </View>
           <View style={styles.paymentStatusContainer}>
-            <Text style={styles.paymentStatusLabel}>Payment:</Text>
+            <Text style={styles.paymentStatusLabel}>{t('pharmacyAdmin.orders.details.paymentLabel')}</Text>
             <View style={[styles.paymentStatusBadge, {
               backgroundColor: order.paymentStatus === 'PAID' ? colors.success + '20' : colors.warning + '20'
             }]}>
               <Text style={[styles.paymentStatusText, {
                 color: order.paymentStatus === 'PAID' ? colors.success : colors.warning
               }]}>
-                {order.paymentStatus}
+                {localizedPaymentStatus}
               </Text>
             </View>
           </View>
@@ -298,7 +315,7 @@ export const OrderDetailsScreen = () => {
 
         {/* Customer Information */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Customer Information</Text>
+          <Text style={styles.sectionTitle}>{t('pharmacyAdmin.orders.details.customerInformationTitle')}</Text>
           <View style={styles.infoRow}>
             <Ionicons name="person-outline" size={20} color={colors.textSecondary} />
             <Text style={styles.infoText}>{patientName}</Text>
@@ -318,7 +335,7 @@ export const OrderDetailsScreen = () => {
         {/* Shipping Address */}
         {shippingAddress && (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Shipping Address</Text>
+            <Text style={styles.sectionTitle}>{t('pharmacyAdmin.orders.details.shippingAddressTitle')}</Text>
             <View style={styles.infoRow}>
               <Ionicons name="location-outline" size={20} color={colors.textSecondary} />
               <View style={styles.addressContainer}>
@@ -335,10 +352,12 @@ export const OrderDetailsScreen = () => {
 
         {/* Order Items */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Order Items ({order.items?.length || 0})</Text>
+          <Text style={styles.sectionTitle}>
+            {t('pharmacyAdmin.orders.details.orderItemsTitle', { count: order.items?.length || 0 })}
+          </Text>
           {order.items?.map((item, index) => {
             const product = typeof item.productId === 'object' ? item.productId : null;
-            const productName = product?.name || 'Product';
+            const productName = product?.name || t('common.product');
             const productImage = product?.images?.[0];
             const normalizedImageUrl = normalizeImageUrl(productImage);
             const imageSource = normalizedImageUrl ? { uri: normalizedImageUrl } : defaultAvatar;
@@ -350,11 +369,11 @@ export const OrderDetailsScreen = () => {
                 <View style={styles.itemInfo}>
                   <Text style={styles.itemName}>{productName}</Text>
                   <View style={styles.itemDetails}>
-                    <Text style={styles.itemQuantity}>Qty: {item.quantity}</Text>
-                    <Text style={styles.itemPrice}>{formatCurrency(itemPrice)} each</Text>
+                    <Text style={styles.itemQuantity}>{t('pharmacyAdmin.orders.details.qtyLabel', { count: item.quantity })}</Text>
+                    <Text style={styles.itemPrice}>{t('pharmacyAdmin.orders.details.eachPrice', { price: formatCurrency(itemPrice, i18n.language) })}</Text>
                   </View>
                 </View>
-                <Text style={styles.itemTotal}>{formatCurrency(item.total)}</Text>
+                <Text style={styles.itemTotal}>{formatCurrency(item.total, i18n.language)}</Text>
               </View>
             );
           })}
@@ -363,33 +382,29 @@ export const OrderDetailsScreen = () => {
         {/* Order Summary */}
         <View style={styles.summarySection}>
           <View style={styles.summaryRow}>
-            <Text style={styles.summaryLabel}>Subtotal</Text>
-            <Text style={styles.summaryValue}>{formatCurrency(order.subtotal)}</Text>
+            <Text style={styles.summaryLabel}>{t('pharmacyAdmin.orders.details.subtotalLabel')}</Text>
+            <Text style={styles.summaryValue}>{formatCurrency(order.subtotal, i18n.language)}</Text>
           </View>
           <View style={styles.summaryRow}>
             <View>
-              <Text style={styles.summaryLabel}>Shipping</Text>
+              <Text style={styles.summaryLabel}>{t('pharmacyAdmin.orders.details.shippingLabel')}</Text>
               {order.finalShipping !== null && order.finalShipping !== order.initialShipping && (
                 <Text style={styles.shippingNote}>
-                  Updated from {formatCurrency(order.initialShipping || 0)}
+                  {t('pharmacyAdmin.orders.details.shippingUpdatedFrom', { price: formatCurrency(order.initialShipping || 0, i18n.language) })}
                 </Text>
               )}
               {order.shippingUpdatedAt && (
                 <Text style={styles.shippingNote}>
-                  Updated on {formatDate(order.shippingUpdatedAt)}
+                  {t('pharmacyAdmin.orders.details.shippingUpdatedOn', { date: formatDate(order.shippingUpdatedAt, i18n.language, t('common.na')) })}
                 </Text>
               )}
             </View>
-            <Text style={styles.summaryValue}>{formatCurrency(order.shipping)}</Text>
-          </View>
-          <View style={styles.summaryRow}>
-            <Text style={styles.summaryLabel}>Tax</Text>
-            <Text style={styles.summaryValue}>{formatCurrency(order.tax)}</Text>
+            <Text style={styles.summaryValue}>{formatCurrency(order.shipping, i18n.language)}</Text>
           </View>
           <View style={styles.summaryDivider} />
           <View style={styles.summaryRow}>
-            <Text style={styles.summaryTotalLabel}>Total</Text>
-            <Text style={styles.summaryTotalValue}>{formatCurrency(order.total)}</Text>
+            <Text style={styles.summaryTotalLabel}>{t('pharmacyAdmin.orders.details.totalLabel')}</Text>
+            <Text style={styles.summaryTotalValue}>{formatCurrency(realTotal, i18n.language)}</Text>
           </View>
         </View>
       </ScrollView>
@@ -406,8 +421,8 @@ export const OrderDetailsScreen = () => {
             <Ionicons name="car-outline" size={20} color={colors.textWhite} style={{ marginRight: 8 }} />
             <Text style={styles.actionButtonText}>
               {order.finalShipping !== null && order.finalShipping !== undefined
-                ? 'Update Shipping Fee'
-                : 'Set Shipping Fee'}
+                ? t('pharmacyAdmin.orders.details.actions.updateShippingFee')
+                : t('pharmacyAdmin.orders.details.actions.setShippingFee')}
             </Text>
           </TouchableOpacity>
         )}
@@ -420,7 +435,7 @@ export const OrderDetailsScreen = () => {
             disabled={updateStatusMutation.isPending}
           >
             <Ionicons name="create-outline" size={20} color={colors.textWhite} style={{ marginRight: 8 }} />
-            <Text style={styles.actionButtonText}>Update Status</Text>
+            <Text style={styles.actionButtonText}>{t('pharmacyAdmin.orders.details.actions.updateStatus')}</Text>
           </TouchableOpacity>
         )}
       </View>
@@ -438,7 +453,11 @@ export const OrderDetailsScreen = () => {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Set Shipping Fee</Text>
+              <Text style={styles.modalTitle}>
+                {order?.finalShipping !== null && order?.finalShipping !== undefined
+                  ? t('pharmacyAdmin.orders.details.modal.updateShippingFeeTitle')
+                  : t('pharmacyAdmin.orders.details.modal.setShippingFeeTitle')}
+              </Text>
               <TouchableOpacity
                 onPress={() => {
                   setShowShippingModal(false);
@@ -450,44 +469,44 @@ export const OrderDetailsScreen = () => {
             </View>
             <ScrollView style={styles.modalBody}>
               <Text style={styles.modalOrderNumber}>
-                Order #{order.orderNumber}
+                {t('pharmacyAdmin.orders.details.modal.orderNumber', { orderNumber: order.orderNumber })}
               </Text>
-              <Text style={styles.modalLabel}>Set the final shipping fee:</Text>
+              <Text style={styles.modalLabel}>{t('pharmacyAdmin.orders.details.modal.setFinalShippingFeeLabel')}</Text>
               
               <View style={styles.shippingInfoContainer}>
-                <Text style={styles.shippingInfoLabel}>Current Shipping Fee:</Text>
+                <Text style={styles.shippingInfoLabel}>{t('pharmacyAdmin.orders.details.modal.currentShippingFeeLabel')}</Text>
                 <Text style={styles.shippingInfoValue}>
-                  {formatCurrency(order.shipping || order.initialShipping || 0)}
+                  {formatCurrency(order.shipping || order.initialShipping || 0, i18n.language)}
                 </Text>
                 {order.initialShipping != null && order.initialShipping !== order.shipping && (
                   <Text style={styles.shippingInfoNote}>
-                    Initial estimate: {formatCurrency(order.initialShipping)}
+                    {t('pharmacyAdmin.orders.details.modal.initialEstimate', { price: formatCurrency(order.initialShipping, i18n.language) })}
                   </Text>
                 )}
               </View>
 
               <View style={styles.shippingInputContainer}>
-                <Text style={styles.modalLabel}>New Shipping Fee:</Text>
+                <Text style={styles.modalLabel}>{t('pharmacyAdmin.orders.details.modal.newShippingFeeLabel')}</Text>
                 <TextInput
                   style={styles.shippingInput}
-                  placeholder="Enter shipping fee"
+                  placeholder={t('pharmacyAdmin.orders.details.modal.shippingFeePlaceholder')}
                   placeholderTextColor={colors.textLight}
                   value={shippingFee}
                   onChangeText={setShippingFee}
                   keyboardType="decimal-pad"
                 />
                 <Text style={styles.modalNote}>
-                  Subtotal: {formatCurrency(order.subtotal || 0)}{' '}
-                  + Tax: {formatCurrency(order.tax || 0)}{' '}
-                  + Shipping = New Total
+                  {t('pharmacyAdmin.orders.details.modal.subtotalPlusShippingNewTotal', {
+                    subtotal: formatCurrency(order.subtotal || 0, i18n.language),
+                  })}
                 </Text>
               </View>
 
               {shippingFee && !isNaN(parseFloat(shippingFee)) && order && (
                 <View style={styles.newTotalContainer}>
-                  <Text style={styles.newTotalLabel}>New Total:</Text>
+                  <Text style={styles.newTotalLabel}>{t('pharmacyAdmin.orders.details.modal.newTotalLabel')}</Text>
                   <Text style={styles.newTotalValue}>
-                    {formatCurrency((order.subtotal || 0) + (order.tax || 0) + parseFloat(shippingFee))}
+                    {formatCurrency((order.subtotal || 0) + parseFloat(shippingFee), i18n.language)}
                   </Text>
                 </View>
               )}
@@ -500,7 +519,7 @@ export const OrderDetailsScreen = () => {
                   setShippingFee('');
                 }}
               >
-                <Text style={styles.modalButtonTextCancel}>Cancel</Text>
+                <Text style={styles.modalButtonTextCancel}>{t('common.cancel')}</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.modalButton, styles.modalButtonConfirm]}
@@ -510,7 +529,11 @@ export const OrderDetailsScreen = () => {
                 {updateShippingFeeMutation.isPending ? (
                   <ActivityIndicator size="small" color={colors.textWhite} />
                 ) : (
-                  <Text style={styles.modalButtonTextConfirm}>Update Shipping Fee</Text>
+                  <Text style={styles.modalButtonTextConfirm}>
+                    {order?.finalShipping !== null && order?.finalShipping !== undefined
+                      ? t('pharmacyAdmin.orders.details.actions.updateShippingFee')
+                      : t('pharmacyAdmin.orders.details.actions.setShippingFee')}
+                  </Text>
                 )}
               </TouchableOpacity>
             </View>

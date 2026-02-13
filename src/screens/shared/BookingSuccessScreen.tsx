@@ -11,11 +11,37 @@ import { StackNavigationProp } from '@react-navigation/stack';
 import { AppointmentsStackParamList } from '../../navigation/types';
 import { colors } from '../../constants/colors';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 
 type BookingSuccessScreenNavigationProp = StackNavigationProp<AppointmentsStackParamList, 'BookingSuccess'>;
 
 const BookingSuccessScreen = () => {
   const navigation = useNavigation<BookingSuccessScreenNavigationProp>();
+  const { t, i18n } = useTranslation();
+
+  const locale = i18n.language?.toLowerCase().startsWith('it') ? 'it-IT' : 'en-US';
+  const formatDateTimeRangeFallback = () => {
+    const start = new Date();
+    const end = new Date(start.getTime() + 60 * 60 * 1000);
+
+    const dateLabel = new Intl.DateTimeFormat(locale, {
+      year: 'numeric',
+      month: 'short',
+      day: '2-digit',
+    }).format(start);
+
+    const startTime = new Intl.DateTimeFormat(locale, {
+      hour: '2-digit',
+      minute: '2-digit',
+    }).format(start);
+
+    const endTime = new Intl.DateTimeFormat(locale, {
+      hour: '2-digit',
+      minute: '2-digit',
+    }).format(end);
+
+    return `${dateLabel} ${startTime} - ${endTime}`;
+  };
 
   return (
     <SafeAreaView style={styles.container}>
@@ -24,10 +50,13 @@ const BookingSuccessScreen = () => {
           <View style={styles.iconContainer}>
             <Ionicons name="checkmark-circle" size={80} color={colors.success} />
           </View>
-          <Text style={styles.title}>Appointment booked Successfully!</Text>
+          <Text style={styles.title}>{t('appointments.bookingSuccess.title')}</Text>
           <Text style={styles.message}>
-            Appointment booked with <Text style={styles.boldText}>Dr. Darren Elder</Text>
-            {'\n'}on <Text style={styles.boldText}>12 Nov 2023 5:00PM to 6:00PM</Text>
+            {t('appointments.bookingSuccess.messagePrefix')}{' '}
+            <Text style={styles.boldText}>{t('appointments.bookingSuccess.doctorNameFallback')}</Text>
+            {'\n'}
+            {t('appointments.bookingSuccess.messageOn')}{' '}
+            <Text style={styles.boldText}>{formatDateTimeRangeFallback()}</Text>
           </Text>
           <TouchableOpacity
             style={styles.viewInvoiceBtn}
@@ -46,7 +75,7 @@ const BookingSuccessScreen = () => {
             }}
             activeOpacity={0.8}
           >
-            <Text style={styles.viewInvoiceText}>View Invoice</Text>
+            <Text style={styles.viewInvoiceText}>{t('appointments.bookingSuccess.viewInvoice')}</Text>
           </TouchableOpacity>
         </View>
       </View>

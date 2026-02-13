@@ -20,6 +20,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as pharmacyApi from '../../services/pharmacy';
 import * as productApi from '../../services/product';
 import { API_BASE_URL } from '../../config/api';
+import { useTranslation } from 'react-i18next';
 
 type PharmacyDetailsScreenNavigationProp = NativeStackNavigationProp<PharmacyStackParamList, 'PharmacyDetails'>;
 type PharmacyDetailsRouteProp = RouteProp<PharmacyStackParamList, 'PharmacyDetails'>;
@@ -59,6 +60,7 @@ export const PharmacyDetailsScreen = () => {
   const navigation = useNavigation<PharmacyDetailsScreenNavigationProp>();
   const route = useRoute<PharmacyDetailsRouteProp>();
   const { pharmacyId } = route.params;
+  const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState<'overview' | 'locations' | 'products'>('overview');
 
   // Fetch pharmacy details
@@ -106,7 +108,7 @@ export const PharmacyDetailsScreen = () => {
   const products = productsData?.data?.products || [];
 
   const formatAddress = (address: pharmacyApi.Pharmacy['address']) => {
-    if (!address) return 'Address not available';
+    if (!address) return t('pharmacy.common.addressNotAvailable');
     const parts = [
       address.line1,
       address.line2,
@@ -115,7 +117,7 @@ export const PharmacyDetailsScreen = () => {
       address.country,
       address.zip,
     ].filter(Boolean);
-    return parts.join(', ') || 'Address not available';
+    return parts.join(', ') || t('pharmacy.common.addressNotAvailable');
   };
 
   const handleCall = (phone: string) => {
@@ -134,7 +136,7 @@ export const PharmacyDetailsScreen = () => {
       <SafeAreaView style={styles.container}>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={colors.primary} />
-          <Text style={styles.loadingText}>Loading pharmacy details...</Text>
+          <Text style={styles.loadingText}>{t('pharmacy.details.loadingPharmacyDetails')}</Text>
         </View>
       </SafeAreaView>
     );
@@ -145,13 +147,13 @@ export const PharmacyDetailsScreen = () => {
       <SafeAreaView style={styles.container}>
         <View style={styles.errorContainer}>
           <Ionicons name="alert-circle-outline" size={64} color={colors.error} />
-          <Text style={styles.errorTitle}>Pharmacy Not Found</Text>
-          <Text style={styles.errorText}>The pharmacy you're looking for doesn't exist.</Text>
+          <Text style={styles.errorTitle}>{t('pharmacy.details.pharmacyNotFoundTitle')}</Text>
+          <Text style={styles.errorText}>{t('pharmacy.details.pharmacyNotFoundBody')}</Text>
           <TouchableOpacity
             style={styles.backButton}
             onPress={() => navigation.navigate('PharmacySearch')}
           >
-            <Text style={styles.backButtonText}>Browse Pharmacies</Text>
+            <Text style={styles.backButtonText}>{t('pharmacy.details.browsePharmacies')}</Text>
           </TouchableOpacity>
         </View>
       </SafeAreaView>
@@ -163,7 +165,7 @@ export const PharmacyDetailsScreen = () => {
   const defaultAvatar = require('../../../assets/avatar.png');
   const imageSource = normalizedImageUrl ? { uri: normalizedImageUrl } : defaultAvatar;
   const pharmacyAddress = formatAddress(pharmacy.address);
-  const pharmacyPhone = pharmacy.phone || 'Phone not available';
+  const pharmacyPhone = pharmacy.phone || t('pharmacy.common.phoneNotAvailable');
 
   const renderProduct = ({ item: product }: { item: productApi.Product }) => {
     const productPrice = product.discountPrice || product.price;
@@ -205,7 +207,7 @@ export const PharmacyDetailsScreen = () => {
             <Text style={styles.pharmacyName}>{pharmacy.name}</Text>
             {pharmacy.isActive && (
               <View style={styles.activeBadge}>
-                <Text style={styles.activeBadgeText}>Active</Text>
+                <Text style={styles.activeBadgeText}>{t('pharmacy.details.active')}</Text>
               </View>
             )}
           </View>
@@ -222,7 +224,7 @@ export const PharmacyDetailsScreen = () => {
                 onPress={() => handleCall(pharmacy.phone!)}
               >
                 <Ionicons name="call" size={16} color={colors.textWhite} />
-                <Text style={styles.callButtonText}>Call</Text>
+                <Text style={styles.callButtonText}>{t('pharmacy.details.call')}</Text>
               </TouchableOpacity>
             )}
           </View>
@@ -235,7 +237,7 @@ export const PharmacyDetailsScreen = () => {
           {pharmacy.address?.city && (
             <View style={styles.infoRow}>
               <Ionicons name="business-outline" size={18} color={colors.textSecondary} />
-              <Text style={styles.infoText}>City: {pharmacy.address.city}</Text>
+              <Text style={styles.infoText}>{t('pharmacy.details.cityLabel', { city: pharmacy.address.city })}</Text>
             </View>
           )}
           {pharmacy.location?.lat && pharmacy.location?.lng && (
@@ -244,7 +246,7 @@ export const PharmacyDetailsScreen = () => {
               onPress={() => handleViewOnMaps(pharmacy.location!.lat, pharmacy.location!.lng)}
             >
               <Ionicons name="map-outline" size={18} color={colors.primary} />
-              <Text style={styles.mapButtonText}>View on Google Maps</Text>
+              <Text style={styles.mapButtonText}>{t('pharmacy.details.viewOnGoogleMaps')}</Text>
             </TouchableOpacity>
           )}
           {ownerId && (
@@ -263,7 +265,7 @@ export const PharmacyDetailsScreen = () => {
                 });
               }}
             >
-              <Text style={styles.browseButtonText}>Browse All Products</Text>
+              <Text style={styles.browseButtonText}>{t('pharmacy.common.browseAllProducts')}</Text>
             </TouchableOpacity>
           )}
         </View>
@@ -275,7 +277,7 @@ export const PharmacyDetailsScreen = () => {
             onPress={() => setActiveTab('overview')}
           >
             <Text style={[styles.tabText, activeTab === 'overview' && styles.tabTextActive]}>
-              Overview
+              {t('pharmacy.details.overviewTab')}
             </Text>
           </TouchableOpacity>
           <TouchableOpacity
@@ -283,7 +285,7 @@ export const PharmacyDetailsScreen = () => {
             onPress={() => setActiveTab('locations')}
           >
             <Text style={[styles.tabText, activeTab === 'locations' && styles.tabTextActive]}>
-              Locations
+              {t('pharmacy.details.locationsTab')}
             </Text>
           </TouchableOpacity>
           <TouchableOpacity
@@ -291,7 +293,7 @@ export const PharmacyDetailsScreen = () => {
             onPress={() => setActiveTab('products')}
           >
             <Text style={[styles.tabText, activeTab === 'products' && styles.tabTextActive]}>
-              Products
+              {t('pharmacy.details.productsTab')}
             </Text>
           </TouchableOpacity>
         </View>
@@ -300,37 +302,38 @@ export const PharmacyDetailsScreen = () => {
         <View style={styles.tabContent}>
           {activeTab === 'overview' && (
             <View style={styles.overviewContent}>
-              <Text style={styles.sectionTitle}>About Pharmacy</Text>
+              <Text style={styles.sectionTitle}>{t('pharmacy.details.aboutPharmacy')}</Text>
               <Text style={styles.overviewText}>
-                {pharmacy.name} is a registered pharmacy providing quality healthcare products and
-                services.
-                {pharmacy.address?.city && ` Located in ${pharmacy.address.city}, `}
-                we offer a wide range of medicines, medical equipment, and health supplements.
+                {t('pharmacy.details.overviewIntro', { name: pharmacy.name })}
+                {pharmacy.address?.city
+                  ? t('pharmacy.details.locatedIn', { city: pharmacy.address.city })
+                  : ''}
+                {t('pharmacy.details.overviewOutro')}
               </Text>
               <View style={styles.contactInfo}>
-                <Text style={styles.contactTitle}>Contact Information</Text>
+                <Text style={styles.contactTitle}>{t('pharmacy.details.contactInformation')}</Text>
                 <View style={styles.contactItem}>
-                  <Text style={styles.contactLabel}>Name:</Text>
+                  <Text style={styles.contactLabel}>{t('pharmacy.details.contactName')}</Text>
                   <Text style={styles.contactValue}>{pharmacy.name}</Text>
                 </View>
                 <View style={styles.contactItem}>
-                  <Text style={styles.contactLabel}>Phone:</Text>
+                  <Text style={styles.contactLabel}>{t('pharmacy.details.contactPhone')}</Text>
                   <Text style={styles.contactValue}>{pharmacyPhone}</Text>
                 </View>
                 <View style={styles.contactItem}>
-                  <Text style={styles.contactLabel}>Address:</Text>
+                  <Text style={styles.contactLabel}>{t('pharmacy.details.contactAddress')}</Text>
                   <Text style={styles.contactValue}>{pharmacyAddress}</Text>
                 </View>
                 {pharmacy.isActive !== undefined && (
                   <View style={styles.contactItem}>
-                    <Text style={styles.contactLabel}>Status:</Text>
+                    <Text style={styles.contactLabel}>{t('pharmacy.details.contactStatus')}</Text>
                     <Text
                       style={[
                         styles.contactValue,
                         pharmacy.isActive ? styles.statusActive : styles.statusInactive,
                       ]}
                     >
-                      {pharmacy.isActive ? 'Active' : 'Inactive'}
+                      {pharmacy.isActive ? t('pharmacy.details.active') : t('pharmacy.details.inactive')}
                     </Text>
                   </View>
                 )}
@@ -340,44 +343,44 @@ export const PharmacyDetailsScreen = () => {
 
           {activeTab === 'locations' && (
             <View style={styles.locationsContent}>
-              <Text style={styles.sectionTitle}>Location Details</Text>
-              <Text style={styles.locationLabel}>Full Address:</Text>
+              <Text style={styles.sectionTitle}>{t('pharmacy.details.locationDetails')}</Text>
+              <Text style={styles.locationLabel}>{t('pharmacy.details.fullAddress')}</Text>
               <Text style={styles.locationText}>{pharmacyAddress}</Text>
               {pharmacy.address && (
                 <View style={styles.addressDetails}>
                   {pharmacy.address.line1 && (
                     <View style={styles.addressItem}>
-                      <Text style={styles.addressLabel}>Line 1:</Text>
+                      <Text style={styles.addressLabel}>{t('pharmacy.details.line1')}</Text>
                       <Text style={styles.addressValue}>{pharmacy.address.line1}</Text>
                     </View>
                   )}
                   {pharmacy.address.line2 && (
                     <View style={styles.addressItem}>
-                      <Text style={styles.addressLabel}>Line 2:</Text>
+                      <Text style={styles.addressLabel}>{t('pharmacy.details.line2')}</Text>
                       <Text style={styles.addressValue}>{pharmacy.address.line2}</Text>
                     </View>
                   )}
                   {pharmacy.address.city && (
                     <View style={styles.addressItem}>
-                      <Text style={styles.addressLabel}>City:</Text>
+                      <Text style={styles.addressLabel}>{t('pharmacy.details.city')}</Text>
                       <Text style={styles.addressValue}>{pharmacy.address.city}</Text>
                     </View>
                   )}
                   {pharmacy.address.state && (
                     <View style={styles.addressItem}>
-                      <Text style={styles.addressLabel}>State:</Text>
+                      <Text style={styles.addressLabel}>{t('pharmacy.details.state')}</Text>
                       <Text style={styles.addressValue}>{pharmacy.address.state}</Text>
                     </View>
                   )}
                   {pharmacy.address.country && (
                     <View style={styles.addressItem}>
-                      <Text style={styles.addressLabel}>Country:</Text>
+                      <Text style={styles.addressLabel}>{t('pharmacy.details.country')}</Text>
                       <Text style={styles.addressValue}>{pharmacy.address.country}</Text>
                     </View>
                   )}
                   {pharmacy.address.zip && (
                     <View style={styles.addressItem}>
-                      <Text style={styles.addressLabel}>ZIP Code:</Text>
+                      <Text style={styles.addressLabel}>{t('pharmacy.details.zipCode')}</Text>
                       <Text style={styles.addressValue}>{pharmacy.address.zip}</Text>
                     </View>
                   )}
@@ -385,17 +388,19 @@ export const PharmacyDetailsScreen = () => {
               )}
               {pharmacy.location?.lat && pharmacy.location?.lng && (
                 <View style={styles.coordinatesSection}>
-                  <Text style={styles.locationLabel}>Coordinates:</Text>
+                  <Text style={styles.locationLabel}>{t('pharmacy.details.coordinates')}</Text>
                   <Text style={styles.coordinatesText}>
-                    Latitude: {pharmacy.location.lat.toFixed(4)}, Longitude:{' '}
-                    {pharmacy.location.lng.toFixed(4)}
+                    {t('pharmacy.details.latitudeLongitude', {
+                      lat: pharmacy.location.lat.toFixed(4),
+                      lng: pharmacy.location.lng.toFixed(4),
+                    })}
                   </Text>
                   <TouchableOpacity
                     style={styles.mapButton}
                     onPress={() => handleViewOnMaps(pharmacy.location!.lat, pharmacy.location!.lng)}
                   >
                     <Ionicons name="map-outline" size={18} color={colors.primary} />
-                    <Text style={styles.mapButtonText}>View on Google Maps</Text>
+                    <Text style={styles.mapButtonText}>{t('pharmacy.details.viewOnGoogleMaps')}</Text>
                   </TouchableOpacity>
                 </View>
               )}
@@ -404,12 +409,12 @@ export const PharmacyDetailsScreen = () => {
 
           {activeTab === 'products' && (
             <View style={styles.productsContent}>
-              <Text style={styles.sectionTitle}>Products from this Pharmacy</Text>
+              <Text style={styles.sectionTitle}>{t('pharmacy.details.productsFromThisPharmacy')}</Text>
               {products.length === 0 ? (
                 <View style={styles.emptyProducts}>
                   <Ionicons name="cube-outline" size={48} color={colors.textLight} />
                   <Text style={styles.emptyProductsText}>
-                    No products available from this pharmacy.
+                    {t('pharmacy.details.noProductsFromThisPharmacy')}
                   </Text>
                 </View>
               ) : (
@@ -439,7 +444,7 @@ export const PharmacyDetailsScreen = () => {
                         });
                       }}
                     >
-                      <Text style={styles.viewAllButtonText}>View All Products</Text>
+                      <Text style={styles.viewAllButtonText}>{t('pharmacy.common.viewAllProducts')}</Text>
                     </TouchableOpacity>
                   )}
                 </>

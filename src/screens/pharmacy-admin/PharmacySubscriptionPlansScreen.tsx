@@ -16,9 +16,11 @@ import Toast from 'react-native-toast-message';
 import { colors } from '../../constants/colors';
 import { Button } from '../../components/common/Button';
 import * as pharmacySubscriptionApi from '../../services/pharmacySubscription';
+import { useTranslation } from 'react-i18next';
 
 export const PharmacySubscriptionPlansScreen = () => {
   const queryClient = useQueryClient();
+  const { t, i18n } = useTranslation();
   const [selectedPlan, setSelectedPlan] = useState<pharmacySubscriptionApi.PharmacySubscriptionPlan | null>(null);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -72,24 +74,38 @@ export const PharmacySubscriptionPlansScreen = () => {
       queryClient.invalidateQueries({ queryKey: ['pharmacy-subscription-plans'] });
       queryClient.invalidateQueries({ queryKey: ['pharmacyOrders'] });
       queryClient.invalidateQueries({ queryKey: ['pharmacy-products'] });
-      Toast.show({ type: 'success', text1: 'Success', text2: 'Subscription activated successfully!' });
+      Toast.show({
+        type: 'success',
+        text1: t('common.success'),
+        text2: t('pharmacyAdmin.subscriptionPlans.toasts.purchasedSuccessfully'),
+      });
       setSelectedPlan(null);
     },
     onError: (error: any) => {
-      const msg = error?.response?.data?.message || error?.message || 'Failed to purchase subscription';
-      Toast.show({ type: 'error', text1: 'Error', text2: msg });
+      const msg =
+        error?.response?.data?.message ||
+        error?.message ||
+        t('pharmacyAdmin.subscriptionPlans.errors.failedToPurchase');
+      Toast.show({ type: 'error', text1: t('common.error'), text2: msg });
     },
   });
 
   const formatPrice = (price: number | undefined | null) => {
     const n = price === undefined || price === null ? 0 : Number(price);
-    return `€${n.toFixed(2)}`;
+    return new Intl.NumberFormat(i18n.language || 'en', {
+      style: 'currency',
+      currency: 'EUR',
+    }).format(n);
   };
 
   const formatDate = (dateString: string | null | undefined) => {
-    if (!dateString) return 'N/A';
+    if (!dateString) return t('common.na');
     const d = new Date(dateString);
-    return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+    return d.toLocaleDateString(i18n.language || 'en-GB', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+    });
   };
 
   const handleRefresh = async () => {
@@ -106,7 +122,7 @@ export const PharmacySubscriptionPlansScreen = () => {
       <SafeAreaView style={styles.container}>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={colors.primary} />
-          <Text style={styles.loadingText}>Loading subscription plans...</Text>
+          <Text style={styles.loadingText}>{t('pharmacyAdmin.subscriptionPlans.loading')}</Text>
         </View>
       </SafeAreaView>
     );
@@ -117,9 +133,11 @@ export const PharmacySubscriptionPlansScreen = () => {
       <SafeAreaView style={styles.container}>
         <View style={styles.errorContainer}>
           <Ionicons name="alert-circle-outline" size={48} color={colors.error} />
-          <Text style={styles.errorTitle}>Error Loading Plans</Text>
+          <Text style={styles.errorTitle}>{t('pharmacyAdmin.subscriptionPlans.error.title')}</Text>
           <Text style={styles.errorText}>
-            {(plansError as any)?.response?.data?.message || (plansError as any)?.message || 'Failed to load subscription plans'}
+            {(plansError as any)?.response?.data?.message ||
+              (plansError as any)?.message ||
+              t('pharmacyAdmin.subscriptionPlans.error.failedToLoad')}
           </Text>
         </View>
       </SafeAreaView>
@@ -135,28 +153,33 @@ export const PharmacySubscriptionPlansScreen = () => {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />}
       >
         <View style={styles.header}>
-          <Text style={styles.title}>Subscription Plans</Text>
-          <Text style={styles.subtitle}>Activate a plan to unlock full access to products and orders</Text>
+          <Text style={styles.title}>{t('pharmacyAdmin.subscriptionPlans.title')}</Text>
+          <Text style={styles.subtitle}>{t('pharmacyAdmin.subscriptionPlans.subtitle')}</Text>
         </View>
 
         <View style={styles.currentCard}>
           <View style={styles.currentRow}>
             <View style={{ flex: 1 }}>
-              <Text style={styles.currentTitle}>Current Subscription</Text>
+              <Text style={styles.currentTitle}>{t('pharmacyAdmin.subscriptionPlans.currentSubscriptionTitle')}</Text>
               {mySubscription?.subscriptionPlan ? (
                 <>
                   <Text style={styles.currentText}>
-                    Plan:{' '}
+                    {t('pharmacyAdmin.subscriptionPlans.labels.plan')}{' '}
                     <Text style={{ fontWeight: '700', color: colors.text }}>
-                      {typeof mySubscription.subscriptionPlan === 'object' ? mySubscription.subscriptionPlan.name : '—'}
+                      {typeof mySubscription.subscriptionPlan === 'object'
+                        ? mySubscription.subscriptionPlan.name
+                        : '—'}
                     </Text>
                   </Text>
                   <Text style={styles.currentText}>
-                    {mySubscription?.hasActiveSubscription ? 'Expires on' : 'Expired on'}: {formatDate(mySubscription.subscriptionExpiresAt)}
+                    {mySubscription?.hasActiveSubscription
+                      ? t('pharmacyAdmin.subscriptionPlans.labels.expiresOn')
+                      : t('pharmacyAdmin.subscriptionPlans.labels.expiredOn')}{' '}
+                    {formatDate(mySubscription.subscriptionExpiresAt)}
                   </Text>
                 </>
               ) : (
-                <Text style={styles.currentText}>No active subscription</Text>
+                <Text style={styles.currentText}>{t('pharmacyAdmin.subscriptionPlans.noActiveSubscription')}</Text>
               )}
             </View>
             <View
@@ -165,7 +188,11 @@ export const PharmacySubscriptionPlansScreen = () => {
                 { backgroundColor: mySubscription?.hasActiveSubscription ? colors.success : colors.error },
               ]}
             >
-              <Text style={styles.badgeText}>{mySubscription?.hasActiveSubscription ? 'Active' : 'Inactive'}</Text>
+              <Text style={styles.badgeText}>
+                {mySubscription?.hasActiveSubscription
+                  ? t('pharmacyAdmin.subscriptionPlans.status.active')
+                  : t('pharmacyAdmin.subscriptionPlans.status.inactive')}
+              </Text>
             </View>
           </View>
         </View>
@@ -173,8 +200,8 @@ export const PharmacySubscriptionPlansScreen = () => {
         {plans.length === 0 ? (
           <View style={styles.emptyContainer}>
             <Ionicons name="card-outline" size={56} color={colors.textLight} />
-            <Text style={styles.emptyTitle}>No plans available</Text>
-            <Text style={styles.emptyText}>Please check back later.</Text>
+            <Text style={styles.emptyTitle}>{t('pharmacyAdmin.subscriptionPlans.empty.title')}</Text>
+            <Text style={styles.emptyText}>{t('pharmacyAdmin.subscriptionPlans.empty.body')}</Text>
           </View>
         ) : (
           <View style={styles.plansContainer}>
@@ -186,18 +213,22 @@ export const PharmacySubscriptionPlansScreen = () => {
                     <Text style={styles.planName}>{plan.name}</Text>
                     {current && (
                       <View style={styles.currentPill}>
-                        <Text style={styles.currentPillText}>Current</Text>
+                        <Text style={styles.currentPillText}>{t('pharmacyAdmin.subscriptionPlans.badges.current')}</Text>
                       </View>
                     )}
                   </View>
 
                   <View style={styles.planPricing}>
                     <Text style={styles.planPrice}>{formatPrice(plan.price)}</Text>
-                    <Text style={styles.planDuration}>Duration: {plan.durationInDays} days</Text>
+                    <Text style={styles.planDuration}>
+                      {t('pharmacyAdmin.subscriptionPlans.labels.duration', { days: plan.durationInDays })}
+                    </Text>
                   </View>
 
                   <View style={styles.featuresList}>
-                    {(Array.isArray(plan.features) && plan.features.length > 0 ? plan.features : ['Full access']).map(
+                    {(Array.isArray(plan.features) && plan.features.length > 0
+                      ? plan.features
+                      : [t('pharmacyAdmin.subscriptionPlans.features.default')]).map(
                       (feature: string, idx: number) => (
                         <View key={`${plan._id}-f-${idx}`} style={styles.featureItem}>
                           <Ionicons name="checkmark-circle" size={16} color={colors.success} />
@@ -209,7 +240,7 @@ export const PharmacySubscriptionPlansScreen = () => {
 
                   {current ? (
                     <TouchableOpacity style={styles.currentButton} disabled>
-                      <Text style={styles.currentButtonText}>Current Plan</Text>
+                      <Text style={styles.currentButtonText}>{t('pharmacyAdmin.subscriptionPlans.actions.currentPlan')}</Text>
                     </TouchableOpacity>
                   ) : (
                     <TouchableOpacity
@@ -218,7 +249,11 @@ export const PharmacySubscriptionPlansScreen = () => {
                       activeOpacity={0.7}
                       disabled={buyMutation.isPending || plan.status !== 'ACTIVE'}
                     >
-                      <Text style={styles.buyButtonText}>{plan.status === 'ACTIVE' ? 'Buy Plan' : 'Not Available'}</Text>
+                      <Text style={styles.buyButtonText}>
+                        {plan.status === 'ACTIVE'
+                          ? t('pharmacyAdmin.subscriptionPlans.actions.buyPlan')
+                          : t('pharmacyAdmin.subscriptionPlans.actions.notAvailable')}
+                      </Text>
                     </TouchableOpacity>
                   )}
                 </View>
@@ -232,7 +267,7 @@ export const PharmacySubscriptionPlansScreen = () => {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Confirm Purchase</Text>
+              <Text style={styles.modalTitle}>{t('pharmacyAdmin.subscriptionPlans.modal.title')}</Text>
               <TouchableOpacity onPress={() => setSelectedPlan(null)}>
                 <Ionicons name="close" size={22} color={colors.text} />
               </TouchableOpacity>
@@ -241,12 +276,14 @@ export const PharmacySubscriptionPlansScreen = () => {
             {selectedPlan && (
               <View style={styles.modalBody}>
                 <Text style={styles.modalLine}>
-                  Plan: <Text style={{ fontWeight: '700' }}>{selectedPlan.name}</Text>
+                  {t('pharmacyAdmin.subscriptionPlans.modal.plan')}{' '}
+                  <Text style={{ fontWeight: '700' }}>{selectedPlan.name}</Text>
                 </Text>
                 <Text style={styles.modalLine}>
-                  Price: <Text style={{ fontWeight: '700' }}>{formatPrice(selectedPlan.price)}</Text>
+                  {t('pharmacyAdmin.subscriptionPlans.modal.price')}{' '}
+                  <Text style={{ fontWeight: '700' }}>{formatPrice(selectedPlan.price)}</Text>
                 </Text>
-                <Text style={styles.modalHint}>This will activate immediately.</Text>
+                <Text style={styles.modalHint}>{t('pharmacyAdmin.subscriptionPlans.modal.hint')}</Text>
               </View>
             )}
 
@@ -256,10 +293,14 @@ export const PharmacySubscriptionPlansScreen = () => {
                 onPress={() => setSelectedPlan(null)}
                 disabled={buyMutation.isPending}
               >
-                <Text style={styles.modalCancelText}>Cancel</Text>
+                <Text style={styles.modalCancelText}>{t('common.cancel')}</Text>
               </TouchableOpacity>
               <Button
-                title={buyMutation.isPending ? 'Processing...' : 'Confirm'}
+                title={
+                  buyMutation.isPending
+                    ? t('common.processing')
+                    : t('pharmacyAdmin.subscriptionPlans.actions.confirm')
+                }
                 onPress={() => {
                   if (!selectedPlan) return;
                   buyMutation.mutate({ planId: selectedPlan._id });

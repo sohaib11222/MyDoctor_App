@@ -20,14 +20,11 @@ import { Button } from '../../components/common/Button';
 import { useAuth } from '../../contexts/AuthContext';
 import { useEffect } from 'react';
 import { colors } from '../../constants/colors';
+import { useTranslation } from 'react-i18next';
  
 
 type LoginScreenNavigationProp = NativeStackNavigationProp<AuthStackParamList>;
 
-const schema = yup.object({
-  email: yup.string().email('Invalid email').required('Email is required'),
-  password: yup.string().required('Password is required'),
-});
 
 interface LoginFormData {
   email: string;
@@ -38,6 +35,15 @@ export const LoginScreen = () => {
   const navigation = useNavigation<LoginScreenNavigationProp>();
   const { login, user } = useAuth();
   const [loading, setLoading] = useState(false);
+  const { t } = useTranslation();
+
+  const schema = yup.object({
+    email: yup
+      .string()
+      .email(t('auth.validation.invalidEmail'))
+      .required(t('auth.validation.emailRequired')),
+    password: yup.string().required(t('auth.validation.passwordRequired')),
+  });
 
   // Navigate pending doctors to verification upload after login
   useEffect(() => {
@@ -50,6 +56,23 @@ export const LoginScreen = () => {
       return () => clearTimeout(timer);
     }
   }, [user, navigation]);
+
+  // Navigate pending pharmacy/parapharmacy users to phone verification/upload after login
+  useEffect(() => {
+    const isPharmacy = user && (user.role === 'pharmacy' || user.role === 'parapharmacy');
+    const isPending = String((user as any)?.status || '').toUpperCase() === 'PENDING';
+
+    if (isPharmacy && isPending) {
+      const timer = setTimeout(() => {
+        if (!(user as any)?.isPhoneVerified) {
+          navigation.replace('PharmacyPhoneVerification');
+        } else {
+          navigation.replace('PharmacyVerificationUpload');
+        }
+      }, 300);
+      return () => clearTimeout(timer);
+    }
+  }, [navigation, user]);
 
   const {
     control,
@@ -98,16 +121,16 @@ export const LoginScreen = () => {
 
         {/* Login Form */}
         <View style={styles.formContainer}>
-          <Text style={styles.title}>Login</Text>
-          <Text style={styles.subtitle}>Access to our dashboard</Text>
+          <Text style={styles.title}>{t('auth.login.title')}</Text>
+          <Text style={styles.subtitle}>{t('auth.login.subtitle')}</Text>
 
           <Controller
             control={control}
             name="email"
             render={({ field: { onChange, onBlur, value } }) => (
               <Input
-                label="Email"
-                placeholder="Enter your email"
+                label={t('auth.login.emailLabel')}
+                placeholder={t('auth.login.emailPlaceholder')}
                 value={value}
                 onChangeText={onChange}
                 onBlur={onBlur}
@@ -125,15 +148,15 @@ export const LoginScreen = () => {
             render={({ field: { onChange, onBlur, value } }) => (
               <View>
                 <View style={styles.passwordHeader}>
-                  <Text style={styles.passwordLabel}>Password</Text>
+                  <Text style={styles.passwordLabel}>{t('auth.login.passwordLabel')}</Text>
                   <TouchableOpacity
                     onPress={() => navigation.navigate('ForgotPassword')}
                   >
-                    <Text style={styles.forgotPasswordText}>Forgot password?</Text>
+                    <Text style={styles.forgotPasswordText}>{t('auth.login.forgotPassword')}</Text>
                   </TouchableOpacity>
                 </View>
                 <Input
-                  placeholder="Enter your password"
+                  placeholder={t('auth.login.passwordPlaceholder')}
                   value={value}
                   onChangeText={onChange}
                   onBlur={onBlur}
@@ -146,16 +169,16 @@ export const LoginScreen = () => {
           />
 
           <Button
-            title={loading ? 'Logging in...' : 'Login'}
+            title={loading ? t('auth.login.buttonLoading') : t('auth.login.button')}
             onPress={handleSubmit(onSubmit)}
             loading={loading}
             style={styles.loginButton}
           />
 
           <View style={styles.registerContainer}>
-            <Text style={styles.registerText}>Don't have an account? </Text>
+            <Text style={styles.registerText}>{t('auth.login.noAccount')} </Text>
             <TouchableOpacity onPress={() => navigation.navigate('Register')}>
-              <Text style={styles.registerLink}>Register</Text>
+              <Text style={styles.registerLink}>{t('auth.login.registerLink')}</Text>
             </TouchableOpacity>
           </View>
         </View>

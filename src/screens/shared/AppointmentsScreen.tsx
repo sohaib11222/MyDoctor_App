@@ -25,6 +25,7 @@ import * as appointmentApi from '../../services/appointment';
 import Toast from 'react-native-toast-message';
 import { API_BASE_URL } from '../../config/api';
 import { NotificationBell } from '../../components/common/NotificationBell';
+import { useTranslation } from 'react-i18next';
 
 /**
  * Normalize image URL for mobile app
@@ -109,6 +110,7 @@ const AppointmentsScreen = () => {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const isDoctor = user?.role === 'doctor';
+  const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState<'upcoming' | 'cancelled' | 'completed'>('upcoming');
   const [searchQuery, setSearchQuery] = useState('');
   const [refreshing, setRefreshing] = useState(false);
@@ -310,8 +312,8 @@ const AppointmentsScreen = () => {
         
         // Get name and image based on role
         const name = isDoctor 
-          ? apt.patientId?.fullName || 'Unknown Patient'
-          : apt.doctorId?.fullName || 'Unknown Doctor';
+          ? apt.patientId?.fullName || t('common.unknownPatient')
+          : apt.doctorId?.fullName || t('common.unknownDoctor');
         const imageUri = isDoctor 
           ? apt.patientId?.profileImage 
           : apt.doctorId?.profileImage;
@@ -325,12 +327,12 @@ const AppointmentsScreen = () => {
         // Build types array
         const types: string[] = [];
         if (apt.bookingType === 'VISIT') {
-          types.push('Direct Visit');
+          types.push(t('appointments.bookingType.directVisit'));
           if (apt.clinicName) {
             types.push(apt.clinicName);
           }
         } else if (apt.bookingType === 'ONLINE') {
-          types.push('Online');
+          types.push(t('appointments.bookingType.online'));
         }
         
         // Extract doctorId and patientId
@@ -390,27 +392,27 @@ const AppointmentsScreen = () => {
       queryClient.invalidateQueries({ queryKey: ['appointmentTabCounts'] });
       Toast.show({
         type: 'success',
-        text1: 'Appointment Cancelled',
-        text2: 'Your appointment has been cancelled successfully',
+        text1: t('appointments.cancel.toastTitle'),
+        text2: t('appointments.cancel.toastBody'),
       });
     },
     onError: (error: any) => {
       Toast.show({
         type: 'error',
-        text1: 'Failed to Cancel',
-        text2: error.response?.data?.message || error.message || 'Please try again',
+        text1: t('appointments.cancel.failedToastTitle'),
+        text2: error.response?.data?.message || error.message || t('appointments.cancel.pleaseTryAgain'),
       });
     },
   });
 
   const handleCancelAppointment = (appointmentId: string) => {
     Alert.alert(
-      'Cancel Appointment',
-      'Are you sure you want to cancel this appointment?',
+      t('appointments.cancel.alertTitle'),
+      t('appointments.cancel.alertBody'),
       [
-        { text: 'No', style: 'cancel' },
+        { text: t('common.no'), style: 'cancel' },
         {
-          text: 'Yes, Cancel',
+          text: t('appointments.cancel.alertConfirm'),
           style: 'destructive',
           onPress: () => {
             cancelAppointmentMutation.mutate(appointmentId);
@@ -426,16 +428,16 @@ const AppointmentsScreen = () => {
       if (!item.patientId) {
         Toast.show({
           type: 'error',
-          text1: 'Error',
-          text2: 'Patient information not available',
+          text1: t('common.error'),
+          text2: t('appointments.chat.patientInfoNotAvailable'),
         });
         return;
       }
       if (!item.appointmentId) {
         Toast.show({
           type: 'error',
-          text1: 'Error',
-          text2: 'Appointment information not available',
+          text1: t('common.error'),
+          text2: t('appointments.chat.appointmentInfoNotAvailable'),
         });
         return;
       }
@@ -453,16 +455,16 @@ const AppointmentsScreen = () => {
       if (!item.doctorId) {
         Toast.show({
           type: 'error',
-          text1: 'Error',
-          text2: 'Doctor information not available',
+          text1: t('common.error'),
+          text2: t('appointments.chat.doctorInfoNotAvailable'),
         });
         return;
       }
       if (!item.appointmentId) {
         Toast.show({
           type: 'error',
-          text1: 'Error',
-          text2: 'Appointment information not available',
+          text1: t('common.error'),
+          text2: t('appointments.chat.appointmentInfoNotAvailable'),
         });
         return;
       }
@@ -508,7 +510,7 @@ const AppointmentsScreen = () => {
                 <Text style={styles.appointmentId}>{item.id}</Text>
                 {item.isNew && (
                   <View style={styles.newBadge}>
-                    <Text style={styles.newBadgeText}>New</Text>
+                    <Text style={styles.newBadgeText}>{t('appointments.badgeNew')}</Text>
                   </View>
                 )}
               </View>
@@ -599,7 +601,7 @@ const AppointmentsScreen = () => {
       {/* Header with Search Bar */}
       <View style={styles.header}>
         <View style={styles.headerTop}>
-          <Text style={styles.headerTitle}>Appointments</Text>
+          <Text style={styles.headerTitle}>{t('appointments.title')}</Text>
           <View style={styles.headerActions}>
             <NotificationBell />
             {isDoctor && (
@@ -636,7 +638,7 @@ const AppointmentsScreen = () => {
             <Ionicons name="search-outline" size={20} color={colors.textSecondary} />
             <TextInput
               style={styles.searchInput}
-              placeholder="Search appointments"
+              placeholder={t('appointments.searchPlaceholder')}
               placeholderTextColor={colors.textLight}
               value={searchQuery}
               onChangeText={setSearchQuery}
@@ -654,7 +656,7 @@ const AppointmentsScreen = () => {
             activeOpacity={0.7}
           >
             <Text style={[styles.tabText, activeTab === 'upcoming' && styles.tabTextActive]}>
-              Upcoming
+              {t('appointments.tabs.upcoming')}
             </Text>
             <View style={[styles.tabBadge, activeTab === 'upcoming' && styles.tabBadgeActive]}>
               <Text style={[styles.tabBadgeText, activeTab === 'upcoming' && styles.tabBadgeTextActive]}>
@@ -668,7 +670,7 @@ const AppointmentsScreen = () => {
             activeOpacity={0.7}
           >
             <Text style={[styles.tabText, activeTab === 'cancelled' && styles.tabTextActive]}>
-              Cancelled
+              {t('appointments.tabs.cancelled')}
             </Text>
             <View style={[styles.tabBadge, activeTab === 'cancelled' && styles.tabBadgeActive]}>
               <Text style={[styles.tabBadgeText, activeTab === 'cancelled' && styles.tabBadgeTextActive]}>
@@ -682,7 +684,7 @@ const AppointmentsScreen = () => {
             activeOpacity={0.7}
           >
             <Text style={[styles.tabText, activeTab === 'completed' && styles.tabTextActive]}>
-              Completed
+              {t('appointments.tabs.completed')}
             </Text>
             <View style={[styles.tabBadge, activeTab === 'completed' && styles.tabBadgeActive]}>
               <Text style={[styles.tabBadgeText, activeTab === 'completed' && styles.tabBadgeTextActive]}>
@@ -714,10 +716,10 @@ const AppointmentsScreen = () => {
             {fromDate && toDate
               ? `${fromDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - ${toDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
               : fromDate
-              ? `From ${fromDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
+              ? t('appointments.filter.fromPrefix', { date: fromDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) })
               : toDate
-              ? `To ${toDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
-              : 'From Date - To Date'}
+              ? t('appointments.filter.toPrefix', { date: toDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) })
+              : t('appointments.filter.dateRangePlaceholder')}
           </Text>
         </TouchableOpacity>
         <TouchableOpacity
@@ -736,7 +738,14 @@ const AppointmentsScreen = () => {
               filterBy !== 'all' && styles.filterTextActive,
             ]}
           >
-            Filter By {filterBy !== 'all' ? `(${filterBy})` : ''}
+            {filterBy === 'all'
+              ? t('appointments.filter.filterByAll')
+              : t('appointments.filter.filterBySelected', {
+                  value:
+                    filterBy === 'online'
+                      ? t('appointments.bookingType.online')
+                      : t('appointments.bookingType.directVisit'),
+                })}
           </Text>
         </TouchableOpacity>
       </View>
@@ -745,14 +754,14 @@ const AppointmentsScreen = () => {
       {isLoading ? (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={colors.primary} />
-          <Text style={styles.loadingText}>Loading appointments...</Text>
+          <Text style={styles.loadingText}>{t('appointments.loadingAppointments')}</Text>
         </View>
       ) : error ? (
         <View style={styles.emptyContainer}>
           <Ionicons name="alert-circle-outline" size={64} color={colors.error} />
-          <Text style={styles.emptyText}>Failed to load appointments</Text>
+          <Text style={styles.emptyText}>{t('appointments.failedToLoadAppointments')}</Text>
           <TouchableOpacity style={styles.retryButton} onPress={() => refetch()}>
-            <Text style={styles.retryButtonText}>Retry</Text>
+            <Text style={styles.retryButtonText}>{t('common.retry')}</Text>
           </TouchableOpacity>
         </View>
       ) : (
@@ -768,7 +777,9 @@ const AppointmentsScreen = () => {
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
               <Ionicons name="calendar-outline" size={64} color={colors.textLight} />
-              <Text style={styles.emptyText}>No {activeTab} appointments</Text>
+              <Text style={styles.emptyText}>
+                {t(`appointments.empty.${activeTab}` as any)}
+              </Text>
             </View>
           }
         />
@@ -789,7 +800,7 @@ const AppointmentsScreen = () => {
           />
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Filter By</Text>
+              <Text style={styles.modalTitle}>{t('appointments.filter.modalTitle')}</Text>
               <TouchableOpacity
                 onPress={() => setShowFilterModal(false)}
                 activeOpacity={0.7}
@@ -815,7 +826,7 @@ const AppointmentsScreen = () => {
                     filterBy === 'all' && styles.filterOptionTextActive,
                   ]}
                 >
-                  All Appointments
+                  {t('appointments.filter.optionAll')}
                 </Text>
                 {filterBy === 'all' && (
                   <Ionicons name="checkmark-circle" size={20} color={colors.primary} />
@@ -838,7 +849,7 @@ const AppointmentsScreen = () => {
                     filterBy === 'online' && styles.filterOptionTextActive,
                   ]}
                 >
-                  Online Appointments
+                  {t('appointments.filter.optionOnline')}
                 </Text>
                 {filterBy === 'online' && (
                   <Ionicons name="checkmark-circle" size={20} color={colors.primary} />
@@ -861,7 +872,7 @@ const AppointmentsScreen = () => {
                     filterBy === 'visit' && styles.filterOptionTextActive,
                   ]}
                 >
-                  Direct Visit Appointments
+                  {t('appointments.filter.optionDirectVisit')}
                 </Text>
                 {filterBy === 'visit' && (
                   <Ionicons name="checkmark-circle" size={20} color={colors.primary} />
@@ -887,7 +898,7 @@ const AppointmentsScreen = () => {
           />
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Select Date Range</Text>
+              <Text style={styles.modalTitle}>{t('appointments.filter.dateModalTitle')}</Text>
               <TouchableOpacity
                 onPress={() => setShowDateFilterModal(false)}
                 activeOpacity={0.7}
@@ -897,10 +908,10 @@ const AppointmentsScreen = () => {
             </View>
             <ScrollView style={styles.modalBody} showsVerticalScrollIndicator={false}>
               <View style={styles.dateInputContainer}>
-                <Text style={styles.dateLabel}>From Date</Text>
+                <Text style={styles.dateLabel}>{t('appointments.filter.fromDateLabel')}</Text>
                 <TextInput
                   style={styles.dateInput}
-                  placeholder="YYYY-MM-DD (e.g., 2024-01-15)"
+                  placeholder={t('appointments.filter.fromDatePlaceholder')}
                   placeholderTextColor={colors.textLight}
                   value={fromDate ? fromDate.toISOString().split('T')[0] : ''}
                   onChangeText={(text) => {
@@ -925,10 +936,10 @@ const AppointmentsScreen = () => {
                 )}
               </View>
               <View style={styles.dateInputContainer}>
-                <Text style={styles.dateLabel}>To Date</Text>
+                <Text style={styles.dateLabel}>{t('appointments.filter.toDateLabel')}</Text>
                 <TextInput
                   style={styles.dateInput}
-                  placeholder="YYYY-MM-DD (e.g., 2024-12-31)"
+                  placeholder={t('appointments.filter.toDatePlaceholder')}
                   placeholderTextColor={colors.textLight}
                   value={toDate ? toDate.toISOString().split('T')[0] : ''}
                   onChangeText={(text) => {
@@ -962,14 +973,14 @@ const AppointmentsScreen = () => {
                   }}
                   activeOpacity={0.7}
                 >
-                  <Text style={styles.modalButtonTextSecondary}>Clear</Text>
+                  <Text style={styles.modalButtonTextSecondary}>{t('common.clear')}</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={[styles.modalButton, styles.modalButtonPrimary]}
                   onPress={() => setShowDateFilterModal(false)}
                   activeOpacity={0.7}
                 >
-                  <Text style={styles.modalButtonTextPrimary}>Apply</Text>
+                  <Text style={styles.modalButtonTextPrimary}>{t('common.apply')}</Text>
                 </TouchableOpacity>
               </View>
             </ScrollView>

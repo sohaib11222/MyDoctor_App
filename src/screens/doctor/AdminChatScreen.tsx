@@ -30,6 +30,7 @@ import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
 import * as uploadApi from '../../services/upload';
 import { copyImageToCacheUri, deleteCacheFiles } from '../../utils/imageUpload';
+import { useTranslation } from 'react-i18next';
 
 const { width } = Dimensions.get('window');
 
@@ -91,7 +92,10 @@ const normalizeImageUrl = (imageUri: string | undefined | null): string | null =
 /**
  * Format date to relative time string
  */
-const formatRelativeTime = (dateString: string): string => {
+const formatRelativeTime = (
+  dateString: string,
+  t: (key: string, options?: any) => string
+): string => {
   if (!dateString) return '';
   
   const date = new Date(dateString);
@@ -101,10 +105,10 @@ const formatRelativeTime = (dateString: string): string => {
   const diffHours = Math.floor(diffMs / 3600000);
   const diffDays = Math.floor(diffMs / 86400000);
   
-  if (diffMins < 1) return 'Just Now';
-  if (diffMins < 60) return `${diffMins}m ago`;
-  if (diffHours < 24) return `${diffHours}h ago`;
-  if (diffDays < 7) return `${diffDays}d ago`;
+  if (diffMins < 1) return t('chat.time.justNow');
+  if (diffMins < 60) return t('chat.time.minutesAgo', { count: diffMins });
+  if (diffHours < 24) return t('chat.time.hoursAgo', { count: diffHours });
+  if (diffDays < 7) return t('chat.time.daysAgo', { count: diffDays });
   
   return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 };
@@ -124,6 +128,12 @@ interface Message {
   message: string;
   time: string;
   date: string;
+  type: 'text' | 'audio' | 'image' | 'file' | 'location' | 'video';
+  images?: string[];
+  fileInfo?: {
+    name: string;
+    type: string;
+  };
 }
 
 // Mock admins removed - using real data from backend
@@ -135,6 +145,7 @@ const sampleMessages: Message[] = [
     message: 'Hello! How can we assist you today?',
     time: '10:00 AM',
     date: '15 Nov 2024',
+    type: 'text',
   },
   {
     id: '2',
@@ -142,6 +153,7 @@ const sampleMessages: Message[] = [
     message: 'I have a question about my subscription plan.',
     time: '10:05 AM',
     date: '15 Nov 2024',
+    type: 'text',
   },
   {
     id: '3',
@@ -149,6 +161,7 @@ const sampleMessages: Message[] = [
     message: 'Sure! What would you like to know?',
     time: '10:06 AM',
     date: '15 Nov 2024',
+    type: 'text',
   },
   {
     id: '4',
@@ -156,6 +169,7 @@ const sampleMessages: Message[] = [
     message: 'Can I upgrade my plan mid-month?',
     time: '10:10 AM',
     date: '15 Nov 2024',
+    type: 'text',
   },
   {
     id: '5',
@@ -163,6 +177,7 @@ const sampleMessages: Message[] = [
     message: 'Yes, you can upgrade at any time. The billing will be prorated.',
     time: '10:15 AM',
     date: '15 Nov 2024',
+    type: 'text',
   },
 ];
 
@@ -171,6 +186,7 @@ export const AdminChatScreen = () => {
   const route = useRoute<AdminChatRouteProp>();
   const { user } = useAuth();
   const queryClient = useQueryClient();
+  const { t } = useTranslation();
   const { conversationId: routeConversationId, adminId: routeAdminId } = route.params || {};
   
   const [selectedAdmin, setSelectedAdmin] = useState<Admin | null>(null);
@@ -206,14 +222,14 @@ export const AdminChatScreen = () => {
         const adminId = typeof conv.adminId === 'object' ? conv.adminId?._id : conv.adminId;
         const admin = typeof conv.adminId === 'object' ? conv.adminId : null;
         const imageUri = admin?.profileImage || null;
-        const lastMessage = conv.lastMessage?.message || 'No messages yet';
-        const lastTime = formatRelativeTime(conv.lastMessageAt || conv.lastMessage?.createdAt || '');
+        const lastMessage = conv.lastMessage?.message || t('chat.common.noMessagesYet');
+        const lastTime = formatRelativeTime(conv.lastMessageAt || conv.lastMessage?.createdAt || '', t);
         
         return {
           id: conv._id,
           conversationId: conv._id,
           adminId: adminId || '',
-          name: admin?.fullName || 'Admin Support',
+          name: admin?.fullName || t('chat.common.adminSupport'),
           avatar: imageUri ? { uri: normalizeImageUrl(imageUri) || undefined } : defaultAvatar,
           lastMessage,
           lastMessageTime: lastTime,
@@ -221,7 +237,7 @@ export const AdminChatScreen = () => {
           online: false, // TODO: Implement online status
         };
       });
-  }, [conversationsResponse]);
+  }, [conversationsResponse, t]);
 
   // Auto-select admin if conversationId is provided
   useEffect(() => {
@@ -240,7 +256,7 @@ export const AdminChatScreen = () => {
   const { data: messagesResponse, isLoading: messagesLoading, refetch: refetchMessages } = useQuery({
     queryKey: ['adminConversationMessages', selectedAdmin?.conversationId],
     queryFn: () => {
-      if (!selectedAdmin?.conversationId) throw new Error('Conversation ID not found');
+      if (!selectedAdmin?.conversationId) throw new Error(t('chat.admin.conversationIdNotFound'));
       return chatApi.getMessages(selectedAdmin.conversationId, { page: 1, limit: 100 });
     },
     enabled: !!selectedAdmin?.conversationId,
@@ -357,12 +373,12 @@ export const AdminChatScreen = () => {
             id: newConversation._id,
             conversationId: newConversation._id,
             adminId: adminId,
-            name: admin.fullName || 'Admin Support',
+            name: admin.fullName || t('chat.common.adminSupport'),
             avatar: admin.profileImage 
               ? { uri: normalizeImageUrl(admin.profileImage) || undefined }
               : defaultAvatar,
-            lastMessage: 'No messages yet',
-            lastMessageTime: 'Just Now',
+            lastMessage: t('chat.common.noMessagesYet'),
+            lastMessageTime: t('chat.time.justNow'),
             unread: 0,
             online: false,
           });
@@ -407,10 +423,10 @@ export const AdminChatScreen = () => {
       }, 100);
     },
     onError: (error: any) => {
-      const errorMessage = error?.response?.data?.message || error?.message || 'Failed to send message';
+      const errorMessage = error?.response?.data?.message || error?.message || t('chat.send.failedFallback');
       Toast.show({
         type: 'error',
-        text1: 'Error',
+        text1: t('common.error'),
         text2: errorMessage,
       });
     },
@@ -447,8 +463,8 @@ export const AdminChatScreen = () => {
     if (!permissionResult.granted) {
       Toast.show({
         type: 'error',
-        text1: 'Permission Required',
-        text2: 'Please grant permission to access your photos.',
+        text1: t('chat.permissions.requiredTitle'),
+        text2: t('chat.permissions.photosBody'),
       });
       return;
     }
@@ -466,8 +482,8 @@ export const AdminChatScreen = () => {
       if (oversizedFiles.length > 0) {
         Toast.show({
           type: 'error',
-          text1: 'File Too Large',
-          text2: 'Some files are too large. Maximum size is 50MB.',
+          text1: t('chat.files.fileTooLargeTitle'),
+          text2: t('chat.files.fileTooLargeBody'),
         });
         return;
       }
@@ -502,8 +518,8 @@ export const AdminChatScreen = () => {
               console.error('Error uploading image:', uploadError);
               Toast.show({
                 type: 'error',
-                text1: 'Upload Failed',
-                text2: `Failed to upload ${fileName}`,
+                text1: t('chat.files.uploadFailedTitle'),
+                text2: t('chat.files.failedToUploadName', { name: fileName }),
               });
             } finally {
               if (tempFileUri) {
@@ -520,8 +536,8 @@ export const AdminChatScreen = () => {
         console.error('Error handling images:', error);
         Toast.show({
           type: 'error',
-          text1: 'Error',
-          text2: 'Failed to upload files',
+          text1: t('common.error'),
+          text2: t('chat.files.failedToUploadFiles'),
         });
       } finally {
         setUploadingFiles(false);
@@ -545,8 +561,8 @@ export const AdminChatScreen = () => {
         if (oversizedFiles.length > 0) {
           Toast.show({
             type: 'error',
-            text1: 'File Too Large',
-            text2: 'Some files are too large. Maximum size is 50MB.',
+            text1: t('chat.files.fileTooLargeTitle'),
+            text2: t('chat.files.fileTooLargeBody'),
           });
           return;
         }
@@ -583,8 +599,8 @@ export const AdminChatScreen = () => {
               console.error('Error uploading file:', uploadError);
               Toast.show({
                 type: 'error',
-                text1: 'Upload Failed',
-                text2: `Failed to upload ${asset.name}`,
+                text1: t('chat.files.uploadFailedTitle'),
+                text2: t('chat.files.failedToUploadName', { name: asset.name }),
               });
             }
           }
@@ -597,8 +613,8 @@ export const AdminChatScreen = () => {
           console.error('Error handling files:', error);
           Toast.show({
             type: 'error',
-            text1: 'Error',
-            text2: 'Failed to upload files',
+            text1: t('common.error'),
+            text2: t('chat.files.failedToUploadFiles'),
           });
         } finally {
           setUploadingFiles(false);
@@ -608,8 +624,8 @@ export const AdminChatScreen = () => {
       console.error('Error picking document:', error);
       Toast.show({
         type: 'error',
-        text1: 'Error',
-        text2: 'Failed to pick document',
+        text1: t('common.error'),
+        text2: t('chat.files.failedToPickDocument'),
       });
     }
   };
@@ -639,10 +655,13 @@ export const AdminChatScreen = () => {
         flatListRef.current?.scrollToEnd({ animated: true });
       }, 100);
     } catch (error: any) {
-      const errorMessage = (error as any)?.response?.data?.message || (error as any)?.message || 'Failed to send message';
+      const errorMessage =
+        (error as any)?.response?.data?.message ||
+        (error as any)?.message ||
+        t('chat.send.failedFallback');
       Toast.show({
         type: 'error',
-        text1: 'Error',
+        text1: t('common.error'),
         text2: errorMessage,
       });
       throw error;
@@ -701,7 +720,7 @@ export const AdminChatScreen = () => {
           )}
           {item.type === 'image' && item.images && item.images.length > 0 && (
             <View style={styles.imageContainer}>
-              {item.images.slice(0, 3).map((img, idx) => {
+              {item.images.slice(0, 3).map((img: string, idx: number) => {
                 const imageUrl = normalizeImageUrl(img);
                 return imageUrl ? (
                   <TouchableOpacity
@@ -787,7 +806,7 @@ export const AdminChatScreen = () => {
         >
           <Ionicons name="chevron-back" size={24} color={colors.textWhite} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Admin Messages</Text>
+        <Text style={styles.headerTitle}>{t('chat.nav.adminMessages')}</Text>
         <View style={styles.headerRightPlaceholder} />
       </View>
       
@@ -795,7 +814,7 @@ export const AdminChatScreen = () => {
         {/* Admin List Sidebar */}
         <View style={styles.sidebar}>
           <View style={styles.sidebarHeader}>
-            <Text style={styles.sidebarTitle}>Administrators</Text>
+            <Text style={styles.sidebarTitle}>{t('chat.admin.administrators')}</Text>
           </View>
           {conversationsLoading ? (
             <View style={styles.loadingContainer}>
@@ -809,7 +828,7 @@ export const AdminChatScreen = () => {
               showsVerticalScrollIndicator={false}
               ListEmptyComponent={
                 <View style={styles.emptyContainer}>
-                  <Text style={styles.emptyText}>No admin conversations</Text>
+                  <Text style={styles.emptyText}>{t('chat.admin.noAdminConversations')}</Text>
                 </View>
               }
             />
@@ -834,7 +853,7 @@ export const AdminChatScreen = () => {
                   <View>
                     <Text style={styles.chatHeaderName}>{selectedAdmin.name}</Text>
                     <Text style={styles.chatHeaderStatus}>
-                      {selectedAdmin.online ? 'Online' : 'Offline'}
+                      {selectedAdmin.online ? t('chat.admin.online') : t('chat.admin.offline')}
                     </Text>
                   </View>
                 </View>
@@ -845,7 +864,7 @@ export const AdminChatScreen = () => {
                 {messagesLoading ? (
                   <View style={styles.loadingContainer}>
                     <ActivityIndicator size="large" color={colors.primary} />
-                    <Text style={styles.loadingText}>Loading messages...</Text>
+                    <Text style={styles.loadingText}>{t('chat.admin.loadingMessages')}</Text>
                   </View>
                 ) : (
                   <FlatList
@@ -860,8 +879,8 @@ export const AdminChatScreen = () => {
                     refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />}
                     ListEmptyComponent={
                       <View style={styles.emptyContainer}>
-                        <Text style={styles.emptyText}>No messages yet</Text>
-                        <Text style={styles.emptySubtext}>Start the conversation</Text>
+                        <Text style={styles.emptyText}>{t('chat.common.noMessagesYet')}</Text>
+                        <Text style={styles.emptySubtext}>{t('chat.detail.startTheConversation')}</Text>
                       </View>
                     }
                   />
@@ -889,7 +908,7 @@ export const AdminChatScreen = () => {
                   </TouchableOpacity>
                   <TextInput
                     style={styles.input}
-                    placeholder="Type your message..."
+                    placeholder={t('chat.detail.messagePlaceholder')}
                     placeholderTextColor={colors.textLight}
                     value={newMessage}
                     onChangeText={setNewMessage}
@@ -918,9 +937,9 @@ export const AdminChatScreen = () => {
           ) : (
             <View style={styles.placeholder}>
               <Ionicons name="chatbubbles-outline" size={64} color={colors.textLight} />
-              <Text style={styles.placeholderTitle}>Select an administrator</Text>
+              <Text style={styles.placeholderTitle}>{t('chat.admin.selectAdministrator')}</Text>
               <Text style={styles.placeholderText}>
-                Choose an admin from the list to start a conversation
+                {t('chat.admin.chooseAdminBody')}
               </Text>
             </View>
           )}

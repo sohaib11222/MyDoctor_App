@@ -7,6 +7,7 @@ import { MoreStackParamList } from '../../navigation/types';
 import { useAuth } from '../../contexts/AuthContext';
 import { colors } from '../../constants/colors';
 import { Feather, Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import * as notificationApi from '../../services/notification';
 import * as profileApi from '../../services/profile';
 import * as subscriptionApi from '../../services/subscription';
@@ -18,6 +19,7 @@ type MoreScreenNavigationProp = NativeStackNavigationProp<MoreStackParamList>;
 export const MoreScreen = () => {
   const navigation = useNavigation<MoreScreenNavigationProp>();
   const { user, logout } = useAuth();
+  const { t } = useTranslation();
 
   // Fetch unread notifications count
   const { data: unreadCount = 0 } = useQuery({
@@ -69,69 +71,73 @@ export const MoreScreen = () => {
   const getMenuItems = () => {
     if ((user as any)?.role === 'ADMIN' || (user as any)?.role === 'admin') {
       return [
-        { id: 1, title: 'All Orders', icon: 'shopping-bag', screen: 'AdminOrders' as keyof MoreStackParamList },
-        { id: 2, title: 'Profile', icon: 'user', screen: 'Profile' as keyof MoreStackParamList },
-        { id: 2.5, title: 'Language', icon: 'globe', screen: 'Language' as keyof MoreStackParamList },
-        { id: 3, title: 'Change Password', icon: 'lock', screen: 'ChangePassword' as keyof MoreStackParamList },
-        { id: 4, title: 'Notifications', icon: 'bell', screen: 'Notifications' as keyof MoreStackParamList },
+        { id: 1, title: t('menu.allOrders'), icon: 'shopping-bag', screen: 'AdminOrders' as keyof MoreStackParamList },
+        { id: 2, title: t('menu.profile'), icon: 'user', screen: 'Profile' as keyof MoreStackParamList },
+        { id: 2.5, title: t('menu.language'), icon: 'globe', screen: 'Language' as keyof MoreStackParamList },
+        { id: 3, title: t('menu.changePassword'), icon: 'lock', screen: 'ChangePassword' as keyof MoreStackParamList },
+        { id: 4, title: t('menu.notifications'), icon: 'bell', screen: 'Notifications' as keyof MoreStackParamList },
       ];
     }
 
     if (user?.role === 'pharmacy') {
       return [
-        { id: 1, title: 'Profile', icon: 'user', screen: 'PharmacyProfile' as keyof MoreStackParamList },
-        { id: 1.5, title: 'Subscription', icon: 'credit-card', screen: 'PharmacySubscription' as keyof MoreStackParamList, showDanger: true },
+        { id: 1, title: t('menu.profile'), icon: 'user', screen: 'PharmacyProfile' as keyof MoreStackParamList },
+        { id: 1.5, title: t('menu.subscription'), icon: 'credit-card', screen: 'PharmacySubscription' as keyof MoreStackParamList, showDanger: true },
+        { id: 1.75, title: t('menu.language'), icon: 'globe', screen: 'Language' as keyof MoreStackParamList },
         // { id: 1.75, title: 'Language', icon: 'globe', screen: 'Language' as keyof MoreStackParamList },
-        { id: 2, title: 'Payout Settings', icon: 'dollar-sign', screen: 'PayoutSettings' as keyof MoreStackParamList },
-        { id: 3, title: 'Change Password', icon: 'lock', screen: 'ChangePassword' as keyof MoreStackParamList },
-        { id: 4, title: 'Notifications', icon: 'bell', screen: 'Notifications' as keyof MoreStackParamList },
+        { id: 2, title: t('menu.payoutSettings'), icon: 'dollar-sign', screen: 'PayoutSettings' as keyof MoreStackParamList },
+        { id: 3, title: t('menu.changePassword'), icon: 'lock', screen: 'ChangePassword' as keyof MoreStackParamList },
+        { id: 4, title: t('menu.notifications'), icon: 'bell', screen: 'Notifications' as keyof MoreStackParamList },
       ];
     }
 
     if (user?.role === 'parapharmacy') {
       return [
-        { id: 1, title: 'Profile', icon: 'user', screen: 'PharmacyProfile' as keyof MoreStackParamList },
+        { id: 1, title: t('menu.profile'), icon: 'user', screen: 'PharmacyProfile' as keyof MoreStackParamList },
+        { id: 1.5, title: t('menu.language'), icon: 'globe', screen: 'Language' as keyof MoreStackParamList },
         // { id: 1.5, title: 'Language', icon: 'globe', screen: 'Language' as keyof MoreStackParamList },
-        { id: 2, title: 'Payout Settings', icon: 'dollar-sign', screen: 'PayoutSettings' as keyof MoreStackParamList },
-        { id: 3, title: 'Change Password', icon: 'lock', screen: 'ChangePassword' as keyof MoreStackParamList },
-        { id: 4, title: 'Notifications', icon: 'bell', screen: 'Notifications' as keyof MoreStackParamList },
+        { id: 2, title: t('menu.payoutSettings'), icon: 'dollar-sign', screen: 'PayoutSettings' as keyof MoreStackParamList },
+        { id: 3, title: t('menu.changePassword'), icon: 'lock', screen: 'ChangePassword' as keyof MoreStackParamList },
+        { id: 4, title: t('menu.notifications'), icon: 'bell', screen: 'Notifications' as keyof MoreStackParamList },
       ];
     }
   
     if (user?.role === 'doctor') {
       return [
         // { id: 1, title: 'Dashboard', icon: 'grid', screen: 'DoctorDashboard' as keyof MoreStackParamList },
-        { id: 2, title: 'My Patients', icon: 'users', screen: 'MyPatients' as keyof MoreStackParamList },
-        { id: 3, title: 'Reviews', icon: 'star', screen: 'Reviews' as keyof MoreStackParamList },
-        { id: 4, title: 'Reschedule Requests', icon: 'calendar', screen: 'DoctorRescheduleRequests' as keyof MoreStackParamList },
-        { id: 5, title: 'Invoices', icon: 'file-text', screen: 'Invoices' as keyof MoreStackParamList },
-        { id: 6, title: 'Subscription', icon: 'credit-card', screen: 'Subscription' as keyof MoreStackParamList, showDanger: true },
-        { id: 6.5, title: 'Payout Settings', icon: 'dollar-sign', screen: 'PayoutSettings' as keyof MoreStackParamList },
-        { id: 7, title: 'Available Timings', icon: 'clock', screen: 'AvailableTimings' as any, showDanger: true, isAppointmentsStack: true },
-        { id: 8, title: 'Announcements', icon: 'bell', screen: 'Announcements' as keyof MoreStackParamList },
-        { id: 11, title: 'Profile', icon: 'user', screen: 'Profile' as keyof MoreStackParamList },
-        { id: 12, title: 'Profile Settings', icon: 'edit', screen: 'ProfileSettings' as keyof MoreStackParamList },
+        { id: 2, title: t('menu.myPatients'), icon: 'users', screen: 'MyPatients' as keyof MoreStackParamList },
+        { id: 3, title: t('menu.reviews'), icon: 'star', screen: 'Reviews' as keyof MoreStackParamList },
+        { id: 4, title: t('menu.rescheduleRequests'), icon: 'calendar', screen: 'DoctorRescheduleRequests' as keyof MoreStackParamList },
+        { id: 5, title: t('menu.invoices'), icon: 'file-text', screen: 'Invoices' as keyof MoreStackParamList },
+        { id: 6, title: t('menu.subscription'), icon: 'credit-card', screen: 'Subscription' as keyof MoreStackParamList, showDanger: true },
+        { id: 6.5, title: t('menu.payoutSettings'), icon: 'dollar-sign', screen: 'PayoutSettings' as keyof MoreStackParamList },
+        { id: 7, title: t('menu.availableTimings'), icon: 'clock', screen: 'AvailableTimings' as any, showDanger: true, isAppointmentsStack: true },
+        { id: 8, title: t('menu.announcements'), icon: 'bell', screen: 'Announcements' as keyof MoreStackParamList },
+        { id: 11, title: t('menu.profile'), icon: 'user', screen: 'Profile' as keyof MoreStackParamList },
+        { id: 12, title: t('menu.profileSettings'), icon: 'edit', screen: 'ProfileSettings' as keyof MoreStackParamList },
+        { id: 12.5, title: t('menu.language'), icon: 'globe', screen: 'Language' as keyof MoreStackParamList },
         // { id: 12.5, title: 'Language', icon: 'globe', screen: 'Language' as keyof MoreStackParamList },
         // { id: 12, title: 'Social Media Links', icon: 'share-2', screen: 'SocialLinks' as keyof MoreStackParamList },
         // { id: 13, title: 'Settings', icon: 'settings', screen: 'Settings' as keyof MoreStackParamList },
-        { id: 14, title: 'Change Password', icon: 'lock', screen: 'ChangePassword' as keyof MoreStackParamList },
-        { id: 15, title: 'Notifications', icon: 'bell', screen: 'Notifications' as keyof MoreStackParamList },
+        { id: 14, title: t('menu.changePassword'), icon: 'lock', screen: 'ChangePassword' as keyof MoreStackParamList },
+        { id: 15, title: t('menu.notifications'), icon: 'bell', screen: 'Notifications' as keyof MoreStackParamList },
       ];
     } else {
       return [
         // { id: 1, title: 'Dashboard', icon: 'grid', screen: 'PatientDashboard' as keyof MoreStackParamList },
         // { id: 2, title: 'Profile', icon: 'user', screen: 'Profile' as keyof MoreStackParamList },
-        { id: 3, title: 'Profile Settings', icon: 'edit', screen: 'PatientProfileSettings' as keyof MoreStackParamList },
+        { id: 3, title: t('menu.profileSettings'), icon: 'edit', screen: 'PatientProfileSettings' as keyof MoreStackParamList },
+        { id: 3.5, title: t('menu.language'), icon: 'globe', screen: 'Language' as keyof MoreStackParamList },
         // { id: 3.5, title: 'Language', icon: 'globe', screen: 'Language' as keyof MoreStackParamList },
         // { id: 4, title: 'Settings', icon: 'settings', screen: 'Settings' as keyof MoreStackParamList },
-        { id: 5, title: 'Change Password', icon: 'lock', screen: 'ChangePassword' as keyof MoreStackParamList },
-        { id: 6, title: 'Medical Records', icon: 'file-text', screen: 'MedicalRecords' as keyof MoreStackParamList },
+        { id: 5, title: t('menu.changePassword'), icon: 'lock', screen: 'ChangePassword' as keyof MoreStackParamList },
+        { id: 6, title: t('menu.medicalRecords'), icon: 'file-text', screen: 'MedicalRecords' as keyof MoreStackParamList },
         // { id: 7, title: 'Dependents', icon: 'users', screen: 'Dependents' as keyof MoreStackParamList },
-        { id: 8, title: 'Favourites', icon: 'heart', screen: 'Favourites' as keyof MoreStackParamList },
-        { id: 9, title: 'Reschedule Requests', icon: 'calendar', screen: 'PatientRescheduleRequests' as keyof MoreStackParamList },
-        { id: 10, title: 'Order History', icon: 'shopping-bag', screen: 'OrderHistory' as keyof MoreStackParamList },
-        { id: 11, title: 'Notifications', icon: 'bell', screen: 'Notifications' as keyof MoreStackParamList },
-        { id: 12, title: 'Invoices', icon: 'file-text', screen: 'Invoices' as keyof MoreStackParamList },
+        { id: 8, title: t('menu.favourites'), icon: 'heart', screen: 'Favourites' as keyof MoreStackParamList },
+        { id: 9, title: t('menu.rescheduleRequests'), icon: 'calendar', screen: 'PatientRescheduleRequests' as keyof MoreStackParamList },
+        { id: 10, title: t('menu.orderHistory'), icon: 'shopping-bag', screen: 'OrderHistory' as keyof MoreStackParamList },
+        { id: 11, title: t('menu.notifications'), icon: 'bell', screen: 'Notifications' as keyof MoreStackParamList },
+        { id: 12, title: t('menu.invoices'), icon: 'file-text', screen: 'Invoices' as keyof MoreStackParamList },
         // { id: 11, title: 'Documents', icon: 'folder', screen: 'Documents' as keyof MoreStackParamList },
       ];
     }
@@ -150,11 +156,11 @@ export const MoreScreen = () => {
           <View style={styles.headerLeft}>
             <View style={styles.avatar}>
               <Text style={styles.avatarText}>
-                {user?.name?.split(' ').map(n => n[0]).join('') || 'U'}
+                {user?.name?.split(' ').map(n => n[0]).join('') || t('common.user').charAt(0)}
               </Text>
             </View>
             <View style={styles.userInfo}>
-              <Text style={styles.userName}>{user?.name || 'User'}</Text>
+              <Text style={styles.userName}>{user?.name || t('common.user')}</Text>
               <Text style={styles.userEmail}>{user?.email || ''}</Text>
             </View>
           </View>
@@ -205,7 +211,9 @@ export const MoreScreen = () => {
             <View style={styles.menuItemRight}>
               {item.screen === 'Notifications' && unreadCount > 0 && (
                 <View style={styles.badge}>
-                  <Text style={styles.badgeText}>{unreadCount > 99 ? '99+' : unreadCount}</Text>
+                  <Text style={styles.badgeText}>
+                    {unreadCount > 99 ? t('common.badgeOverflow', { count: 99 }) : unreadCount}
+                  </Text>
                 </View>
               )}
               {/* Danger sign for Subscription if no active subscription */}
@@ -224,7 +232,7 @@ export const MoreScreen = () => {
 
       <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
         <Feather name="log-out" size={24} color={colors.error} />
-        <Text style={styles.logoutText}>Logout</Text>
+        <Text style={styles.logoutText}>{t('menu.logout')}</Text>
       </TouchableOpacity>
     </ScrollView>
   );

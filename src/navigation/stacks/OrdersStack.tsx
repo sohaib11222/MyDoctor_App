@@ -5,10 +5,12 @@ import { OrdersListScreen } from '../../screens/pharmacy-admin/OrdersListScreen'
 import { OrderDetailsScreen } from '../../screens/pharmacy-admin/OrderDetailsScreen';
 import { OrderStatusScreen } from '../../screens/pharmacy-admin/OrderStatusScreen';
 import { CustomHeader } from '../../components/common/CustomHeader';
+import { useTranslation } from 'react-i18next';
 
 const Stack = createNativeStackNavigator<OrdersStackParamList>();
 
 export const OrdersStack = () => {
+  const { t } = useTranslation();
   return (
     <Stack.Navigator
       screenOptions={{
@@ -24,17 +26,17 @@ export const OrdersStack = () => {
       <Stack.Screen 
         name="OrdersList" 
         component={OrdersListScreen}
-        options={{ title: 'Orders', headerShown: true }}
+        options={{ title: t('screens.orders'), headerShown: true }}
       />
       <Stack.Screen 
         name="OrderDetails" 
         component={OrderDetailsScreen}
-        options={{ title: 'Order Details' }}
+        options={{ title: t('screens.orderDetails') }}
       />
       <Stack.Screen 
         name="OrderStatus" 
         component={OrderStatusScreen}
-        options={{ title: 'Update Order Status' }}
+        options={{ title: t('screens.updateOrderStatus') }}
       />
     </Stack.Navigator>
   );

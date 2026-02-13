@@ -8,6 +8,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../../constants/colors';
+import { useTranslation } from 'react-i18next';
 
 interface AddTimingsModalProps {
   show: boolean;
@@ -22,6 +23,8 @@ export const AddTimingsModal: React.FC<AddTimingsModalProps> = ({
 }) => {
   if (!show) return null;
 
+  const { t } = useTranslation();
+
   return (
     <Modal
       visible={show}
@@ -34,7 +37,7 @@ export const AddTimingsModal: React.FC<AddTimingsModalProps> = ({
           <View style={styles.modalHeader}>
             <View style={styles.headerContent}>
               <Ionicons name="time-outline" size={24} color={colors.warning} />
-              <Text style={styles.modalTitle}>Add Available Timings</Text>
+              <Text style={styles.modalTitle}>{t('doctor.addTimingsModal.title')}</Text>
             </View>
             <TouchableOpacity onPress={onClose} style={styles.closeButton}>
               <Ionicons name="close" size={24} color={colors.text} />
@@ -46,15 +49,15 @@ export const AddTimingsModal: React.FC<AddTimingsModalProps> = ({
               <Ionicons name="calendar-outline" size={64} color={colors.warning} />
             </View>
 
-            <Text style={styles.heading}>Your profile is complete!</Text>
+            <Text style={styles.heading}>{t('doctor.addTimingsModal.heading')}</Text>
             <Text style={styles.description}>
-              To allow patients to book appointments, please set your available timings. This will let patients know when you're available for consultations.
+              {t('doctor.addTimingsModal.description')}
             </Text>
 
             <View style={styles.noteContainer}>
               <Ionicons name="information-circle" size={20} color={colors.info} />
               <Text style={styles.noteText}>
-                <Text style={styles.boldText}>Note:</Text> Patients cannot book appointments until you set your available timings.
+                <Text style={styles.boldText}>{t('doctor.addTimingsModal.noteLabel')}</Text> {t('doctor.addTimingsModal.noteText')}
               </Text>
             </View>
           </View>
@@ -64,14 +67,14 @@ export const AddTimingsModal: React.FC<AddTimingsModalProps> = ({
               style={[styles.button, styles.secondaryButton]}
               onPress={onClose}
             >
-              <Text style={styles.secondaryButtonText}>I'll Do It Later</Text>
+              <Text style={styles.secondaryButtonText}>{t('doctor.addTimingsModal.actions.doItLater')}</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.button, styles.primaryButton]}
               onPress={onGoToTimings}
             >
               <Ionicons name="calendar-outline" size={20} color={colors.textWhite} />
-              <Text style={styles.primaryButtonText}>Add Timings Now</Text>
+              <Text style={styles.primaryButtonText}>{t('doctor.addTimingsModal.actions.addNow')}</Text>
             </TouchableOpacity>
           </View>
         </View>

@@ -80,7 +80,7 @@ export interface CreateOrderData {
 export interface OrderResponse {
   success: boolean;
   message: string;
-  data: Order;
+  data: Order | { orders: Order[] };
 }
 
 export interface OrdersResponse {
@@ -219,7 +219,7 @@ export const updateShippingFee = async (
  */
 export const payForOrder = async (
   orderId: string,
-  paymentMethod: string = 'DUMMY'
+  paymentMethod: string = 'STRIPE'
 ): Promise<any> => {
   const response = await api.post(`/orders/${orderId}/pay`, { paymentMethod });
   return response;
@@ -233,7 +233,7 @@ export const payForOrder = async (
  */
 export const processOrderPayment = async (
   orderId: string,
-  paymentMethod: string = 'DUMMY'
+  paymentMethod: string = 'STRIPE'
 ): Promise<any> => {
   const response = await api.post('/payment/order', {
     orderId,

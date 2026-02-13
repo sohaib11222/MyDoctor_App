@@ -20,19 +20,10 @@ import * as orderApi from '../../services/order';
 import { useAuth } from '../../contexts/AuthContext';
 import Toast from 'react-native-toast-message';
 import * as pharmacySubscriptionApi from '../../services/pharmacySubscription';
+import { useTranslation } from 'react-i18next';
 
 type OrderStatusScreenNavigationProp = NativeStackNavigationProp<OrdersStackParamList, 'OrderStatus'>;
 type OrderStatusRouteProp = RouteProp<OrdersStackParamList, 'OrderStatus'>;
-
-const statusOptions: { value: orderApi.Order['status']; label: string; icon: string; color: string }[] = [
-  { value: 'PENDING', label: 'Pending', icon: 'time-outline', color: colors.warning },
-  { value: 'CONFIRMED', label: 'Confirmed', icon: 'checkmark-outline', color: colors.primary },
-  { value: 'PROCESSING', label: 'Processing', icon: 'sync-outline', color: colors.primary },
-  { value: 'SHIPPED', label: 'Shipped', icon: 'car-outline', color: colors.info },
-  { value: 'DELIVERED', label: 'Delivered', icon: 'checkmark-circle-outline', color: colors.success },
-  { value: 'CANCELLED', label: 'Cancelled', icon: 'close-circle-outline', color: colors.error },
-  { value: 'REFUNDED', label: 'Refunded', icon: 'cash-outline', color: colors.error },
-];
 
 export const OrderStatusScreen = () => {
   const navigation = useNavigation<OrderStatusScreenNavigationProp>();
@@ -40,6 +31,7 @@ export const OrderStatusScreen = () => {
   const { orderId } = route.params;
   const { user } = useAuth();
   const queryClient = useQueryClient();
+  const { t } = useTranslation();
   const isPharmacy = user?.role === 'pharmacy' || (user as any)?.role === 'PHARMACY';
   const isParapharmacy = user?.role === 'parapharmacy' || (user as any)?.role === 'PARAPHARMACY';
   const isPharmacyUser = isPharmacy || isParapharmacy;
@@ -85,7 +77,15 @@ export const OrderStatusScreen = () => {
     retry: 1,
   });
 
-  const order = orderResponse?.data;
+  const order = React.useMemo<orderApi.Order | null>(() => {
+    const r: any = orderResponse as any;
+    const data = r?.data ?? r;
+    if (!data) return null;
+    const maybeOrder = data?.data ?? data;
+    if (!maybeOrder) return null;
+    if (maybeOrder?.orders && Array.isArray(maybeOrder.orders)) return maybeOrder.orders[0] ?? null;
+    return maybeOrder as orderApi.Order;
+  }, [orderResponse]);
   const [selectedStatus, setSelectedStatus] = useState<orderApi.Order['status']>('PENDING');
 
   React.useEffect(() => {
@@ -99,14 +99,14 @@ export const OrderStatusScreen = () => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['order', orderId] });
       queryClient.invalidateQueries({ queryKey: ['pharmacyOrders'] });
-      Toast.show({ type: 'success', text1: 'Order status updated' });
+      Toast.show({ type: 'success', text1: t('pharmacyAdmin.orders.details.toasts.orderStatusUpdated') });
       navigation.goBack();
     },
     onError: (err: any) => {
       Toast.show({
         type: 'error',
-        text1: 'Failed to update status',
-        text2: err?.response?.data?.message || err?.message || 'Please try again',
+        text1: t('pharmacyAdmin.orders.details.toasts.failedToUpdateOrderStatusTitle'),
+        text2: err?.response?.data?.message || err?.message || t('pharmacyAdmin.orders.pleaseTryAgain'),
       });
     },
   });
@@ -114,7 +114,10 @@ export const OrderStatusScreen = () => {
   const handleUpdateStatus = () => {
     if (!order) return;
     if (selectedStatus === order.status) {
-      Alert.alert('No Change', 'Please select a different status.');
+      Alert.alert(
+        t('pharmacyAdmin.orders.statusScreen.alerts.noChangeTitle'),
+        t('pharmacyAdmin.orders.statusScreen.alerts.noChangeBody')
+      );
       return;
     }
 
@@ -122,32 +125,28 @@ export const OrderStatusScreen = () => {
   };
 
   const getStatusDescription = (status: orderApi.Order['status']) => {
-    switch (status) {
-      case 'PENDING':
-        return 'Order has been placed and is awaiting processing.';
-      case 'CONFIRMED':
-        return 'Order has been confirmed and will be processed.';
-      case 'PROCESSING':
-        return 'Order is being prepared and will be shipped soon.';
-      case 'SHIPPED':
-        return 'Order has been shipped and is on its way to the customer.';
-      case 'DELIVERED':
-        return 'Order has been successfully delivered to the customer.';
-      case 'CANCELLED':
-        return 'Order has been cancelled.';
-      case 'REFUNDED':
-        return 'Order has been refunded.';
-      default:
-        return '';
-    }
+    return t(`pharmacyAdmin.orders.statusDescriptions.${status}` as any, { defaultValue: '' });
   };
+
+  const statusOptions = React.useMemo(
+    () => [
+      { value: 'PENDING' as const, label: t('pharmacyAdmin.orders.status.PENDING'), icon: 'time-outline', color: colors.warning },
+      { value: 'CONFIRMED' as const, label: t('pharmacyAdmin.orders.status.CONFIRMED'), icon: 'checkmark-outline', color: colors.primary },
+      { value: 'PROCESSING' as const, label: t('pharmacyAdmin.orders.status.PROCESSING'), icon: 'sync-outline', color: colors.primary },
+      { value: 'SHIPPED' as const, label: t('pharmacyAdmin.orders.status.SHIPPED'), icon: 'car-outline', color: colors.info },
+      { value: 'DELIVERED' as const, label: t('pharmacyAdmin.orders.status.DELIVERED'), icon: 'checkmark-circle-outline', color: colors.success },
+      { value: 'CANCELLED' as const, label: t('pharmacyAdmin.orders.status.CANCELLED'), icon: 'close-circle-outline', color: colors.error },
+      { value: 'REFUNDED' as const, label: t('pharmacyAdmin.orders.status.REFUNDED'), icon: 'cash-outline', color: colors.error },
+    ],
+    [t]
+  );
 
   if (!isPharmacyUser) {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.loadingContainer}>
           <Ionicons name="alert-circle-outline" size={48} color={colors.error} />
-          <Text style={styles.loadingText}>This screen is available for pharmacy accounts only.</Text>
+          <Text style={styles.loadingText}>{t('pharmacyAdmin.common.pharmacyAccountsOnly')}</Text>
         </View>
       </SafeAreaView>
     );
@@ -158,7 +157,7 @@ export const OrderStatusScreen = () => {
       <SafeAreaView style={styles.container}>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={colors.primary} />
-          <Text style={styles.loadingText}>Loading subscription...</Text>
+          <Text style={styles.loadingText}>{t('pharmacyAdmin.dashboard.banners.loadingSubscription')}</Text>
         </View>
       </SafeAreaView>
     );
@@ -169,9 +168,9 @@ export const OrderStatusScreen = () => {
       <SafeAreaView style={styles.container}>
         <View style={styles.loadingContainer}>
           <Ionicons name="card-outline" size={48} color={colors.warning} />
-          <Text style={styles.loadingText}>Subscription required to update order status.</Text>
+          <Text style={styles.loadingText}>{t('pharmacyAdmin.orders.statusScreen.gates.subscriptionRequiredBody')}</Text>
           <View style={{ width: '100%', paddingHorizontal: 24, marginTop: 16 }}>
-            <Button title="View Subscription Plans" onPress={goToSubscription} />
+            <Button title={t('pharmacyAdmin.orders.actions.viewSubscriptionPlans')} onPress={goToSubscription} />
           </View>
         </View>
       </SafeAreaView>
@@ -183,7 +182,7 @@ export const OrderStatusScreen = () => {
       <SafeAreaView style={styles.container}>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={colors.primary} />
-          <Text style={styles.loadingText}>Loading order...</Text>
+          <Text style={styles.loadingText}>{t('pharmacyAdmin.orders.statusScreen.loadingOrder')}</Text>
         </View>
       </SafeAreaView>
     );
@@ -194,11 +193,14 @@ export const OrderStatusScreen = () => {
       <SafeAreaView style={styles.container}>
         <View style={styles.loadingContainer}>
           <Ionicons name="alert-circle-outline" size={48} color={colors.error} />
-          <Text style={styles.loadingText}>{(error as any)?.message || 'Failed to load order'}</Text>
+          <Text style={styles.loadingText}>{(error as any)?.message || t('pharmacyAdmin.orders.statusScreen.failedToLoadOrder')}</Text>
         </View>
       </SafeAreaView>
     );
   }
+
+  const localizedCurrentStatus = t(`pharmacyAdmin.orders.status.${order.status}` as any, { defaultValue: order.status });
+  const currentStatusColor = statusOptions.find((s) => s.value === order.status)?.color || colors.textSecondary;
 
   return (
     <SafeAreaView style={styles.container}>
@@ -207,22 +209,22 @@ export const OrderStatusScreen = () => {
         <View style={styles.header}>
           <Text style={styles.orderNumber}>{order.orderNumber}</Text>
           <View style={styles.currentStatusContainer}>
-            <Text style={styles.currentStatusLabel}>Current Status:</Text>
+            <Text style={styles.currentStatusLabel}>{t('pharmacyAdmin.orders.statusScreen.currentStatusLabel')}</Text>
             <View
               style={[
                 styles.currentStatusBadge,
                 {
-                  backgroundColor: `${statusOptions.find((s) => s.value === order.status)?.color}20`,
+                  backgroundColor: `${currentStatusColor}20`,
                 },
               ]}
             >
               <Text
                 style={[
                   styles.currentStatusText,
-                  { color: statusOptions.find((s) => s.value === order.status)?.color },
+                  { color: currentStatusColor },
                 ]}
               >
-                {order.status}
+                {localizedCurrentStatus}
               </Text>
             </View>
           </View>
@@ -230,9 +232,9 @@ export const OrderStatusScreen = () => {
 
         {/* Status Selection */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Select New Status</Text>
+          <Text style={styles.sectionTitle}>{t('pharmacyAdmin.orders.statusScreen.selectNewStatusTitle')}</Text>
           <Text style={styles.sectionDescription}>
-            Choose the new status for this order. The customer will be notified of the status change.
+            {t('pharmacyAdmin.orders.statusScreen.selectNewStatusBody')}
           </Text>
 
           {statusOptions.map((status) => (
@@ -280,7 +282,7 @@ export const OrderStatusScreen = () => {
           <View style={styles.warningContainer}>
             <Ionicons name="warning-outline" size={24} color={colors.error} />
             <Text style={styles.warningText}>
-              Cancelling an order will notify the customer and may require a refund. Please confirm this action.
+              {t('pharmacyAdmin.orders.statusScreen.cancelledWarning')}
             </Text>
           </View>
         )}
@@ -289,7 +291,7 @@ export const OrderStatusScreen = () => {
       {/* Action Button */}
       <View style={styles.footer}>
         <Button
-          title="Update Status"
+          title={t('pharmacyAdmin.orders.details.actions.updateStatus')}
           onPress={handleUpdateStatus}
           loading={updateStatusMutation.isPending}
           disabled={selectedStatus === order.status || updateStatusMutation.isPending}

@@ -24,9 +24,10 @@ import * as ImagePicker from 'expo-image-picker';
 import Toast from 'react-native-toast-message';
 import { API_BASE_URL } from '../../config/api';
 import { copyImageToCacheUri, deleteCacheFiles } from '../../utils/imageUpload';
-import { getNextTab, TabType, PROFILE_SETTINGS_TABS } from '../../utils/profileSettingsTabs';
+import { getNextTab, TabType } from '../../utils/profileSettingsTabs';
 import * as specializationApi from '../../services/specialization';
 import * as insuranceApi from '../../services/insurance';
+import { useTranslation } from 'react-i18next';
 
 type TabTypeLocal = 'basic' | 'specialties' | 'experience' | 'education' | 'awards' | 'clinics' | 'insurance' | 'business' | 'social';
 
@@ -41,6 +42,7 @@ const getNextTabLocal = (currentTab: TabTypeLocal): TabTypeLocal | null => {
 };
 
 export const ProfileSettingsScreen = () => {
+  const { t } = useTranslation();
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const [refreshing, setRefreshing] = useState(false);
@@ -122,7 +124,7 @@ export const ProfileSettingsScreen = () => {
     queryFn: async () => {
       // Ensure user is available before making the call
       if (!user || !userId) {
-        throw new Error('User not authenticated');
+        throw new Error(t('common.userNotAuthenticated'));
       }
       return profileApi.getDoctorProfile();
     },
@@ -168,15 +170,16 @@ export const ProfileSettingsScreen = () => {
       queryClient.invalidateQueries({ queryKey: ['doctorProfile'] });
       Toast.show({
         type: 'success',
-        text1: 'Success',
-        text2: 'Profile updated successfully!',
+        text1: t('common.success'),
+        text2: t('more.doctorProfileSettings.profileUpdatedSuccessfully'),
       });
     },
     onError: (error: any) => {
-      const errorMessage = error?.response?.data?.message || error?.message || 'Failed to update profile';
+      const errorMessage =
+        error?.response?.data?.message || error?.message || t('more.doctorProfileSettings.failedToUpdateProfile');
       Toast.show({
         type: 'error',
-        text1: 'Error',
+        text1: t('common.error'),
         text2: errorMessage,
       });
     },
@@ -187,7 +190,7 @@ export const ProfileSettingsScreen = () => {
     mutationFn: async (data: any) => {
       // Ensure user is available before making the call
       if (!user || !userId) {
-        throw new Error('User not authenticated');
+        throw new Error(t('common.userNotAuthenticated'));
       }
       return profileApi.updateDoctorProfile(data);
     },
@@ -196,8 +199,8 @@ export const ProfileSettingsScreen = () => {
       queryClient.invalidateQueries({ queryKey: ['userProfile', user?._id] });
       Toast.show({
         type: 'success',
-        text1: 'Success',
-        text2: 'Doctor profile updated successfully!',
+        text1: t('common.success'),
+        text2: t('more.doctorProfileSettings.doctorProfileUpdatedSuccessfully'),
       });
       
       // Check if profile is still incomplete and navigate to next tab
@@ -257,10 +260,11 @@ export const ProfileSettingsScreen = () => {
       }
     },
     onError: (error: any) => {
-      const errorMessage = error?.response?.data?.message || error?.message || 'Failed to update doctor profile';
+      const errorMessage =
+        error?.response?.data?.message || error?.message || t('more.doctorProfileSettings.failedToUpdateDoctorProfile');
       Toast.show({
         type: 'error',
-        text1: 'Error',
+        text1: t('common.error'),
         text2: errorMessage,
       });
     },
@@ -387,7 +391,10 @@ export const ProfileSettingsScreen = () => {
   const handleImagePicker = async () => {
     const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permissionResult.granted) {
-      Alert.alert('Permission Required', 'Please grant permission to access your photos.');
+      Alert.alert(
+        t('more.profileSettings.permissionRequiredTitle'),
+        t('more.profileSettings.permissionPhotosBody')
+      );
       return;
     }
 
@@ -403,8 +410,8 @@ export const ProfileSettingsScreen = () => {
       if (asset.fileSize && asset.fileSize > 4 * 1024 * 1024) {
         Toast.show({
           type: 'error',
-          text1: 'Error',
-          text2: 'Image size must be less than 4 MB',
+          text1: t('more.profileSettings.fileTooLargeTitle'),
+          text2: t('more.profileSettings.imageSizeBelow4mb'),
         });
         return;
       }
@@ -482,10 +489,10 @@ export const ProfileSettingsScreen = () => {
   };
 
   const handleRemoveExperience = (index: number) => {
-    Alert.alert('Remove Experience', 'Are you sure you want to remove this experience?', [
-      { text: 'Cancel', style: 'cancel' },
+    Alert.alert(t('more.doctorProfileSettings.alerts.removeExperience.title'), t('more.doctorProfileSettings.alerts.removeExperience.body'), [
+      { text: t('common.cancel'), style: 'cancel' },
       {
-        text: 'Remove',
+        text: t('common.remove'),
         style: 'destructive',
         onPress: () => {
           setDoctorProfileData((prev) => ({
@@ -518,10 +525,10 @@ export const ProfileSettingsScreen = () => {
   };
 
   const handleRemoveEducation = (index: number) => {
-    Alert.alert('Remove Education', 'Are you sure you want to remove this education?', [
-      { text: 'Cancel', style: 'cancel' },
+    Alert.alert(t('more.doctorProfileSettings.alerts.removeEducation.title'), t('more.doctorProfileSettings.alerts.removeEducation.body'), [
+      { text: t('common.cancel'), style: 'cancel' },
       {
-        text: 'Remove',
+        text: t('common.remove'),
         style: 'destructive',
         onPress: () => {
           setDoctorProfileData((prev) => ({
@@ -554,10 +561,10 @@ export const ProfileSettingsScreen = () => {
   };
 
   const handleRemoveAward = (index: number) => {
-    Alert.alert('Remove Award', 'Are you sure you want to remove this award?', [
-      { text: 'Cancel', style: 'cancel' },
+    Alert.alert(t('more.doctorProfileSettings.alerts.removeAward.title'), t('more.doctorProfileSettings.alerts.removeAward.body'), [
+      { text: t('common.cancel'), style: 'cancel' },
       {
-        text: 'Remove',
+        text: t('common.remove'),
         style: 'destructive',
         onPress: () => {
           setDoctorProfileData((prev) => ({
@@ -615,10 +622,10 @@ export const ProfileSettingsScreen = () => {
   };
 
   const handleRemoveClinic = (index: number) => {
-    Alert.alert('Remove Clinic', 'Are you sure you want to remove this clinic?', [
-      { text: 'Cancel', style: 'cancel' },
+    Alert.alert(t('more.doctorProfileSettings.alerts.removeClinic.title'), t('more.doctorProfileSettings.alerts.removeClinic.body'), [
+      { text: t('common.cancel'), style: 'cancel' },
       {
-        text: 'Remove',
+        text: t('common.remove'),
         style: 'destructive',
         onPress: () => {
           setDoctorProfileData((prev) => ({
@@ -666,8 +673,8 @@ export const ProfileSettingsScreen = () => {
       if (!userProfileData.fullName || !userProfileData.phone) {
         Toast.show({
           type: 'error',
-          text1: 'Error',
-          text2: 'Please fill in all required fields (Full Name, Phone)',
+          text1: t('common.error'),
+          text2: t('more.doctorProfileSettings.validation.fillRequiredFields'),
         });
         return;
       }
@@ -680,10 +687,11 @@ export const ProfileSettingsScreen = () => {
           setSelectedImageAsset(null); // Clear selected asset after upload
           setUserProfileData((prev) => ({ ...prev, profileImage: imageUrl }));
         } catch (error: any) {
-          const errorMessage = error?.response?.data?.message || error?.message || 'Failed to upload image';
+          const errorMessage =
+            error?.response?.data?.message || error?.message || t('more.doctorProfileSettings.failedToUploadImage');
           Toast.show({
             type: 'error',
-            text1: 'Upload Error',
+            text1: t('more.doctorProfileSettings.uploadErrorTitle'),
             text2: errorMessage,
           });
           return; // Don't proceed with profile update if image upload fails
@@ -739,8 +747,8 @@ export const ProfileSettingsScreen = () => {
       if (!doctorProfileData.specializationId) {
         Toast.show({
           type: 'error',
-          text1: 'Error',
-          text2: 'Please select a specialization',
+          text1: t('common.error'),
+          text2: t('more.doctorProfileSettings.validation.selectSpecialization'),
         });
         return;
       }
@@ -756,8 +764,8 @@ export const ProfileSettingsScreen = () => {
       if (validServices.length === 0) {
         Toast.show({
           type: 'error',
-          text1: 'Error',
-          text2: 'Please add at least one service',
+          text1: t('common.error'),
+          text2: t('more.doctorProfileSettings.validation.addAtLeastOneService'),
         });
         return;
       }
@@ -804,8 +812,8 @@ export const ProfileSettingsScreen = () => {
       if (validClinics.length === 0) {
         Toast.show({
           type: 'error',
-          text1: 'Error',
-          text2: 'Please add at least one clinic with a name',
+          text1: t('common.error'),
+          text2: t('more.doctorProfileSettings.validation.addAtLeastOneClinicWithName'),
         });
         return;
       }
@@ -864,7 +872,7 @@ export const ProfileSettingsScreen = () => {
 
       // Get existing clinics or create a default one
       const existingClinics = doctorProfileData.clinics;
-      let clinics = existingClinics.length > 0 ? [...existingClinics] : [{ name: 'Main Clinic', timings: [] }];
+      let clinics = existingClinics.length > 0 ? [...existingClinics] : [{ name: t('more.doctorProfileSettings.mainClinicDefaultName'), timings: [] }];
 
       // Update timings for first clinic
       clinics = clinics.map((clinic, index) => {
@@ -886,8 +894,8 @@ export const ProfileSettingsScreen = () => {
         } else {
           Toast.show({
             type: 'error',
-            text1: 'Invalid URL',
-            text2: 'Please enter a valid Facebook URL',
+            text1: t('more.socialLinks.invalidUrlTitle'),
+            text2: t('more.socialLinks.invalidUrlBody', { platform: t('more.socialLinks.platforms.facebook') }),
           });
           return;
         }
@@ -899,8 +907,8 @@ export const ProfileSettingsScreen = () => {
         } else {
           Toast.show({
             type: 'error',
-            text1: 'Invalid URL',
-            text2: 'Please enter a valid Instagram URL',
+            text1: t('more.socialLinks.invalidUrlTitle'),
+            text2: t('more.socialLinks.invalidUrlBody', { platform: t('more.socialLinks.platforms.instagram') }),
           });
           return;
         }
@@ -912,8 +920,8 @@ export const ProfileSettingsScreen = () => {
         } else {
           Toast.show({
             type: 'error',
-            text1: 'Invalid URL',
-            text2: 'Please enter a valid LinkedIn URL',
+            text1: t('more.socialLinks.invalidUrlTitle'),
+            text2: t('more.socialLinks.invalidUrlBody', { platform: t('more.socialLinks.platforms.linkedin') }),
           });
           return;
         }
@@ -925,8 +933,8 @@ export const ProfileSettingsScreen = () => {
         } else {
           Toast.show({
             type: 'error',
-            text1: 'Invalid URL',
-            text2: 'Please enter a valid Twitter URL',
+            text1: t('more.socialLinks.invalidUrlTitle'),
+            text2: t('more.socialLinks.invalidUrlBody', { platform: t('more.socialLinks.platforms.twitter') }),
           });
           return;
         }
@@ -938,8 +946,8 @@ export const ProfileSettingsScreen = () => {
         } else {
           Toast.show({
             type: 'error',
-            text1: 'Invalid URL',
-            text2: 'Please enter a valid Website URL',
+            text1: t('more.socialLinks.invalidUrlTitle'),
+            text2: t('more.socialLinks.invalidUrlBody', { platform: t('more.socialLinks.platforms.website') }),
           });
           return;
         }
@@ -951,8 +959,8 @@ export const ProfileSettingsScreen = () => {
       if (convenzionato && selectedInsuranceIds.length === 0) {
         Toast.show({
           type: 'error',
-          text1: 'Error',
-          text2: 'Please select at least one insurance company if you accept insurance',
+          text1: t('common.error'),
+          text2: t('more.doctorProfileSettings.validation.selectAtLeastOneInsuranceCompany'),
         });
         return;
       }
@@ -1008,7 +1016,7 @@ export const ProfileSettingsScreen = () => {
       <SafeAreaView style={styles.container}>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={colors.primary} />
-          <Text style={styles.loadingText}>Loading profile...</Text>
+          <Text style={styles.loadingText}>{t('more.doctorProfileSettings.loadingProfile')}</Text>
         </View>
       </SafeAreaView>
     );
@@ -1021,7 +1029,7 @@ export const ProfileSettingsScreen = () => {
     <ScrollView showsVerticalScrollIndicator={false}>
       {/* Profile Image */}
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Profile Image</Text>
+        <Text style={styles.sectionTitle}>{t('more.doctorProfileSettings.sections.profileImage')}</Text>
         <View style={styles.profilePhotoContainer}>
           <View style={styles.profilePhoto}>
             {displayImageUrl ? (
@@ -1036,83 +1044,83 @@ export const ProfileSettingsScreen = () => {
               onPress={handleImagePicker}
               disabled={updateUserProfileMutation.isPending || updateDoctorProfileMutation.isPending}
             >
-              <Text style={styles.photoButtonText}>Select Image</Text>
+              <Text style={styles.photoButtonText}>{t('more.profileSettings.selectImage')}</Text>
             </TouchableOpacity>
             {displayImageUrl && (
               <TouchableOpacity style={styles.photoButtonRemove} onPress={handleRemoveImage}>
-                <Text style={styles.photoButtonRemoveText}>Remove</Text>
+                <Text style={styles.photoButtonRemoveText}>{t('common.remove')}</Text>
               </TouchableOpacity>
             )}
           </View>
         </View>
-        <Text style={styles.photoHint}>Your Image should Below 4 MB, Accepted format jpg,png,svg</Text>
+        <Text style={styles.photoHint}>{t('more.settings.photoHint')}</Text>
       </View>
 
       {/* Information */}
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Information</Text>
+        <Text style={styles.sectionTitle}>{t('more.settings.information')}</Text>
         <Input
-          label="First Name *"
+          label={t('more.settings.firstNameLabel')}
           value={firstName}
           onChangeText={(text) => handleNameChange('firstName', text)}
-          placeholder="Enter first name"
+          placeholder={t('more.settings.firstNamePlaceholder')}
         />
         <Input
-          label="Last Name *"
+          label={t('more.settings.lastNameLabel')}
           value={lastName}
           onChangeText={(text) => handleNameChange('lastName', text)}
-          placeholder="Enter last name"
+          placeholder={t('more.settings.lastNamePlaceholder')}
         />
         <Input
-          label="Display Name *"
+          label={t('more.doctorProfileSettings.displayNameLabel')}
           value={userProfileData.fullName}
           onChangeText={(text) => setUserProfileData((prev) => ({ ...prev, fullName: text }))}
-          placeholder="Enter display name"
+          placeholder={t('more.doctorProfileSettings.displayNamePlaceholder')}
         />
         <Input
-          label="Designation *"
+          label={t('more.doctorProfileSettings.designationLabel')}
           value={doctorProfileData.title}
           onChangeText={(text) => setDoctorProfileData((prev) => ({ ...prev, title: text }))}
-          placeholder="e.g., MD, MBBS, etc."
+          placeholder={t('more.doctorProfileSettings.designationPlaceholder')}
         />
         <Input
-          label="Phone Numbers *"
+          label={t('more.settings.phoneNumberLabel')}
           value={userProfileData.phone}
           onChangeText={(text) => setUserProfileData((prev) => ({ ...prev, phone: text }))}
-          placeholder="Enter phone number"
+          placeholder={t('more.settings.phoneNumberPlaceholder')}
           keyboardType="phone-pad"
         />
         <Input
-          label="Email Address *"
+          label={t('more.settings.emailAddressLabel')}
           value={(user as any)?.email || ''}
           editable={false}
           style={styles.disabledInput}
-          placeholder="Email cannot be changed"
+          placeholder={t('more.doctorProfileSettings.emailCannotBeChanged')}
         />
       </View>
 
       {/* Biography */}
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Biography</Text>
+        <Text style={styles.sectionTitle}>{t('more.doctorProfileSettings.sections.biography')}</Text>
         <Input
-          label="Biography *"
+          label={t('more.doctorProfileSettings.biographyLabel')}
           value={doctorProfileData.biography}
           onChangeText={(text) => setDoctorProfileData((prev) => ({ ...prev, biography: text }))}
-          placeholder="Enter your biography, professional background, and expertise..."
+          placeholder={t('more.doctorProfileSettings.biographyPlaceholder')}
           multiline
           numberOfLines={5}
           style={styles.textArea}
         />
-        <Text style={styles.hintText}>This information will be displayed on your profile page</Text>
+        <Text style={styles.hintText}>{t('more.doctorProfileSettings.biographyHint')}</Text>
       </View>
 
       {/* Consultation Fees */}
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Consultation Fees</Text>
+        <Text style={styles.sectionTitle}>{t('more.doctorProfileSettings.sections.consultationFees')}</Text>
         <View style={styles.feesRow}>
           <View style={styles.feeInput}>
             <Input
-              label="In-Person Visit Fee (€)"
+              label={t('more.doctorProfileSettings.inPersonVisitFeeLabel')}
               value={typeof doctorProfileData.consultationFees.clinic === 'number' 
                 ? doctorProfileData.consultationFees.clinic.toString() 
                 : (doctorProfileData.consultationFees.clinic || '')}
@@ -1120,11 +1128,11 @@ export const ProfileSettingsScreen = () => {
               placeholder="0.00"
               keyboardType="decimal-pad"
             />
-            <Text style={styles.hintText}>Fee for physical clinic visits</Text>
+            <Text style={styles.hintText}>{t('more.doctorProfileSettings.inPersonVisitFeeHint')}</Text>
           </View>
           <View style={styles.feeInput}>
             <Input
-              label="Online Consultation Fee (€)"
+              label={t('more.doctorProfileSettings.onlineConsultationFeeLabel')}
               value={typeof doctorProfileData.consultationFees.online === 'number' 
                 ? doctorProfileData.consultationFees.online.toString() 
                 : (doctorProfileData.consultationFees.online || '')}
@@ -1132,23 +1140,23 @@ export const ProfileSettingsScreen = () => {
               placeholder="0.00"
               keyboardType="decimal-pad"
             />
-            <Text style={styles.hintText}>Fee for video/online consultations</Text>
+            <Text style={styles.hintText}>{t('more.doctorProfileSettings.onlineConsultationFeeHint')}</Text>
           </View>
         </View>
       </View>
 
       {/* Memberships */}
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Memberships</Text>
+        <Text style={styles.sectionTitle}>{t('more.doctorProfileSettings.sections.memberships')}</Text>
         {doctorProfileData.memberships.length > 0 ? (
           <View style={styles.membershipsList}>
             {doctorProfileData.memberships.map((membership, index) => (
               <View key={index} style={styles.membershipItem}>
                 <Input
-                  label="Membership Name"
+                  label={t('more.doctorProfileSettings.membershipNameLabel')}
                   value={membership.name}
                   onChangeText={(text) => handleMembershipChange(index, text)}
-                  placeholder="Enter membership name"
+                  placeholder={t('more.doctorProfileSettings.membershipNamePlaceholder')}
                   style={styles.membershipInput}
                 />
                 <TouchableOpacity
@@ -1161,11 +1169,11 @@ export const ProfileSettingsScreen = () => {
             ))}
           </View>
         ) : (
-          <Text style={styles.emptyText}>No memberships added yet</Text>
+          <Text style={styles.emptyText}>{t('more.doctorProfileSettings.empty.memberships')}</Text>
         )}
         <TouchableOpacity style={styles.addButton} onPress={handleAddMembership}>
           <Ionicons name="add-circle-outline" size={20} color={colors.primary} />
-          <Text style={styles.addButtonText}>Add New</Text>
+          <Text style={styles.addButtonText}>{t('more.doctorProfileSettings.actions.addNew')}</Text>
         </TouchableOpacity>
       </View>
     </ScrollView>
@@ -1197,10 +1205,10 @@ export const ProfileSettingsScreen = () => {
   };
 
   const handleRemoveService = (index: number) => {
-    Alert.alert('Remove Service', 'Are you sure you want to remove this service?', [
-      { text: 'Cancel', style: 'cancel' },
+    Alert.alert(t('more.doctorProfileSettings.alerts.removeService.title'), t('more.doctorProfileSettings.alerts.removeService.body'), [
+      { text: t('common.cancel'), style: 'cancel' },
       {
-        text: 'Remove',
+        text: t('common.remove'),
         style: 'destructive',
         onPress: () => {
           setDoctorProfileData((prev) => ({
@@ -1215,8 +1223,8 @@ export const ProfileSettingsScreen = () => {
   const renderSpecialtiesTab = () => (
     <ScrollView showsVerticalScrollIndicator={false}>
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Specialization</Text>
-        <Text style={styles.sectionSubtitle}>Select your medical specialization</Text>
+        <Text style={styles.sectionTitle}>{t('more.doctorProfileSettings.sections.specialization')}</Text>
+        <Text style={styles.sectionSubtitle}>{t('more.doctorProfileSettings.specializationSubtitle')}</Text>
         
         {specializationsLoading ? (
           <ActivityIndicator size="small" color={colors.primary} style={{ marginVertical: 20 }} />
@@ -1251,21 +1259,21 @@ export const ProfileSettingsScreen = () => {
       </View>
 
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Services</Text>
-        <Text style={styles.sectionSubtitle}>Add services you offer with their prices</Text>
+        <Text style={styles.sectionTitle}>{t('more.doctorProfileSettings.sections.services')}</Text>
+        <Text style={styles.sectionSubtitle}>{t('more.doctorProfileSettings.servicesSubtitle')}</Text>
         
         {doctorProfileData.services.length > 0 ? (
           <View style={styles.listContainer}>
             {doctorProfileData.services.map((service, index) => (
               <View key={index} style={styles.itemCard}>
                 <Input
-                  label="Service Name *"
+                  label={t('more.doctorProfileSettings.serviceNameLabel')}
                   value={service.name}
                   onChangeText={(text) => handleServiceChange(index, 'name', text)}
-                  placeholder="Enter service name"
+                  placeholder={t('more.doctorProfileSettings.serviceNamePlaceholder')}
                 />
                 <Input
-                  label="Price (€) *"
+                  label={t('more.doctorProfileSettings.servicePriceLabel')}
                   value={String(service.price || '')}
                   onChangeText={(text) => handleServiceChange(index, 'price', text)}
                   placeholder="0.00"
@@ -1276,18 +1284,18 @@ export const ProfileSettingsScreen = () => {
                   onPress={() => handleRemoveService(index)}
                 >
                   <Ionicons name="trash-outline" size={20} color={colors.error} />
-                  <Text style={styles.removeItemButtonText}>Remove</Text>
+                  <Text style={styles.removeItemButtonText}>{t('common.remove')}</Text>
                 </TouchableOpacity>
               </View>
             ))}
           </View>
         ) : (
-          <Text style={styles.emptyText}>No services added yet</Text>
+          <Text style={styles.emptyText}>{t('more.doctorProfileSettings.empty.services')}</Text>
         )}
         
         <TouchableOpacity style={styles.addButton} onPress={handleAddService}>
           <Ionicons name="add-circle-outline" size={20} color={colors.primary} />
-          <Text style={styles.addButtonText}>Add Service</Text>
+          <Text style={styles.addButtonText}>{t('more.doctorProfileSettings.actions.addService')}</Text>
         </TouchableOpacity>
       </View>
     </ScrollView>
@@ -1296,37 +1304,37 @@ export const ProfileSettingsScreen = () => {
   const renderExperienceTab = () => (
     <ScrollView showsVerticalScrollIndicator={false}>
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Professional Experience</Text>
+        <Text style={styles.sectionTitle}>{t('more.doctorProfileSettings.sections.professionalExperience')}</Text>
         {doctorProfileData.experience.length > 0 ? (
           <View style={styles.listContainer}>
             {doctorProfileData.experience.map((exp, index) => (
               <View key={index} style={styles.itemCard}>
                 <Input
-                  label="Hospital/Institution *"
+                  label={t('more.doctorProfileSettings.hospitalInstitutionLabel')}
                   value={exp.hospital}
                   onChangeText={(text) => handleExperienceChange(index, 'hospital', text)}
-                  placeholder="Enter hospital name"
+                  placeholder={t('more.doctorProfileSettings.hospitalInstitutionPlaceholder')}
                 />
                 <Input
-                  label="Designation"
+                  label={t('more.doctorProfileSettings.designationOptionalLabel')}
                   value={exp.designation}
                   onChangeText={(text) => handleExperienceChange(index, 'designation', text)}
-                  placeholder="Enter designation"
+                  placeholder={t('more.doctorProfileSettings.designationOptionalPlaceholder')}
                 />
                 <View style={styles.row}>
                   <Input
-                    label="From Year"
+                    label={t('more.doctorProfileSettings.fromYearLabel')}
                     value={exp.fromYear}
                     onChangeText={(text) => handleExperienceChange(index, 'fromYear', text)}
-                    placeholder="YYYY"
+                    placeholder={t('more.doctorProfileSettings.yearPlaceholder')}
                     keyboardType="numeric"
                     style={styles.halfInput}
                   />
                   <Input
-                    label="To Year"
+                    label={t('more.doctorProfileSettings.toYearLabel')}
                     value={exp.toYear}
                     onChangeText={(text) => handleExperienceChange(index, 'toYear', text)}
-                    placeholder="YYYY"
+                    placeholder={t('more.doctorProfileSettings.yearPlaceholder')}
                     keyboardType="numeric"
                     style={styles.halfInput}
                   />
@@ -1336,17 +1344,17 @@ export const ProfileSettingsScreen = () => {
                   onPress={() => handleRemoveExperience(index)}
                 >
                   <Ionicons name="trash-outline" size={20} color={colors.error} />
-                  <Text style={styles.removeItemButtonText}>Remove</Text>
+                  <Text style={styles.removeItemButtonText}>{t('common.remove')}</Text>
                 </TouchableOpacity>
               </View>
             ))}
           </View>
         ) : (
-          <Text style={styles.emptyText}>No experience added yet</Text>
+          <Text style={styles.emptyText}>{t('more.doctorProfileSettings.empty.experience')}</Text>
         )}
         <TouchableOpacity style={styles.addButton} onPress={handleAddExperience}>
           <Ionicons name="add-circle-outline" size={20} color={colors.primary} />
-          <Text style={styles.addButtonText}>Add Experience</Text>
+          <Text style={styles.addButtonText}>{t('more.doctorProfileSettings.actions.addExperience')}</Text>
         </TouchableOpacity>
       </View>
     </ScrollView>
@@ -1355,28 +1363,28 @@ export const ProfileSettingsScreen = () => {
   const renderEducationTab = () => (
     <ScrollView showsVerticalScrollIndicator={false}>
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Education</Text>
+        <Text style={styles.sectionTitle}>{t('more.doctorProfileSettings.sections.education')}</Text>
         {doctorProfileData.education.length > 0 ? (
           <View style={styles.listContainer}>
             {doctorProfileData.education.map((edu, index) => (
               <View key={index} style={styles.itemCard}>
                 <Input
-                  label="Degree *"
+                  label={t('more.doctorProfileSettings.degreeLabel')}
                   value={edu.degree}
                   onChangeText={(text) => handleEducationChange(index, 'degree', text)}
-                  placeholder="Enter degree"
+                  placeholder={t('more.doctorProfileSettings.degreePlaceholder')}
                 />
                 <Input
-                  label="College/University *"
+                  label={t('more.doctorProfileSettings.collegeUniversityLabel')}
                   value={edu.college}
                   onChangeText={(text) => handleEducationChange(index, 'college', text)}
-                  placeholder="Enter college name"
+                  placeholder={t('more.doctorProfileSettings.collegeUniversityPlaceholder')}
                 />
                 <Input
-                  label="Year"
+                  label={t('more.doctorProfileSettings.yearLabel')}
                   value={edu.year}
                   onChangeText={(text) => handleEducationChange(index, 'year', text)}
-                  placeholder="YYYY"
+                  placeholder={t('more.doctorProfileSettings.yearPlaceholder')}
                   keyboardType="numeric"
                 />
                 <TouchableOpacity
@@ -1384,17 +1392,17 @@ export const ProfileSettingsScreen = () => {
                   onPress={() => handleRemoveEducation(index)}
                 >
                   <Ionicons name="trash-outline" size={20} color={colors.error} />
-                  <Text style={styles.removeItemButtonText}>Remove</Text>
+                  <Text style={styles.removeItemButtonText}>{t('common.remove')}</Text>
                 </TouchableOpacity>
               </View>
             ))}
           </View>
         ) : (
-          <Text style={styles.emptyText}>No education added yet</Text>
+          <Text style={styles.emptyText}>{t('more.doctorProfileSettings.empty.education')}</Text>
         )}
         <TouchableOpacity style={styles.addButton} onPress={handleAddEducation}>
           <Ionicons name="add-circle-outline" size={20} color={colors.primary} />
-          <Text style={styles.addButtonText}>Add Education</Text>
+          <Text style={styles.addButtonText}>{t('more.doctorProfileSettings.actions.addEducation')}</Text>
         </TouchableOpacity>
       </View>
     </ScrollView>
@@ -1403,22 +1411,22 @@ export const ProfileSettingsScreen = () => {
   const renderAwardsTab = () => (
     <ScrollView showsVerticalScrollIndicator={false}>
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Awards & Recognition</Text>
+        <Text style={styles.sectionTitle}>{t('more.doctorProfileSettings.sections.awardsRecognition')}</Text>
         {doctorProfileData.awards.length > 0 ? (
           <View style={styles.listContainer}>
             {doctorProfileData.awards.map((award, index) => (
               <View key={index} style={styles.itemCard}>
                 <Input
-                  label="Award Title *"
+                  label={t('more.doctorProfileSettings.awardTitleLabel')}
                   value={award.title}
                   onChangeText={(text) => handleAwardChange(index, 'title', text)}
-                  placeholder="Enter award title"
+                  placeholder={t('more.doctorProfileSettings.awardTitlePlaceholder')}
                 />
                 <Input
-                  label="Year"
+                  label={t('more.doctorProfileSettings.yearLabel')}
                   value={award.year}
                   onChangeText={(text) => handleAwardChange(index, 'year', text)}
-                  placeholder="YYYY"
+                  placeholder={t('more.doctorProfileSettings.yearPlaceholder')}
                   keyboardType="numeric"
                 />
                 <TouchableOpacity
@@ -1426,17 +1434,17 @@ export const ProfileSettingsScreen = () => {
                   onPress={() => handleRemoveAward(index)}
                 >
                   <Ionicons name="trash-outline" size={20} color={colors.error} />
-                  <Text style={styles.removeItemButtonText}>Remove</Text>
+                  <Text style={styles.removeItemButtonText}>{t('common.remove')}</Text>
                 </TouchableOpacity>
               </View>
             ))}
           </View>
         ) : (
-          <Text style={styles.emptyText}>No awards added yet</Text>
+          <Text style={styles.emptyText}>{t('more.doctorProfileSettings.empty.awards')}</Text>
         )}
         <TouchableOpacity style={styles.addButton} onPress={handleAddAward}>
           <Ionicons name="add-circle-outline" size={20} color={colors.primary} />
-          <Text style={styles.addButtonText}>Add Award</Text>
+          <Text style={styles.addButtonText}>{t('more.doctorProfileSettings.actions.addAward')}</Text>
         </TouchableOpacity>
       </View>
     </ScrollView>
@@ -1445,60 +1453,58 @@ export const ProfileSettingsScreen = () => {
   const renderClinicsTab = () => (
     <ScrollView showsVerticalScrollIndicator={false}>
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Clinics</Text>
+        <Text style={styles.sectionTitle}>{t('more.doctorProfileSettings.sections.clinics')}</Text>
         {doctorProfileData.clinics.length > 0 ? (
           <View style={styles.listContainer}>
             {doctorProfileData.clinics.map((clinic, index) => (
               <View key={index} style={styles.itemCard}>
                 <Input
-                  label="Clinic Name *"
+                  label={t('more.doctorProfileSettings.clinicNameLabel')}
                   value={clinic.name}
                   onChangeText={(text) => handleClinicChange(index, 'name', text)}
-                  placeholder="Enter clinic name"
+                  placeholder={t('more.doctorProfileSettings.clinicNamePlaceholder')}
                 />
                 <Input
-                  label="Address"
+                  label={t('more.doctorProfileSettings.addressLabel')}
                   value={clinic.address}
                   onChangeText={(text) => handleClinicChange(index, 'address', text)}
-                  placeholder="Enter address"
+                  placeholder={t('more.doctorProfileSettings.addressPlaceholder')}
                 />
                 <View style={styles.row}>
                   <Input
-                    label="City"
+                    label={t('more.doctorProfileSettings.cityLabel')}
                     value={clinic.city}
                     onChangeText={(text) => handleClinicChange(index, 'city', text)}
-                    placeholder="Enter city"
+                    placeholder={t('more.doctorProfileSettings.cityPlaceholder')}
                     style={styles.halfInput}
                   />
                   <Input
-                    label="State"
+                    label={t('more.doctorProfileSettings.stateLabel')}
                     value={clinic.state}
                     onChangeText={(text) => handleClinicChange(index, 'state', text)}
-                    placeholder="Enter state"
+                    placeholder={t('more.doctorProfileSettings.statePlaceholder')}
                     style={styles.halfInput}
                   />
                 </View>
                 <Input
-                  label="Country"
+                  label={t('more.doctorProfileSettings.countryLabel')}
                   value={clinic.country}
                   onChangeText={(text) => handleClinicChange(index, 'country', text)}
-                  placeholder="Enter country"
+                  placeholder={t('more.doctorProfileSettings.countryPlaceholder')}
                 />
                 <Input
-                  label="Phone"
+                  label={t('more.doctorProfileSettings.phoneLabel')}
                   value={clinic.phone}
                   onChangeText={(text) => handleClinicChange(index, 'phone', text)}
-                  placeholder="Enter phone number"
+                  placeholder={t('more.doctorProfileSettings.phonePlaceholder')}
                   keyboardType="phone-pad"
                 />
                 <View style={styles.coordinatesSection}>
-                  <Text style={styles.coordinatesSectionTitle}>Location Coordinates</Text>
-                  <Text style={styles.coordinatesHint}>
-                    Enter latitude and longitude for map integration (optional)
-                  </Text>
+                  <Text style={styles.coordinatesSectionTitle}>{t('more.doctorProfileSettings.locationCoordinatesTitle')}</Text>
+                  <Text style={styles.coordinatesHint}>{t('more.doctorProfileSettings.locationCoordinatesHint')}</Text>
                   <View style={styles.row}>
                     <Input
-                      label="Latitude"
+                      label={t('more.doctorProfileSettings.latitudeLabel')}
                       value={clinic.lat !== null && clinic.lat !== undefined ? clinic.lat.toString() : ''}
                       onChangeText={(text) => {
                         const numValue = text.trim() === '' ? null : parseFloat(text);
@@ -1506,12 +1512,12 @@ export const ProfileSettingsScreen = () => {
                           handleClinicChange(index, 'lat', numValue);
                         }
                       }}
-                      placeholder="e.g., 40.7128"
+                      placeholder={t('more.doctorProfileSettings.latitudePlaceholder')}
                       keyboardType="decimal-pad"
                       style={styles.halfInput}
                     />
                     <Input
-                      label="Longitude"
+                      label={t('more.doctorProfileSettings.longitudeLabel')}
                       value={clinic.lng !== null && clinic.lng !== undefined ? clinic.lng.toString() : ''}
                       onChangeText={(text) => {
                         const numValue = text.trim() === '' ? null : parseFloat(text);
@@ -1519,14 +1525,14 @@ export const ProfileSettingsScreen = () => {
                           handleClinicChange(index, 'lng', numValue);
                         }
                       }}
-                      placeholder="e.g., -74.0060"
+                      placeholder={t('more.doctorProfileSettings.longitudePlaceholder')}
                       keyboardType="decimal-pad"
                       style={styles.halfInput}
                     />
                   </View>
                   <Text style={styles.coordinatesInfo}>
                     <Ionicons name="information-circle-outline" size={14} color={colors.textSecondary} />{' '}
-                    Latitude: -90 to 90, Longitude: -180 to 180
+                    {t('more.doctorProfileSettings.coordinatesInfo')}
                   </Text>
                 </View>
                 <TouchableOpacity
@@ -1534,17 +1540,17 @@ export const ProfileSettingsScreen = () => {
                   onPress={() => handleRemoveClinic(index)}
                 >
                   <Ionicons name="trash-outline" size={20} color={colors.error} />
-                  <Text style={styles.removeItemButtonText}>Remove</Text>
+                  <Text style={styles.removeItemButtonText}>{t('common.remove')}</Text>
                 </TouchableOpacity>
               </View>
             ))}
           </View>
         ) : (
-          <Text style={styles.emptyText}>No clinics added yet</Text>
+          <Text style={styles.emptyText}>{t('more.doctorProfileSettings.empty.clinics')}</Text>
         )}
         <TouchableOpacity style={styles.addButton} onPress={handleAddClinic}>
           <Ionicons name="add-circle-outline" size={20} color={colors.primary} />
-          <Text style={styles.addButtonText}>Add Clinic</Text>
+          <Text style={styles.addButtonText}>{t('more.doctorProfileSettings.actions.addClinic')}</Text>
         </TouchableOpacity>
       </View>
     </ScrollView>
@@ -1553,23 +1559,23 @@ export const ProfileSettingsScreen = () => {
   const renderBusinessTab = () => (
     <ScrollView showsVerticalScrollIndicator={false}>
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Business Hours</Text>
+        <Text style={styles.sectionTitle}>{t('more.doctorProfileSettings.sections.businessHours')}</Text>
         {days.map((day) => (
           <View key={day} style={styles.businessHoursItem}>
-            <Text style={styles.dayLabel}>{day}</Text>
+            <Text style={styles.dayLabel}>{t(`more.doctorProfileSettings.weekdays.${day.toLowerCase()}`)}</Text>
             <View style={styles.timeRow}>
               <Input
-                label="Start Time"
+                label={t('more.doctorProfileSettings.startTimeLabel')}
                 value={businessHours[day]?.startTime || ''}
                 onChangeText={(text) => handleTimeChange(day, 'startTime', text)}
-                placeholder="HH:MM"
+                placeholder={t('more.doctorProfileSettings.timePlaceholder')}
                 style={styles.halfInput}
               />
               <Input
-                label="End Time"
+                label={t('more.doctorProfileSettings.endTimeLabel')}
                 value={businessHours[day]?.endTime || ''}
                 onChangeText={(text) => handleTimeChange(day, 'endTime', text)}
-                placeholder="HH:MM"
+                placeholder={t('more.doctorProfileSettings.timePlaceholder')}
                 style={styles.halfInput}
               />
             </View>
@@ -1581,18 +1587,18 @@ export const ProfileSettingsScreen = () => {
 
   const renderSocialTab = () => {
     const socialPlatforms = [
-      { key: 'facebook' as keyof typeof socialLinks, label: 'Facebook', icon: 'logo-facebook' },
-      { key: 'instagram' as keyof typeof socialLinks, label: 'Instagram', icon: 'logo-instagram' },
-      { key: 'linkedin' as keyof typeof socialLinks, label: 'LinkedIn', icon: 'logo-linkedin' },
-      { key: 'twitter' as keyof typeof socialLinks, label: 'Twitter', icon: 'logo-twitter' },
-      { key: 'website' as keyof typeof socialLinks, label: 'Website', icon: 'globe-outline' },
+      { key: 'facebook' as keyof typeof socialLinks, label: t('more.socialLinks.platforms.facebook'), icon: 'logo-facebook' },
+      { key: 'instagram' as keyof typeof socialLinks, label: t('more.socialLinks.platforms.instagram'), icon: 'logo-instagram' },
+      { key: 'linkedin' as keyof typeof socialLinks, label: t('more.socialLinks.platforms.linkedin'), icon: 'logo-linkedin' },
+      { key: 'twitter' as keyof typeof socialLinks, label: t('more.socialLinks.platforms.twitter'), icon: 'logo-twitter' },
+      { key: 'website' as keyof typeof socialLinks, label: t('more.socialLinks.platforms.website'), icon: 'globe-outline' },
     ];
 
     return (
       <ScrollView showsVerticalScrollIndicator={false}>
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Social Media Links</Text>
-          <Text style={styles.sectionSubtitle}>Add your social media profiles to connect with patients</Text>
+          <Text style={styles.sectionTitle}>{t('screens.socialLinks')}</Text>
+          <Text style={styles.sectionSubtitle}>{t('more.socialLinks.subtitle')}</Text>
 
           {socialPlatforms.map((platform) => (
             <View key={platform.key} style={styles.linkContainer}>
@@ -1601,7 +1607,7 @@ export const ProfileSettingsScreen = () => {
                 <Text style={styles.linkLabel}>{platform.label}</Text>
               </View>
               <Input
-                placeholder={`Add ${platform.label} URL`}
+                placeholder={t('more.socialLinks.addUrlPlaceholder', { platform: platform.label })}
                 value={socialLinks[platform.key]}
                 onChangeText={(text) => handleLinkChange(platform.key, text)}
                 keyboardType="url"
@@ -1616,10 +1622,9 @@ export const ProfileSettingsScreen = () => {
         <View style={styles.infoCard}>
           <Ionicons name="information-circle" size={24} color={colors.primary} />
           <View style={styles.infoContent}>
-            <Text style={styles.infoTitle}>About Social Links</Text>
+            <Text style={styles.infoTitle}>{t('more.socialLinks.aboutTitle')}</Text>
             <Text style={styles.infoText}>
-              Add your social media profiles and website URL. These links will be displayed on your public profile
-              page. Make sure to enter valid URLs starting with http:// or https://
+              {t('more.socialLinks.aboutBody')}
             </Text>
           </View>
         </View>
@@ -1650,15 +1655,15 @@ export const ProfileSettingsScreen = () => {
     return (
       <ScrollView showsVerticalScrollIndicator={false}>
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Insurance Settings</Text>
+          <Text style={styles.sectionTitle}>{t('more.doctorProfileSettings.sections.insuranceSettings')}</Text>
           <Text style={styles.sectionSubtitle}>
-            Enable if you are partnered with insurance companies and accept insurance payments
+            {t('more.doctorProfileSettings.insuranceSettingsSubtitle')}
           </Text>
 
           {/* Convenzionato Toggle */}
           <View style={styles.toggleContainer}>
             <View style={styles.toggleRow}>
-              <Text style={styles.toggleLabel}>Do you accept insurance? *</Text>
+              <Text style={styles.toggleLabel}>{t('more.doctorProfileSettings.acceptInsuranceLabel')}</Text>
               <TouchableOpacity
                 style={[styles.toggleSwitch, convenzionato && styles.toggleSwitchActive]}
                 onPress={() => handleConvenzionatoToggle(!convenzionato)}
@@ -1668,24 +1673,26 @@ export const ProfileSettingsScreen = () => {
               </TouchableOpacity>
             </View>
             <Text style={styles.toggleHint}>
-              {convenzionato ? 'Yes, I accept insurance' : 'No, I do not accept insurance'}
+              {convenzionato
+                ? t('more.doctorProfileSettings.acceptInsuranceYes')
+                : t('more.doctorProfileSettings.acceptInsuranceNo')}
             </Text>
           </View>
 
           {/* Insurance Companies Selection */}
           {convenzionato && (
             <View style={styles.insuranceSection}>
-              <Text style={styles.sectionSubtitle}>Select Insurance Companies *</Text>
+              <Text style={styles.sectionSubtitle}>{t('more.doctorProfileSettings.selectInsuranceCompaniesLabel')}</Text>
               {insuranceLoading ? (
                 <View style={styles.loadingContainer}>
                   <ActivityIndicator size="large" color={colors.primary} />
-                  <Text style={styles.loadingText}>Loading insurance companies...</Text>
+                  <Text style={styles.loadingText}>{t('more.doctorProfileSettings.loadingInsuranceCompanies')}</Text>
                 </View>
               ) : insuranceCompanies.length === 0 ? (
                 <View style={styles.warningCard}>
                   <Ionicons name="warning-outline" size={24} color={colors.warning} />
                   <Text style={styles.warningText}>
-                    No active insurance companies available. Please contact admin to add insurance companies.
+                    {t('more.doctorProfileSettings.noActiveInsuranceCompanies')}
                   </Text>
                 </View>
               ) : (
@@ -1736,7 +1743,7 @@ export const ProfileSettingsScreen = () => {
               {convenzionato && selectedInsuranceIds.length === 0 && insuranceCompanies.length > 0 && (
                 <View style={styles.infoCard}>
                   <Ionicons name="information-circle-outline" size={20} color={colors.info} />
-                  <Text style={styles.infoText}>Please select at least one insurance company</Text>
+                  <Text style={styles.infoText}>{t('more.doctorProfileSettings.validation.selectAtLeastOneInsuranceCompany')}</Text>
                 </View>
               )}
             </View>
@@ -1772,15 +1779,15 @@ export const ProfileSettingsScreen = () => {
   };
 
   const tabs = [
-    { key: 'basic' as TabTypeLocal, label: 'Basic', icon: 'person' },
-    { key: 'specialties' as TabTypeLocal, label: 'Specialties', icon: 'medical' },
-    { key: 'experience' as TabTypeLocal, label: 'Experience', icon: 'briefcase' },
-    { key: 'education' as TabTypeLocal, label: 'Education', icon: 'school' },
-    { key: 'awards' as TabTypeLocal, label: 'Awards', icon: 'trophy' },
-    { key: 'clinics' as TabTypeLocal, label: 'Clinics', icon: 'business' },
-    { key: 'insurance' as TabTypeLocal, label: 'Insurance', icon: 'shield' },
-    { key: 'business' as TabTypeLocal, label: 'Business Hours', icon: 'time' },
-    { key: 'social' as TabTypeLocal, label: 'Social Links', icon: 'share-social' },
+    { key: 'basic' as TabTypeLocal, label: t('more.doctorProfileSettings.tabs.basic'), icon: 'person' },
+    { key: 'specialties' as TabTypeLocal, label: t('more.doctorProfileSettings.tabs.specialties'), icon: 'medical' },
+    { key: 'experience' as TabTypeLocal, label: t('more.doctorProfileSettings.tabs.experience'), icon: 'briefcase' },
+    { key: 'education' as TabTypeLocal, label: t('more.doctorProfileSettings.tabs.education'), icon: 'school' },
+    { key: 'awards' as TabTypeLocal, label: t('more.doctorProfileSettings.tabs.awards'), icon: 'trophy' },
+    { key: 'clinics' as TabTypeLocal, label: t('more.doctorProfileSettings.tabs.clinics'), icon: 'business' },
+    { key: 'insurance' as TabTypeLocal, label: t('more.doctorProfileSettings.tabs.insurance'), icon: 'shield' },
+    { key: 'business' as TabTypeLocal, label: t('more.doctorProfileSettings.tabs.business'), icon: 'time' },
+    { key: 'social' as TabTypeLocal, label: t('more.doctorProfileSettings.tabs.social'), icon: 'share-social' },
   ];
 
   return (
@@ -1815,8 +1822,8 @@ export const ProfileSettingsScreen = () => {
         <Button
           title={
             updateUserProfileMutation.isPending || updateDoctorProfileMutation.isPending
-              ? 'Saving...'
-              : 'Save Changes'
+              ? t('common.saving')
+              : t('common.saveChanges')
           }
           onPress={handleSubmit}
           disabled={updateUserProfileMutation.isPending || updateDoctorProfileMutation.isPending}

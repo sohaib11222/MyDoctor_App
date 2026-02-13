@@ -20,9 +20,9 @@ import { Button } from '../../components/common/Button';
 import { Input } from '../../components/common/Input';
 import { useCart } from '../../contexts/CartContext';
 import { useAuth } from '../../contexts/AuthContext';
-import * as paymentApi from '../../services/payment';
 import * as orderApi from '../../services/order';
 import Toast from 'react-native-toast-message';
+import { useTranslation } from 'react-i18next';
 
 type CheckoutScreenNavigationProp = NativeStackNavigationProp<PharmacyStackParamList>;
 
@@ -30,6 +30,7 @@ export const CheckoutScreen = () => {
   const navigation = useNavigation<CheckoutScreenNavigationProp>();
   const { cartItems, getCartTotal, clearCart } = useCart();
   const { user } = useAuth();
+  const { t } = useTranslation();
   const [formData, setFormData] = useState({
     firstName: user?.fullName?.split(' ')[0] || '',
     lastName: user?.fullName?.split(' ').slice(1).join(' ') || '',
@@ -45,12 +46,7 @@ export const CheckoutScreen = () => {
       zip: '',
     },
     orderNotes: '',
-    paymentMethod: 'CARD' as 'CARD' | 'PAYPAL' | 'DUMMY',
-    cardName: '',
-    cardNumber: '',
-    expiryMonth: '',
-    expiryYear: '',
-    cvv: '',
+    paymentMethod: 'STRIPE' as 'STRIPE',
   });
   const [termsAccepted, setTermsAccepted] = useState(false);
 
@@ -63,8 +59,8 @@ export const CheckoutScreen = () => {
     if (cartItems.length === 0) {
       Toast.show({
         type: 'warning',
-        text1: 'Empty Cart',
-        text2: 'Your cart is empty',
+        text1: t('pharmacy.checkout.emptyCartTitle'),
+        text2: t('pharmacy.checkout.emptyCartBody'),
       });
       navigation.navigate('ProductCatalog');
     }
@@ -102,31 +98,41 @@ export const CheckoutScreen = () => {
             zip: formData.shippingAddress.zip.trim(),
           };
         } else {
-          throw new Error('Please fill in all required shipping address fields');
+          throw new Error(t('pharmacy.checkout.shippingAddressRequired'));
         }
       }
 
       // Add payment method if provided
-      if (formData.paymentMethod) {
-        orderData.paymentMethod = formData.paymentMethod;
-      }
+      orderData.paymentMethod = 'STRIPE';
 
       // Create order (payment is processed immediately during checkout)
       const orderResponse = await orderApi.createOrder(orderData);
 
-      return { order: orderResponse.data };
+      const responseData: any = (orderResponse as any)?.data;
+      const createdOrders = Array.isArray(responseData?.orders)
+        ? responseData.orders
+        : (responseData ? [responseData] : []);
+
+      return { orders: createdOrders };
     },
     onSuccess: (data) => {
+      const createdOrders = data?.orders || [];
       Toast.show({
         type: 'success',
-        text1: 'Order Placed Successfully',
-        text2: `Order #${data.order.orderNumber} has been placed and payment processed!`,
+        text1: t('pharmacy.checkout.orderPlacedTitle'),
+        text2: createdOrders.length === 1
+          ? t('pharmacy.checkout.orderPlacedSingle', { orderNumber: createdOrders[0].orderNumber })
+          : t('pharmacy.checkout.orderPlacedMultiple', { count: createdOrders.length }),
       });
       clearCart();
-      navigation.navigate('PaymentSuccess', { orderId: data.order._id });
+      if (createdOrders.length === 1) {
+        navigation.navigate('OrderDetails', { orderId: createdOrders[0]._id });
+      } else {
+        navigation.navigate('OrderHistory');
+      }
     },
     onError: (error: any) => {
-      let errorMessage = 'Order failed';
+      let errorMessage = t('pharmacy.checkout.orderFailedFallback');
       
       if (error.response?.data) {
         // Handle validation errors
@@ -156,7 +162,7 @@ export const CheckoutScreen = () => {
 
       Toast.show({
         type: 'error',
-        text1: 'Order Failed',
+        text1: t('pharmacy.checkout.orderFailedTitle'),
         text2: errorMessage,
       });
     },
@@ -166,8 +172,8 @@ export const CheckoutScreen = () => {
     if (!termsAccepted) {
       Toast.show({
         type: 'error',
-        text1: 'Terms Required',
-        text2: 'Please accept the Terms & Conditions to continue',
+        text1: t('pharmacy.checkout.termsRequiredTitle'),
+        text2: t('pharmacy.checkout.termsRequiredBody'),
       });
       return;
     }
@@ -175,27 +181,10 @@ export const CheckoutScreen = () => {
     if (!user) {
       Toast.show({
         type: 'error',
-        text1: 'Login Required',
-        text2: 'Please login to complete checkout',
+        text1: t('pharmacy.checkout.loginRequiredTitle'),
+        text2: t('pharmacy.checkout.loginRequiredBody'),
       });
       return;
-    }
-
-    if (formData.paymentMethod === 'CARD') {
-      if (
-        !formData.cardName ||
-        !formData.cardNumber ||
-        !formData.expiryMonth ||
-        !formData.expiryYear ||
-        !formData.cvv
-      ) {
-        Toast.show({
-          type: 'error',
-          text1: 'Card Details Required',
-          text2: 'Please fill in all card details',
-        });
-        return;
-      }
     }
 
     // Create order and process payment
@@ -212,41 +201,42 @@ export const CheckoutScreen = () => {
       <ScrollView showsVerticalScrollIndicator={false}>
         {/* Billing Details */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Billing details</Text>
+          <Text style={styles.sectionTitle}>{t('pharmacy.checkout.billingDetails')}</Text>
 
           {/* Personal Information */}
           <View style={styles.subSection}>
-            <Text style={styles.subSectionTitle}>Personal Information</Text>
+            <Text style={styles.subSectionTitle}>{t('pharmacy.checkout.personalInformation')}</Text>
             <Input
-              label="First Name"
+              label={t('pharmacy.checkout.firstName')}
               value={formData.firstName}
               onChangeText={(text) => setFormData({ ...formData, firstName: text })}
-              placeholder="Enter first name"
+              placeholder={t('pharmacy.checkout.firstNamePlaceholder')}
             />
             <Input
-              label="Last Name"
+              label={t('pharmacy.checkout.lastName')}
               value={formData.lastName}
               onChangeText={(text) => setFormData({ ...formData, lastName: text })}
-              placeholder="Enter last name"
+              placeholder={t('pharmacy.checkout.lastNamePlaceholder')}
             />
             <Input
-              label="Email"
+              label={t('pharmacy.checkout.email')}
               value={formData.email}
               onChangeText={(text) => setFormData({ ...formData, email: text })}
-              placeholder="Enter email"
+              placeholder={t('pharmacy.checkout.emailPlaceholder')}
               keyboardType="email-address"
             />
             <Input
-              label="Phone"
+              label={t('pharmacy.checkout.phone')}
               value={formData.phone}
               onChangeText={(text) => setFormData({ ...formData, phone: text })}
-              placeholder="Enter phone"
+              placeholder={t('pharmacy.checkout.phonePlaceholder')}
               keyboardType="phone-pad"
             />
             {!user && (
               <TouchableOpacity style={styles.existingCustomerLink}>
                 <Text style={styles.existingCustomerText}>
-                  Existing Customer? <Text style={styles.linkText}>Click here to login</Text>
+                  {t('pharmacy.checkout.existingCustomer')}
+                  <Text style={styles.linkText}>{t('pharmacy.checkout.clickHereToLogin')}</Text>
                 </Text>
               </TouchableOpacity>
             )}
@@ -254,7 +244,7 @@ export const CheckoutScreen = () => {
 
           {/* Shipping Details */}
           <View style={styles.subSection}>
-            <Text style={styles.subSectionTitle}>Shipping Details</Text>
+            <Text style={styles.subSectionTitle}>{t('pharmacy.checkout.shippingDetails')}</Text>
             <TouchableOpacity
               style={styles.checkboxContainer}
               onPress={() => setFormData({ ...formData, shipToDifferentAddress: !formData.shipToDifferentAddress })}
@@ -269,91 +259,86 @@ export const CheckoutScreen = () => {
                   <Ionicons name="checkmark" size={16} color={colors.textWhite} />
                 )}
               </View>
-              <Text style={styles.checkboxLabel}>Ship to a different address?</Text>
+              <Text style={styles.checkboxLabel}>{t('pharmacy.checkout.shipToDifferentAddress')}</Text>
             </TouchableOpacity>
             {formData.shipToDifferentAddress && (
               <>
                 <Input
-                  label="Address Line 1"
+                  label={t('pharmacy.checkout.addressLine1')}
                   value={formData.shippingAddress.line1}
                   onChangeText={(text) => setFormData({ 
                     ...formData, 
                     shippingAddress: { ...formData.shippingAddress, line1: text } 
                   })}
-                  placeholder="Enter address line 1"
-                  required
+                  placeholder={t('pharmacy.checkout.addressLine1Placeholder')}
                 />
                 <Input
-                  label="Address Line 2 (Optional)"
+                  label={t('pharmacy.checkout.addressLine2Optional')}
                   value={formData.shippingAddress.line2}
                   onChangeText={(text) => setFormData({ 
                     ...formData, 
                     shippingAddress: { ...formData.shippingAddress, line2: text } 
                   })}
-                  placeholder="Enter address line 2"
+                  placeholder={t('pharmacy.checkout.addressLine2Placeholder')}
                 />
                 <View style={styles.row}>
                   <View style={styles.halfInput}>
                     <Input
-                      label="City"
+                      label={t('pharmacy.checkout.city')}
                       value={formData.shippingAddress.city}
                       onChangeText={(text) => setFormData({ 
                         ...formData, 
                         shippingAddress: { ...formData.shippingAddress, city: text } 
                       })}
-                      placeholder="Enter city"
-                      required
+                      placeholder={t('pharmacy.checkout.cityPlaceholder')}
                     />
                   </View>
                   <View style={styles.halfInput}>
                     <Input
-                      label="State"
+                      label={t('pharmacy.checkout.state')}
                       value={formData.shippingAddress.state}
                       onChangeText={(text) => setFormData({ 
                         ...formData, 
                         shippingAddress: { ...formData.shippingAddress, state: text } 
                       })}
-                      placeholder="Enter state"
-                      required
+                      placeholder={t('pharmacy.checkout.statePlaceholder')}
                     />
                   </View>
                 </View>
                 <View style={styles.row}>
                   <View style={styles.halfInput}>
                     <Input
-                      label="Country"
+                      label={t('pharmacy.checkout.country')}
                       value={formData.shippingAddress.country}
                       onChangeText={(text) => setFormData({ 
                         ...formData, 
                         shippingAddress: { ...formData.shippingAddress, country: text } 
                       })}
-                      placeholder="Enter country"
-                      required
+                      placeholder={t('pharmacy.checkout.countryPlaceholder')}
                     />
                   </View>
                   <View style={styles.halfInput}>
                     <Input
-                      label="ZIP Code"
+                      label={t('pharmacy.checkout.zipCode')}
                       value={formData.shippingAddress.zip}
                       onChangeText={(text) => setFormData({ 
                         ...formData, 
                         shippingAddress: { ...formData.shippingAddress, zip: text } 
                       })}
-                      placeholder="Enter ZIP"
+                      placeholder={t('pharmacy.checkout.zipPlaceholder')}
                       keyboardType="numeric"
-                      required
                     />
                   </View>
                 </View>
               </>
             )}
             <View style={styles.textAreaContainer}>
-              <Text style={styles.label}>Order notes (Optional)</Text>
+              <Text style={styles.label}>{t('pharmacy.checkout.orderNotesOptional')}</Text>
               <TextInput
                 style={styles.textArea}
                 value={formData.orderNotes}
                 onChangeText={(text) => setFormData({ ...formData, orderNotes: text })}
-                placeholder="Any special instructions for your order..."
+                placeholder={t('pharmacy.checkout.orderNotesPlaceholder')}
                 placeholderTextColor={colors.textLight}
                 multiline
                 numberOfLines={5}
@@ -363,121 +348,16 @@ export const CheckoutScreen = () => {
 
           {/* Payment Method */}
           <View style={styles.subSection}>
-            <Text style={styles.subSectionTitle}>Payment Method</Text>
+            <Text style={styles.subSectionTitle}>{t('pharmacy.checkout.paymentMethod')}</Text>
 
-            {/* Credit Card Option */}
-            <TouchableOpacity
-              style={styles.paymentOption}
-              onPress={() => setFormData({ ...formData, paymentMethod: 'CARD' })}
-            >
+            <View style={styles.paymentOption}>
               <View style={styles.radioContainer}>
-                <View
-                  style={[
-                    styles.radio,
-                    formData.paymentMethod === 'CARD' && styles.radioChecked,
-                  ]}
-                >
-                  {formData.paymentMethod === 'CARD' && (
-                    <View style={styles.radioInner} />
-                  )}
+                <View style={[styles.radio, styles.radioChecked]}>
+                  <View style={styles.radioInner} />
                 </View>
-                <Text style={styles.paymentOptionText}>Credit card</Text>
+                <Text style={styles.paymentOptionText}>{t('pharmacy.checkout.stripe')}</Text>
               </View>
-            </TouchableOpacity>
-
-            {formData.paymentMethod === 'CARD' && (
-              <View style={styles.paymentDetails}>
-                <Input
-                  label="Name on Card"
-                  value={formData.cardName}
-                  onChangeText={(text) => setFormData({ ...formData, cardName: text })}
-                  placeholder="Enter name"
-                  required={formData.paymentMethod === 'CARD'}
-                />
-                <Input
-                  label="Card Number"
-                  value={formData.cardNumber}
-                  onChangeText={(text) => setFormData({ ...formData, cardNumber: text })}
-                  placeholder="1234 5678 9876 5432"
-                  keyboardType="numeric"
-                  required={formData.paymentMethod === 'CARD'}
-                />
-                <View style={styles.row}>
-                  <View style={styles.halfInput}>
-                    <Input
-                      label="Expiry Month"
-                      value={formData.expiryMonth}
-                      onChangeText={(text) => setFormData({ ...formData, expiryMonth: text })}
-                      placeholder="MM"
-                      keyboardType="numeric"
-                      maxLength={2}
-                      required={formData.paymentMethod === 'CARD'}
-                    />
-                  </View>
-                  <View style={styles.halfInput}>
-                    <Input
-                      label="Expiry Year"
-                      value={formData.expiryYear}
-                      onChangeText={(text) => setFormData({ ...formData, expiryYear: text })}
-                      placeholder="YY"
-                      keyboardType="numeric"
-                      maxLength={2}
-                      required={formData.paymentMethod === 'CARD'}
-                    />
-                  </View>
-                </View>
-                <Input
-                  label="CVV"
-                  value={formData.cvv}
-                  onChangeText={(text) => setFormData({ ...formData, cvv: text })}
-                  placeholder="CVV"
-                  keyboardType="numeric"
-                  secureTextEntry
-                  maxLength={4}
-                  required={formData.paymentMethod === 'CARD'}
-                />
-              </View>
-            )}
-
-            {/* PayPal Option */}
-            <TouchableOpacity
-              style={styles.paymentOption}
-              onPress={() => setFormData({ ...formData, paymentMethod: 'PAYPAL' })}
-            >
-              <View style={styles.radioContainer}>
-                <View
-                  style={[
-                    styles.radio,
-                    formData.paymentMethod === 'PAYPAL' && styles.radioChecked,
-                  ]}
-                >
-                  {formData.paymentMethod === 'PAYPAL' && (
-                    <View style={styles.radioInner} />
-                  )}
-                </View>
-                <Text style={styles.paymentOptionText}>Paypal</Text>
-              </View>
-            </TouchableOpacity>
-
-            {/* Dummy/Test Payment Option */}
-            <TouchableOpacity
-              style={styles.paymentOption}
-              onPress={() => setFormData({ ...formData, paymentMethod: 'DUMMY' })}
-            >
-              <View style={styles.radioContainer}>
-                <View
-                  style={[
-                    styles.radio,
-                    formData.paymentMethod === 'DUMMY' && styles.radioChecked,
-                  ]}
-                >
-                  {formData.paymentMethod === 'DUMMY' && (
-                    <View style={styles.radioInner} />
-                  )}
-                </View>
-                <Text style={styles.paymentOptionText}>Test Payment (Dummy)</Text>
-              </View>
-            </TouchableOpacity>
+            </View>
 
             {/* Terms */}
             <TouchableOpacity
@@ -495,7 +375,8 @@ export const CheckoutScreen = () => {
                 )}
               </View>
               <Text style={styles.checkboxLabel}>
-                I have read and accept <Text style={styles.linkText}>Terms & Conditions</Text>
+                {t('pharmacy.checkout.termsPrefix')}
+                <Text style={styles.linkText}>{t('pharmacy.checkout.termsLink')}</Text>
               </Text>
             </TouchableOpacity>
           </View>
@@ -503,7 +384,7 @@ export const CheckoutScreen = () => {
 
         {/* Order Summary */}
         <View style={styles.orderSummary}>
-          <Text style={styles.orderSummaryTitle}>Your Order</Text>
+          <Text style={styles.orderSummaryTitle}>{t('pharmacy.checkout.yourOrder')}</Text>
           <View style={styles.orderItemsList}>
             {cartItems.map((item) => (
               <View key={item._id} style={styles.orderItem}>
@@ -518,14 +399,14 @@ export const CheckoutScreen = () => {
           </View>
           <View style={styles.orderTotals}>
             <View style={styles.totalRow}>
-              <Text style={styles.totalLabel}>Subtotal</Text>
+              <Text style={styles.totalLabel}>{t('pharmacy.cart.subtotal')}</Text>
               <Text style={styles.totalValue}>${subtotal.toFixed(2)}</Text>
             </View>
             <View style={styles.totalRow}>
-              <Text style={styles.totalLabel}>Shipping</Text>
+              <Text style={styles.totalLabel}>{t('pharmacy.cart.shipping')}</Text>
               <Text style={styles.totalValue}>
                 {shipping === 0 ? (
-                  <Text style={styles.freeShippingText}>Free</Text>
+                  <Text style={styles.freeShippingText}>{t('pharmacy.common.free')}</Text>
                 ) : (
                   `$${shipping.toFixed(2)}`
                 )}
@@ -533,20 +414,20 @@ export const CheckoutScreen = () => {
             </View>
             {tax > 0 && (
               <View style={styles.totalRow}>
-                <Text style={styles.totalLabel}>Tax</Text>
+                <Text style={styles.totalLabel}>{t('pharmacy.cart.tax')}</Text>
                 <Text style={styles.totalValue}>${tax.toFixed(2)}</Text>
               </View>
             )}
             <View style={[styles.totalRow, styles.totalRowMain]}>
-              <Text style={styles.totalLabelMain}>Total</Text>
+              <Text style={styles.totalLabelMain}>{t('pharmacy.cart.total')}</Text>
               <Text style={styles.totalValueMain}>${total.toFixed(2)}</Text>
             </View>
           </View>
           <Button
-            title={checkoutMutation.isLoading ? 'Processing...' : 'Confirm and Pay'}
+            title={checkoutMutation.isPending ? t('pharmacy.checkout.processing') : t('pharmacy.checkout.placeOrder')}
             onPress={handleSubmit}
-            disabled={!termsAccepted || checkoutMutation.isLoading}
-            loading={checkoutMutation.isLoading}
+            disabled={!termsAccepted || checkoutMutation.isPending}
+            loading={checkoutMutation.isPending}
             style={styles.submitButton}
           />
         </View>
@@ -787,13 +668,6 @@ const styles = StyleSheet.create({
   orderItemQuantity: {
     fontSize: 12,
     color: colors.textSecondary,
-  },
-  row: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  halfInput: {
-    flex: 1,
   },
 });
 

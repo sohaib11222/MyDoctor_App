@@ -10,7 +10,6 @@ import {
   RefreshControl,
   Modal,
   TextInput,
-  Alert,
 } from 'react-native';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { colors } from '../../constants/colors';
@@ -18,9 +17,20 @@ import { Ionicons } from '@expo/vector-icons';
 import { Button } from '../../components/common/Button';
 import * as balanceApi from '../../services/balance';
 import Toast from 'react-native-toast-message';
+import { useTranslation } from 'react-i18next';
 
 export const PayoutSettingsScreen = () => {
   const queryClient = useQueryClient();
+  const { t, i18n } = useTranslation();
+
+  const getPaymentMethodLabel = (method: string | null | undefined): string => {
+    const normalized = (method || '').toUpperCase();
+    if (normalized === 'STRIPE') return t('doctor.payoutSettings.paymentMethods.stripe.title');
+    if (normalized === 'BANK' || normalized === 'BANK_TRANSFER') {
+      return t('doctor.payoutSettings.paymentMethods.bankTransfer.title');
+    }
+    return method || '—';
+  };
   const [withdrawModal, setWithdrawModal] = useState({
     show: false,
     amount: '',
@@ -68,16 +78,17 @@ export const PayoutSettingsScreen = () => {
       queryClient.invalidateQueries({ queryKey: ['userBalance'] });
       Toast.show({
         type: 'success',
-        text1: 'Success',
-        text2: 'Withdrawal request submitted successfully!',
+        text1: t('common.success'),
+        text2: t('doctor.payoutSettings.toasts.withdrawalRequestSubmitted'),
       });
       setWithdrawModal({ show: false, amount: '', paymentMethod: 'STRIPE', paymentDetails: '' });
     },
     onError: (error: any) => {
-      const errorMessage = error?.response?.data?.message || error?.message || 'Failed to submit withdrawal request';
+      const errorMessage =
+        error?.response?.data?.message || error?.message || t('doctor.payoutSettings.errors.failedToSubmitWithdrawalRequest');
       Toast.show({
         type: 'error',
-        text1: 'Error',
+        text1: t('common.error'),
         text2: errorMessage,
       });
     },
@@ -87,7 +98,12 @@ export const PayoutSettingsScreen = () => {
   const formatDate = (dateString: string | null | undefined): string => {
     if (!dateString) return '—';
     const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' });
+    return date.toLocaleDateString(i18n.language || 'en-US', { day: 'numeric', month: 'short', year: 'numeric' });
+  };
+
+  const formatCurrency = (amount: number | null | undefined): string => {
+    const safeAmount = amount === null || amount === undefined ? 0 : amount;
+    return new Intl.NumberFormat(i18n.language || 'en', { style: 'currency', currency: 'EUR' }).format(safeAmount);
   };
 
   // Get status badge
@@ -98,7 +114,9 @@ export const PayoutSettingsScreen = () => {
       return (
         <View style={[styles.statusBadge, styles.statusBadgeSuccess]}>
           <Text style={styles.statusBadgeText}>
-            {statusUpper === 'APPROVED' ? 'Approved' : 'Completed'}
+            {statusUpper === 'APPROVED'
+              ? t('doctor.payoutSettings.status.approved')
+              : t('doctor.payoutSettings.status.completed')}
           </Text>
         </View>
       );
@@ -107,7 +125,9 @@ export const PayoutSettingsScreen = () => {
     if (statusUpper === 'PENDING') {
       return (
         <View style={[styles.statusBadge, styles.statusBadgeWarning]}>
-          <Text style={[styles.statusBadgeText, styles.statusBadgeTextDark]}>Pending</Text>
+          <Text style={[styles.statusBadgeText, styles.statusBadgeTextDark]}>
+            {t('doctor.payoutSettings.status.pending')}
+          </Text>
         </View>
       );
     }
@@ -115,7 +135,7 @@ export const PayoutSettingsScreen = () => {
     if (statusUpper === 'REJECTED') {
       return (
         <View style={[styles.statusBadge, styles.statusBadgeDanger]}>
-          <Text style={styles.statusBadgeText}>Rejected</Text>
+          <Text style={styles.statusBadgeText}>{t('doctor.payoutSettings.status.rejected')}</Text>
         </View>
       );
     }
@@ -133,24 +153,24 @@ export const PayoutSettingsScreen = () => {
     if (!amount || amount <= 0) {
       Toast.show({
         type: 'error',
-        text1: 'Error',
-        text2: 'Please enter a valid amount',
+        text1: t('common.error'),
+        text2: t('doctor.payoutSettings.validation.enterValidAmount'),
       });
       return;
     }
     if (amount > balance) {
       Toast.show({
         type: 'error',
-        text1: 'Error',
-        text2: 'Insufficient balance',
+        text1: t('common.error'),
+        text2: t('doctor.payoutSettings.validation.insufficientBalance'),
       });
       return;
     }
     if (!withdrawModal.paymentDetails.trim()) {
       Toast.show({
         type: 'error',
-        text1: 'Error',
-        text2: 'Please enter payment details',
+        text1: t('common.error'),
+        text2: t('doctor.payoutSettings.validation.paymentDetailsRequired'),
       });
       return;
     }
@@ -177,34 +197,34 @@ export const PayoutSettingsScreen = () => {
       >
         {/* Settings Section */}
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>Settings</Text>
-          <Text style={styles.cardSubtitle}>All the earning will be sent to below selected payout method</Text>
+          <Text style={styles.cardTitle}>{t('doctor.payoutSettings.sections.settingsTitle')}</Text>
+          <Text style={styles.cardSubtitle}>{t('doctor.payoutSettings.sections.settingsSubtitle')}</Text>
 
           <View style={styles.paymentMethodCard}>
             <View style={styles.paymentMethodIcon}>
               <Ionicons name="card-outline" size={32} color={colors.primary} />
             </View>
             <View style={styles.paymentMethodInfo}>
-              <Text style={styles.paymentMethodName}>Stripe</Text>
-              <Text style={styles.paymentMethodDescription}>Configure your Stripe account</Text>
+              <Text style={styles.paymentMethodName}>{t('doctor.payoutSettings.paymentMethods.stripe.title')}</Text>
+              <Text style={styles.paymentMethodDescription}>{t('doctor.payoutSettings.paymentMethods.stripe.description')}</Text>
             </View>
             <TouchableOpacity
               style={styles.configureButton}
               onPress={() => setWithdrawModal({ ...withdrawModal, show: true, paymentMethod: 'STRIPE' })}
             >
               <Ionicons name="settings-outline" size={18} color={colors.primary} />
-              <Text style={styles.configureButtonText}>Configure</Text>
+              <Text style={styles.configureButtonText}>{t('doctor.payoutSettings.actions.configure')}</Text>
             </TouchableOpacity>
           </View>
 
           {/* Available Balance */}
           <View style={styles.balanceCard}>
             <View style={styles.balanceInfo}>
-              <Text style={styles.balanceLabel}>Available Balance</Text>
-              <Text style={styles.balanceAmount}>€{balance.toFixed(2)}</Text>
+              <Text style={styles.balanceLabel}>{t('doctor.payoutSettings.labels.availableBalance')}</Text>
+              <Text style={styles.balanceAmount}>{formatCurrency(balance)}</Text>
             </View>
             <Button
-              title="Request Withdrawal"
+              title={t('doctor.payoutSettings.actions.requestWithdrawal')}
               onPress={() => setWithdrawModal({ ...withdrawModal, show: true })}
               disabled={balance <= 0}
               style={styles.withdrawButton}
@@ -214,7 +234,7 @@ export const PayoutSettingsScreen = () => {
 
         {/* Payouts Section */}
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>Payouts</Text>
+          <Text style={styles.cardTitle}>{t('doctor.payoutSettings.sections.payoutsTitle')}</Text>
 
           {withdrawalLoading ? (
             <View style={styles.loadingContainer}>
@@ -223,7 +243,7 @@ export const PayoutSettingsScreen = () => {
           ) : withdrawals.length === 0 ? (
             <View style={styles.emptyContainer}>
               <Ionicons name="receipt-outline" size={48} color={colors.textLight} />
-              <Text style={styles.emptyText}>No withdrawal requests found</Text>
+              <Text style={styles.emptyText}>{t('doctor.payoutSettings.empty.noWithdrawalRequests')}</Text>
             </View>
           ) : (
             <>
@@ -237,34 +257,36 @@ export const PayoutSettingsScreen = () => {
                   </View>
                   <View style={styles.withdrawalDetails}>
                     <View style={styles.withdrawalRow}>
-                      <Text style={styles.withdrawalLabel}>Payment Method:</Text>
-                      <Text style={styles.withdrawalValue}>{withdrawal.paymentMethod || '—'}</Text>
+                      <Text style={styles.withdrawalLabel}>{t('doctor.payoutSettings.labels.paymentMethod')}</Text>
+                      <Text style={styles.withdrawalValue}>
+                        {getPaymentMethodLabel(withdrawal.paymentMethod)}
+                      </Text>
                     </View>
                     <View style={styles.withdrawalRow}>
-                      <Text style={styles.withdrawalLabel}>Amount:</Text>
-                      <Text style={styles.withdrawalAmount}>€{(withdrawal.amount || 0).toFixed(2)}</Text>
+                      <Text style={styles.withdrawalLabel}>{t('doctor.payoutSettings.labels.amount')}</Text>
+                      <Text style={styles.withdrawalAmount}>{formatCurrency(withdrawal.amount || 0)}</Text>
                     </View>
                     {(withdrawal as any).netAmount !== null &&
                       (withdrawal as any).netAmount !== undefined &&
                       (withdrawal as any).netAmount !== withdrawal.amount && (
                         <View style={styles.withdrawalRow}>
-                          <Text style={styles.withdrawalLabel}>You receive:</Text>
+                          <Text style={styles.withdrawalLabel}>{t('doctor.payoutSettings.labels.youReceive')}</Text>
                           <Text style={styles.withdrawalValue}>
-                            €{(withdrawal as any).netAmount.toFixed(2)}
+                            {formatCurrency((withdrawal as any).netAmount)}
                           </Text>
                         </View>
                       )}
                     {(withdrawal as any).withdrawalFeePercent !== null &&
                       (withdrawal as any).withdrawalFeePercent !== undefined && (
                         <View style={styles.withdrawalRow}>
-                          <Text style={styles.withdrawalLabel}>Fee:</Text>
+                          <Text style={styles.withdrawalLabel}>{t('doctor.payoutSettings.labels.fee')}</Text>
                           <Text style={styles.withdrawalValue}>
                             {(withdrawal as any).withdrawalFeePercent}%
                             {(withdrawal as any).withdrawalFeeAmount !== null &&
                               (withdrawal as any).withdrawalFeeAmount !== undefined && (
                                 <Text style={styles.withdrawalFeeAmount}>
                                   {' '}
-                                  (€{(withdrawal as any).withdrawalFeeAmount.toFixed(2)})
+                                  ({formatCurrency((withdrawal as any).withdrawalFeeAmount)})
                                 </Text>
                               )}
                           </Text>
@@ -289,7 +311,7 @@ export const PayoutSettingsScreen = () => {
                     />
                   </TouchableOpacity>
                   <Text style={styles.paginationText}>
-                    Page {currentPage} of {pagination.pages}
+                    {t('doctor.payoutSettings.pagination.pageOf', { page: currentPage, pages: pagination.pages })}
                   </Text>
                   <TouchableOpacity
                     style={[
@@ -322,7 +344,7 @@ export const PayoutSettingsScreen = () => {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Request Withdrawal</Text>
+              <Text style={styles.modalTitle}>{t('doctor.payoutSettings.modal.title')}</Text>
               <TouchableOpacity
                 onPress={() => setWithdrawModal({ show: false, amount: '', paymentMethod: 'STRIPE', paymentDetails: '' })}
               >
@@ -332,30 +354,30 @@ export const PayoutSettingsScreen = () => {
 
             <ScrollView style={styles.modalBody} showsVerticalScrollIndicator={false}>
               <View style={styles.formGroup}>
-                <Text style={styles.formLabel}>Available Balance</Text>
+                <Text style={styles.formLabel}>{t('doctor.payoutSettings.modal.availableBalanceLabel')}</Text>
                 <TextInput
                   style={[styles.formInput, styles.formInputDisabled]}
-                  value={`€${balance.toFixed(2)}`}
+                  value={formatCurrency(balance)}
                   editable={false}
                 />
               </View>
 
               <View style={styles.formGroup}>
                 <Text style={styles.formLabel}>
-                  Amount to Withdraw <Text style={styles.required}>*</Text>
+                  {t('doctor.payoutSettings.modal.amountToWithdrawLabel')} <Text style={styles.required}>*</Text>
                 </Text>
                 <TextInput
                   style={styles.formInput}
                   value={withdrawModal.amount}
                   onChangeText={(text) => setWithdrawModal({ ...withdrawModal, amount: text })}
-                  placeholder="Enter amount"
+                  placeholder={t('doctor.payoutSettings.modal.amountPlaceholder')}
                   keyboardType="decimal-pad"
                 />
               </View>
 
               <View style={styles.formGroup}>
                 <Text style={styles.formLabel}>
-                  Payment Method <Text style={styles.required}>*</Text>
+                  {t('doctor.payoutSettings.modal.paymentMethodLabel')} <Text style={styles.required}>*</Text>
                 </Text>
                 <View style={styles.paymentMethodSelector}>
                   <TouchableOpacity
@@ -376,7 +398,7 @@ export const PayoutSettingsScreen = () => {
                         withdrawModal.paymentMethod === 'STRIPE' && styles.paymentMethodOptionTextActive,
                       ]}
                     >
-                      Stripe
+                      {t('doctor.payoutSettings.paymentMethods.stripe.title')}
                     </Text>
                   </TouchableOpacity>
                   <TouchableOpacity
@@ -397,7 +419,7 @@ export const PayoutSettingsScreen = () => {
                         withdrawModal.paymentMethod === 'BANK' && styles.paymentMethodOptionTextActive,
                       ]}
                     >
-                      Bank Transfer
+                      {t('doctor.payoutSettings.paymentMethods.bankTransfer.title')}
                     </Text>
                   </TouchableOpacity>
                 </View>
@@ -405,18 +427,18 @@ export const PayoutSettingsScreen = () => {
 
               <View style={styles.formGroup}>
                 <Text style={styles.formLabel}>
-                  Payment Details <Text style={styles.required}>*</Text>
+                  {t('doctor.payoutSettings.modal.paymentDetailsLabel')} <Text style={styles.required}>*</Text>
                 </Text>
                 <Text style={styles.formHint}>
                   {withdrawModal.paymentMethod === 'STRIPE' &&
-                    'Enter Stripe account details (Account ID or email)'}
-                  {withdrawModal.paymentMethod === 'BANK' && 'Enter bank account details'}
+                    t('doctor.payoutSettings.modal.paymentDetailsHintStripe')}
+                  {withdrawModal.paymentMethod === 'BANK' && t('doctor.payoutSettings.modal.paymentDetailsHintBank')}
                 </Text>
                 <TextInput
                   style={[styles.formInput, styles.formTextArea]}
                   value={withdrawModal.paymentDetails}
                   onChangeText={(text) => setWithdrawModal({ ...withdrawModal, paymentDetails: text })}
-                  placeholder="Enter payment details..."
+                  placeholder={t('doctor.payoutSettings.modal.paymentDetailsPlaceholder')}
                   multiline
                   numberOfLines={3}
                 />
@@ -425,14 +447,18 @@ export const PayoutSettingsScreen = () => {
 
             <View style={styles.modalFooter}>
               <Button
-                title="Cancel"
+                title={t('common.cancel')}
                 onPress={() => setWithdrawModal({ show: false, amount: '', paymentMethod: 'STRIPE', paymentDetails: '' })}
                 variant="outline"
                 style={styles.modalButton}
                 disabled={requestWithdrawalMutation.isPending}
               />
               <Button
-                title={requestWithdrawalMutation.isPending ? 'Submitting...' : 'Submit Request'}
+                title={
+                  requestWithdrawalMutation.isPending
+                    ? t('doctor.payoutSettings.actions.submitting')
+                    : t('doctor.payoutSettings.actions.submitRequest')
+                }
                 onPress={handleWithdrawRequest}
                 style={styles.modalButton}
                 disabled={

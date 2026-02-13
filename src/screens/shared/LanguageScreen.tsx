@@ -4,30 +4,17 @@ import { Ionicons } from '@expo/vector-icons';
 import { useQueryClient } from '@tanstack/react-query';
 import { colors } from '../../constants/colors';
 import { useLanguage } from '../../contexts/LanguageContext';
+import { useTranslation } from 'react-i18next';
 
-const LANGUAGES: Array<{ code: string; label: string }> = [
-  { code: 'en', label: 'English' },
-  { code: 'it', label: 'Italiano' },
-  { code: 'es', label: 'Español' },
-  { code: 'fr', label: 'Français' },
-  { code: 'de', label: 'Deutsch' },
-  { code: 'pt', label: 'Português' },
-  { code: 'ru', label: 'Русский' },
-  { code: 'tr', label: 'Türkçe' },
-  { code: 'ar', label: 'العربية' },
-  { code: 'hi', label: 'हिन्दी' },
-  { code: 'id', label: 'Bahasa Indonesia' },
-  { code: 'ja', label: '日本語' },
-  { code: 'ko', label: '한국어' },
-  { code: 'th', label: 'ไทย' },
-  { code: 'vi', label: 'Tiếng Việt' },
-  { code: 'zh-CN', label: '中文 (简体)' },
-  { code: 'zh-TW', label: '中文 (繁體)' },
+const LANGUAGES: Array<{ code: string; labelKey: string }> = [
+  { code: 'en', labelKey: 'languageScreen.english' },
+  { code: 'it', labelKey: 'languageScreen.italian' },
 ];
 
 export const LanguageScreen = () => {
   const { language, setLanguage } = useLanguage();
   const queryClient = useQueryClient();
+  const { t } = useTranslation();
 
   return (
     <SafeAreaView style={styles.container}>
@@ -45,7 +32,7 @@ export const LanguageScreen = () => {
               activeOpacity={0.8}
             >
               <View style={styles.rowLeft}>
-                <Text style={styles.label}>{item.label}</Text>
+                <Text style={styles.label}>{t(item.labelKey)}</Text>
                 <Text style={styles.code}>{item.code}</Text>
               </View>
               <View style={styles.rowRight}>

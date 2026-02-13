@@ -16,6 +16,7 @@ import { colors } from '../../constants/colors';
 import { Ionicons } from '@expo/vector-icons';
 import { Input } from '../../components/common/Input';
 import { Button } from '../../components/common/Button';
+import { useTranslation } from 'react-i18next';
 
 type StartAppointmentScreenNavigationProp = StackNavigationProp<AppointmentsStackParamList, 'StartAppointment'>;
 type StartAppointmentRouteProp = RouteProp<AppointmentsStackParamList, 'StartAppointment'>;
@@ -23,6 +24,7 @@ type StartAppointmentRouteProp = RouteProp<AppointmentsStackParamList, 'StartApp
 export const StartAppointmentScreen = () => {
   const navigation = useNavigation<StartAppointmentScreenNavigationProp>();
   const route = useRoute<StartAppointmentRouteProp>();
+  const { t } = useTranslation();
   const { appointmentId } = route.params;
   const [sessionTime, setSessionTime] = useState({ minutes: 8, seconds: 0 });
   const [isActive, setIsActive] = useState(false);
@@ -65,16 +67,19 @@ export const StartAppointmentScreen = () => {
 
   const handleEndSession = () => {
     Alert.alert(
-      'End Session',
-      'Are you sure you want to end this appointment session?',
+      t('appointments.session.endSessionTitle'),
+      t('appointments.session.endSessionBody'),
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: t('common.cancel'), style: 'cancel' },
         {
-          text: 'End Session',
+          text: t('appointments.session.endSessionConfirm'),
           style: 'destructive',
           onPress: () => {
             // Save appointment details
-            Alert.alert('Success', 'Appointment session ended successfully');
+            Alert.alert(
+              t('appointments.session.endedSuccessTitle'),
+              t('appointments.session.endedSuccessBody')
+            );
             navigation.goBack();
           },
         },
@@ -101,7 +106,7 @@ export const StartAppointmentScreen = () => {
             </View>
             {isActive && (
               <View style={styles.timerContainer}>
-                <Text style={styles.timerLabel}>Session Ends in</Text>
+                <Text style={styles.timerLabel}>{t('appointments.session.timerLabel')}</Text>
                 <Text style={styles.timer}>
                   {String(sessionTime.minutes).padStart(2, '0')}M:{String(sessionTime.seconds).padStart(2, '0')}S
                 </Text>
@@ -111,19 +116,21 @@ export const StartAppointmentScreen = () => {
 
           <View style={styles.patientInfoGrid}>
             <View style={styles.infoItem}>
-              <Text style={styles.infoLabel}>Age / Gender</Text>
-              <Text style={styles.infoValue}>{patient.age} Years / {patient.gender}</Text>
+              <Text style={styles.infoLabel}>{t('appointments.session.ageGender')}</Text>
+              <Text style={styles.infoValue}>
+                {patient.age} {t('appointments.session.years')} / {patient.gender}
+              </Text>
             </View>
             <View style={styles.infoItem}>
-              <Text style={styles.infoLabel}>Address</Text>
+              <Text style={styles.infoLabel}>{t('appointments.session.address')}</Text>
               <Text style={styles.infoValue}>{patient.address}</Text>
             </View>
             <View style={styles.infoItem}>
-              <Text style={styles.infoLabel}>Blood Group</Text>
+              <Text style={styles.infoLabel}>{t('appointments.session.bloodGroup')}</Text>
               <Text style={styles.infoValue}>{patient.bloodGroup}</Text>
             </View>
             <View style={styles.infoItem}>
-              <Text style={styles.infoLabel}>No of Visit</Text>
+              <Text style={styles.infoLabel}>{t('appointments.session.noOfVisit')}</Text>
               <Text style={styles.infoValue}>{patient.visits}</Text>
             </View>
           </View>
@@ -131,10 +138,10 @@ export const StartAppointmentScreen = () => {
 
         {/* Vitals Section */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Vitals</Text>
+          <Text style={styles.sectionTitle}>{t('appointments.session.vitals')}</Text>
           <View style={styles.vitalsGrid}>
             <View style={styles.vitalItem}>
-              <Text style={styles.vitalLabel}>Temperature</Text>
+              <Text style={styles.vitalLabel}>{t('appointments.session.temperature')}</Text>
               <View style={styles.vitalInputContainer}>
                 <TextInput
                   style={styles.vitalInput}
@@ -147,7 +154,7 @@ export const StartAppointmentScreen = () => {
               </View>
             </View>
             <View style={styles.vitalItem}>
-              <Text style={styles.vitalLabel}>Pulse</Text>
+              <Text style={styles.vitalLabel}>{t('appointments.session.pulse')}</Text>
               <View style={styles.vitalInputContainer}>
                 <TextInput
                   style={styles.vitalInput}
@@ -160,7 +167,7 @@ export const StartAppointmentScreen = () => {
               </View>
             </View>
             <View style={styles.vitalItem}>
-              <Text style={styles.vitalLabel}>Respiratory Rate</Text>
+              <Text style={styles.vitalLabel}>{t('appointments.session.respiratoryRate')}</Text>
               <View style={styles.vitalInputContainer}>
                 <TextInput
                   style={styles.vitalInput}
@@ -173,7 +180,7 @@ export const StartAppointmentScreen = () => {
               </View>
             </View>
             <View style={styles.vitalItem}>
-              <Text style={styles.vitalLabel}>SPO2</Text>
+              <Text style={styles.vitalLabel}>{t('appointments.session.spo2')}</Text>
               <View style={styles.vitalInputContainer}>
                 <TextInput
                   style={styles.vitalInput}
@@ -186,7 +193,7 @@ export const StartAppointmentScreen = () => {
               </View>
             </View>
             <View style={styles.vitalItem}>
-              <Text style={styles.vitalLabel}>Height</Text>
+              <Text style={styles.vitalLabel}>{t('appointments.session.height')}</Text>
               <View style={styles.vitalInputContainer}>
                 <TextInput
                   style={styles.vitalInput}
@@ -199,7 +206,7 @@ export const StartAppointmentScreen = () => {
               </View>
             </View>
             <View style={styles.vitalItem}>
-              <Text style={styles.vitalLabel}>Weight</Text>
+              <Text style={styles.vitalLabel}>{t('appointments.session.weight')}</Text>
               <View style={styles.vitalInputContainer}>
                 <TextInput
                   style={styles.vitalInput}
@@ -212,7 +219,7 @@ export const StartAppointmentScreen = () => {
               </View>
             </View>
             <View style={styles.vitalItem}>
-              <Text style={styles.vitalLabel}>Waist</Text>
+              <Text style={styles.vitalLabel}>{t('appointments.session.waist')}</Text>
               <View style={styles.vitalInputContainer}>
                 <TextInput
                   style={styles.vitalInput}
@@ -225,7 +232,7 @@ export const StartAppointmentScreen = () => {
               </View>
             </View>
             <View style={styles.vitalItem}>
-              <Text style={styles.vitalLabel}>BSA</Text>
+              <Text style={styles.vitalLabel}>{t('appointments.session.bsa')}</Text>
               <View style={styles.vitalInputContainer}>
                 <TextInput
                   style={styles.vitalInput}
@@ -238,7 +245,7 @@ export const StartAppointmentScreen = () => {
               </View>
             </View>
             <View style={styles.vitalItem}>
-              <Text style={styles.vitalLabel}>BMI</Text>
+              <Text style={styles.vitalLabel}>{t('appointments.session.bmi')}</Text>
               <View style={styles.vitalInputContainer}>
                 <TextInput
                   style={styles.vitalInput}
@@ -255,10 +262,10 @@ export const StartAppointmentScreen = () => {
 
         {/* Previous Medical History */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Previous Medical History</Text>
+          <Text style={styles.sectionTitle}>{t('appointments.session.previousMedicalHistory')}</Text>
           <TextInput
             style={styles.textArea}
-            placeholder="Enter previous medical history..."
+            placeholder={t('appointments.session.previousMedicalHistoryPlaceholder')}
             multiline
             numberOfLines={3}
             value={previousHistory}
@@ -268,10 +275,10 @@ export const StartAppointmentScreen = () => {
 
         {/* Clinical Notes */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Clinical Notes</Text>
+          <Text style={styles.sectionTitle}>{t('appointments.session.clinicalNotes')}</Text>
           <TextInput
             style={styles.textArea}
-            placeholder="Enter clinical notes..."
+            placeholder={t('appointments.session.clinicalNotesPlaceholder')}
             multiline
             numberOfLines={3}
             value={clinicalNotes}
@@ -281,10 +288,10 @@ export const StartAppointmentScreen = () => {
 
         {/* Diagnosis */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Diagnosis</Text>
+          <Text style={styles.sectionTitle}>{t('appointments.session.diagnosis')}</Text>
           <TextInput
             style={styles.textArea}
-            placeholder="Enter diagnosis..."
+            placeholder={t('appointments.session.diagnosisPlaceholder')}
             multiline
             numberOfLines={2}
             value={diagnosis}
@@ -294,10 +301,10 @@ export const StartAppointmentScreen = () => {
 
         {/* Advice */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Advice</Text>
+          <Text style={styles.sectionTitle}>{t('appointments.session.advice')}</Text>
           <TextInput
             style={styles.textArea}
-            placeholder="Enter advice..."
+            placeholder={t('appointments.session.advicePlaceholder')}
             multiline
             numberOfLines={3}
             value={advice}
@@ -307,10 +314,10 @@ export const StartAppointmentScreen = () => {
 
         {/* Follow Up */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Follow Up</Text>
+          <Text style={styles.sectionTitle}>{t('appointments.session.followUp')}</Text>
           <TextInput
             style={styles.textArea}
-            placeholder="Enter follow up instructions..."
+            placeholder={t('appointments.session.followUpPlaceholder')}
             multiline
             numberOfLines={3}
             value={followUp}
@@ -322,20 +329,20 @@ export const StartAppointmentScreen = () => {
         <View style={styles.actionButtons}>
           {!isActive ? (
             <Button
-              title="Start Session"
+              title={t('appointments.session.startSession')}
               onPress={handleStartSession}
               style={styles.startButton}
             />
           ) : (
             <>
               <Button
-                title="Cancel"
+                title={t('common.cancel')}
                 onPress={() => navigation.goBack()}
                 variant="outline"
                 style={styles.cancelButton}
               />
               <Button
-                title="Save & End Appointment"
+                title={t('appointments.session.saveEndAppointment')}
                 onPress={handleEndSession}
                 style={styles.endButton}
               />

@@ -19,6 +19,7 @@ import { colors } from '../../constants/colors';
 import { Ionicons } from '@expo/vector-icons';
 import * as rescheduleApi from '../../services/rescheduleRequest';
 import Toast from 'react-native-toast-message';
+import { useTranslation } from 'react-i18next';
 
 type PatientRescheduleRequestsScreenNavigationProp = StackNavigationProp<AppointmentsStackParamList, 'PatientRescheduleRequests'>;
 
@@ -26,6 +27,7 @@ const PatientRescheduleRequestsScreen = () => {
   const navigation = useNavigation<PatientRescheduleRequestsScreenNavigationProp>();
   const { user } = useAuth();
   const queryClient = useQueryClient();
+  const { t, i18n } = useTranslation();
   const [selectedRequest, setSelectedRequest] = useState<rescheduleApi.RescheduleRequest | null>(null);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
 
@@ -46,8 +48,8 @@ const PatientRescheduleRequestsScreen = () => {
     onSuccess: () => {
       Toast.show({
         type: 'success',
-        text1: 'Payment Successful',
-        text2: 'Reschedule fee paid successfully! Your appointment is now confirmed.',
+        text1: t('more.patientRescheduleRequests.toasts.paymentSuccessfulTitle'),
+        text2: t('more.patientRescheduleRequests.toasts.paymentSuccessfulBody'),
       });
       queryClient.invalidateQueries({ queryKey: ['rescheduleRequests'] });
       queryClient.invalidateQueries({ queryKey: ['appointments'] });
@@ -55,10 +57,11 @@ const PatientRescheduleRequestsScreen = () => {
       setSelectedRequest(null);
     },
     onError: (error: any) => {
-      const errorMessage = error?.response?.data?.message || error?.message || 'Payment failed';
+      const errorMessage =
+        error?.response?.data?.message || error?.message || t('more.patientRescheduleRequests.errors.paymentFailed');
       Toast.show({
         type: 'error',
-        text1: 'Payment Failed',
+        text1: t('more.patientRescheduleRequests.toasts.paymentFailedTitle'),
         text2: errorMessage,
       });
     },
@@ -71,12 +74,22 @@ const PatientRescheduleRequestsScreen = () => {
 
   const getStatusBadge = (status: string) => {
     const badges: Record<string, { color: string; text: string }> = {
-      PENDING: { color: colors.warning, text: 'Pending' },
-      APPROVED: { color: colors.success, text: 'Approved' },
-      REJECTED: { color: colors.error, text: 'Rejected' },
-      CANCELLED: { color: colors.textSecondary, text: 'Cancelled' },
+      PENDING: { color: colors.warning, text: t('more.patientRescheduleRequests.status.pending') },
+      APPROVED: { color: colors.success, text: t('more.patientRescheduleRequests.status.approved') },
+      REJECTED: { color: colors.error, text: t('more.patientRescheduleRequests.status.rejected') },
+      CANCELLED: { color: colors.textSecondary, text: t('more.patientRescheduleRequests.status.cancelled') },
     };
     return badges[status] || { color: colors.textSecondary, text: status };
+  };
+
+  const formatDate = (dateString: string | undefined | null) => {
+    if (!dateString) return t('common.na');
+    return new Date(dateString).toLocaleDateString(i18n.language);
+  };
+
+  const formatCurrency = (amount: number | undefined | null) => {
+    const safeAmount = amount === undefined || amount === null ? 0 : amount;
+    return new Intl.NumberFormat(i18n.language, { style: 'currency', currency: 'USD' }).format(safeAmount);
   };
 
   const handlePayment = () => {
@@ -106,7 +119,7 @@ const PatientRescheduleRequestsScreen = () => {
   };
 
   const handleViewRejectionReason = (reason: string) => {
-    Alert.alert('Rejection Reason', reason);
+    Alert.alert(t('more.patientRescheduleRequests.alerts.rejectionReasonTitle'), reason);
   };
 
   return (
@@ -115,28 +128,30 @@ const PatientRescheduleRequestsScreen = () => {
         {isLoading ? (
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color={colors.primary} />
-            <Text style={styles.loadingText}>Loading requests...</Text>
+            <Text style={styles.loadingText}>{t('more.patientRescheduleRequests.loadingRequests')}</Text>
           </View>
         ) : requestsError ? (
           <View style={styles.errorContainer}>
             <Ionicons name="alert-circle-outline" size={48} color={colors.warning} />
-            <Text style={styles.errorTitle}>Unable to Load Requests</Text>
+            <Text style={styles.errorTitle}>{t('more.patientRescheduleRequests.error.unableToLoadTitle')}</Text>
             <Text style={styles.errorText}>
               {((requestsError as any)?.response?.status === 404)
-                ? 'The reschedule request feature is not available. Please ensure the backend server has been restarted.'
-                : (requestsError as any)?.response?.data?.message || (requestsError as any)?.message || 'An error occurred while loading requests'}
+                ? t('more.patientRescheduleRequests.error.featureNotAvailable')
+                : (requestsError as any)?.response?.data?.message ||
+                  (requestsError as any)?.message ||
+                  t('more.patientRescheduleRequests.error.generic')}
             </Text>
           </View>
         ) : requests.length === 0 ? (
           <View style={styles.emptyContainer}>
             <Ionicons name="calendar-outline" size={48} color={colors.textSecondary} />
-            <Text style={styles.emptyText}>No reschedule requests found</Text>
+            <Text style={styles.emptyText}>{t('more.patientRescheduleRequests.empty.noRequestsFound')}</Text>
             <TouchableOpacity
               style={styles.requestButton}
               onPress={() => navigation.navigate('RequestReschedule', { appointmentId: '' })}
               activeOpacity={0.8}
             >
-              <Text style={styles.requestButtonText}>Request Reschedule</Text>
+              <Text style={styles.requestButtonText}>{t('more.patientRescheduleRequests.actions.requestReschedule')}</Text>
             </TouchableOpacity>
           </View>
         ) : (
@@ -147,7 +162,7 @@ const PatientRescheduleRequestsScreen = () => {
                 <View key={request._id} style={styles.requestCard}>
                   <View style={styles.requestHeader}>
                     <View style={styles.requestHeaderLeft}>
-                      <Text style={styles.requestTitle}>Reschedule Request</Text>
+                      <Text style={styles.requestTitle}>{t('more.patientRescheduleRequests.requestTitle')}</Text>
                       <View style={[styles.statusBadge, { backgroundColor: statusBadge.color + '20' }]}>
                         <Text style={[styles.statusBadgeText, { color: statusBadge.color }]}>
                           {statusBadge.text}
@@ -158,12 +173,12 @@ const PatientRescheduleRequestsScreen = () => {
 
                   <View style={styles.requestContent}>
                     <View style={styles.detailRow}>
-                      <Text style={styles.detailLabel}>Original Appointment:</Text>
+                      <Text style={styles.detailLabel}>{t('more.patientRescheduleRequests.labels.originalAppointment')}</Text>
                       <View style={styles.detailValue}>
                         {request.appointmentId ? (
                           <>
                             <Text style={styles.detailText}>
-                              {new Date(request.appointmentId.appointmentDate).toLocaleDateString()}
+                              {formatDate(request.appointmentId.appointmentDate)}
                             </Text>
                             <Text style={styles.detailSubtext}>{request.appointmentId.appointmentTime}</Text>
                             {request.appointmentId.appointmentNumber && (
@@ -173,13 +188,13 @@ const PatientRescheduleRequestsScreen = () => {
                             )}
                           </>
                         ) : (
-                          <Text style={styles.detailText}>N/A</Text>
+                          <Text style={styles.detailText}>{t('common.na')}</Text>
                         )}
                       </View>
                     </View>
 
                     <View style={styles.detailRow}>
-                      <Text style={styles.detailLabel}>Reason:</Text>
+                      <Text style={styles.detailLabel}>{t('more.patientRescheduleRequests.labels.reason')}</Text>
                       <Text style={styles.detailText} numberOfLines={2}>
                         {request.reason}
                       </Text>
@@ -187,22 +202,22 @@ const PatientRescheduleRequestsScreen = () => {
 
                     {request.status === 'APPROVED' && (
                       <View style={styles.detailRow}>
-                        <Text style={styles.detailLabel}>Reschedule Fee:</Text>
+                        <Text style={styles.detailLabel}>{t('more.patientRescheduleRequests.labels.rescheduleFee')}</Text>
                         <Text style={[styles.detailText, styles.feeText]}>
-                          ${request.rescheduleFee?.toFixed(2) || '—'}
+                          {request.rescheduleFee != null ? formatCurrency(request.rescheduleFee) : t('common.na')}
                         </Text>
                       </View>
                     )}
 
                     {request.newAppointmentId && (
                       <View style={styles.detailRow}>
-                        <Text style={styles.detailLabel}>New Appointment:</Text>
+                        <Text style={styles.detailLabel}>{t('more.patientRescheduleRequests.labels.newAppointment')}</Text>
                         <TouchableOpacity
                           onPress={() => handleViewAppointment(request.newAppointmentId!)}
                           activeOpacity={0.7}
                         >
                           <View style={styles.viewAppointmentButton}>
-                            <Text style={styles.viewAppointmentText}>View Appointment</Text>
+                            <Text style={styles.viewAppointmentText}>{t('more.patientRescheduleRequests.actions.viewAppointment')}</Text>
                             <Ionicons name="chevron-forward" size={16} color={colors.primary} />
                           </View>
                         </TouchableOpacity>
@@ -219,7 +234,7 @@ const PatientRescheduleRequestsScreen = () => {
                             activeOpacity={0.8}
                           >
                             <Ionicons name="card-outline" size={18} color={colors.textWhite} />
-                            <Text style={styles.payButtonText}>Pay Fee</Text>
+                            <Text style={styles.payButtonText}>{t('more.patientRescheduleRequests.actions.payFee')}</Text>
                           </TouchableOpacity>
                         )}
                       {request.status === 'REJECTED' && request.rejectionReason && (
@@ -229,7 +244,7 @@ const PatientRescheduleRequestsScreen = () => {
                           activeOpacity={0.8}
                         >
                           <Ionicons name="information-circle-outline" size={18} color={colors.text} />
-                          <Text style={styles.reasonButtonText}>View Reason</Text>
+                          <Text style={styles.reasonButtonText}>{t('more.patientRescheduleRequests.actions.viewReason')}</Text>
                         </TouchableOpacity>
                       )}
                     </View>
@@ -254,7 +269,7 @@ const PatientRescheduleRequestsScreen = () => {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Pay Reschedule Fee</Text>
+              <Text style={styles.modalTitle}>{t('more.patientRescheduleRequests.paymentModal.title')}</Text>
               <TouchableOpacity
                 onPress={() => {
                   setShowPaymentModal(false);
@@ -268,26 +283,29 @@ const PatientRescheduleRequestsScreen = () => {
 
             <View style={styles.modalBody}>
               <View style={styles.paymentInfo}>
-                <Text style={styles.paymentLabel}>Reschedule Fee:</Text>
+                <Text style={styles.paymentLabel}>{t('more.patientRescheduleRequests.paymentModal.rescheduleFeeLabel')}</Text>
                 <Text style={styles.paymentAmount}>
-                  ${selectedRequest?.rescheduleFee?.toFixed(2) || '0.00'}
+                  {formatCurrency(selectedRequest?.rescheduleFee)}
                 </Text>
               </View>
               {selectedRequest?.originalAppointmentFee && (
                 <Text style={styles.paymentSubtext}>
-                  Original appointment fee: ${selectedRequest.originalAppointmentFee.toFixed(2)}
+                  {t('more.patientRescheduleRequests.paymentModal.originalAppointmentFee', {
+                    amount: formatCurrency(selectedRequest.originalAppointmentFee),
+                  })}
                 </Text>
               )}
               {selectedRequest?.newAppointmentId && (
                 <Text style={styles.paymentSubtext}>
-                  New appointment date:{' '}
-                  {new Date(selectedRequest.newAppointmentId.appointmentDate).toLocaleDateString()}
+                  {t('more.patientRescheduleRequests.paymentModal.newAppointmentDate', {
+                    date: formatDate(selectedRequest.newAppointmentId.appointmentDate),
+                  })}
                 </Text>
               )}
               <View style={styles.paymentInfoCard}>
                 <Ionicons name="information-circle-outline" size={20} color={colors.info} />
                 <Text style={styles.paymentInfoText}>
-                  Click "Confirm Payment" to proceed with the payment.
+                  {t('more.patientRescheduleRequests.paymentModal.info')}
                 </Text>
               </View>
             </View>
@@ -302,7 +320,7 @@ const PatientRescheduleRequestsScreen = () => {
                 disabled={payFeeMutation.isPending}
                 activeOpacity={0.8}
               >
-                <Text style={styles.modalCancelButtonText}>Cancel</Text>
+                <Text style={styles.modalCancelButtonText}>{t('common.cancel')}</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[
@@ -316,7 +334,7 @@ const PatientRescheduleRequestsScreen = () => {
                 {payFeeMutation.isPending ? (
                   <ActivityIndicator size="small" color={colors.textWhite} />
                 ) : (
-                  <Text style={styles.modalConfirmButtonText}>Confirm Payment</Text>
+                  <Text style={styles.modalConfirmButtonText}>{t('more.patientRescheduleRequests.paymentModal.confirmPayment')}</Text>
                 )}
               </TouchableOpacity>
             </View>

@@ -26,6 +26,7 @@ import * as specializationApi from '../../services/specialization';
 import * as favoriteApi from '../../services/favorite';
 import { API_BASE_URL } from '../../config/api';
 import Toast from 'react-native-toast-message';
+import { useTranslation } from 'react-i18next';
 
 type SearchScreenNavigationProp = StackNavigationProp<HomeStackParamList, 'Search'>;
 
@@ -75,6 +76,7 @@ const SearchScreen = () => {
   const navigation = useNavigation<SearchScreenNavigationProp>();
   const { user } = useAuth();
   const queryClient = useQueryClient();
+  const { t } = useTranslation();
   const userId = user?._id || user?.id;
   const isPatient = user?.role === 'patient';
   
@@ -217,16 +219,16 @@ const SearchScreen = () => {
     onSuccess: () => {
       Toast.show({
         type: 'success',
-        text1: 'Success',
-        text2: 'Doctor added to favorites',
+        text1: t('common.success'),
+        text2: t('searchScreen.toastDoctorAdded'),
       });
       queryClient.invalidateQueries({ queryKey: ['favorites', userId] });
     },
     onError: (error: any) => {
-      const errorMessage = error?.response?.data?.message || error?.message || 'Failed to add favorite';
+      const errorMessage = error?.response?.data?.message || error?.message || t('searchScreen.errorAddFavorite');
       Toast.show({
         type: 'error',
-        text1: 'Error',
+        text1: t('common.error'),
         text2: errorMessage,
       });
     },
@@ -238,16 +240,16 @@ const SearchScreen = () => {
     onSuccess: () => {
       Toast.show({
         type: 'success',
-        text1: 'Success',
-        text2: 'Doctor removed from favorites',
+        text1: t('common.success'),
+        text2: t('searchScreen.toastDoctorRemoved'),
       });
       queryClient.invalidateQueries({ queryKey: ['favorites', userId] });
     },
     onError: (error: any) => {
-      const errorMessage = error?.response?.data?.message || error?.message || 'Failed to remove favorite';
+      const errorMessage = error?.response?.data?.message || error?.message || t('searchScreen.errorRemoveFavorite');
       Toast.show({
         type: 'error',
-        text1: 'Error',
+        text1: t('common.error'),
         text2: errorMessage,
       });
     },
@@ -258,8 +260,8 @@ const SearchScreen = () => {
     if (!isPatient) {
       Toast.show({
         type: 'info',
-        text1: 'Login Required',
-        text2: 'Please login as a patient to add favorites',
+        text1: t('searchScreen.loginRequiredTitle'),
+        text2: t('searchScreen.loginRequiredBody'),
       });
       return;
     }
@@ -289,12 +291,12 @@ const SearchScreen = () => {
     // Fallback to nested paths
     if (doctor.doctorProfile?.specialization) {
       const spec = doctor.doctorProfile.specialization;
-      return typeof spec === 'object' && spec !== null && spec.name ? spec.name : 'General';
+      return typeof spec === 'object' && spec !== null && spec.name ? spec.name : t('searchScreen.general');
     }
     if (doctor.doctorProfile?.specializations?.[0]) {
-      return doctor.doctorProfile.specializations[0].name || 'General';
+      return doctor.doctorProfile.specializations[0].name || t('searchScreen.general');
     }
-    return 'General';
+    return t('searchScreen.general');
   };
 
   const getRating = (doctor: doctorApi.DoctorListItem): number => {
@@ -338,7 +340,7 @@ const SearchScreen = () => {
         return locationParts.join(', ');
       }
     }
-    return 'Location not available';
+    return t('searchScreen.locationNotAvailable');
   };
 
   const getConsultationFee = (doctor: doctorApi.DoctorListItem): number => {
@@ -380,7 +382,7 @@ const SearchScreen = () => {
   };
 
   const getDoctorName = (doctor: doctorApi.DoctorListItem): string => {
-    return doctor.userId?.fullName || doctor.fullName || 'Unknown Doctor';
+    return doctor.userId?.fullName || doctor.fullName || t('common.unknownDoctor');
   };
 
   const onRefresh = React.useCallback(async () => {
@@ -460,7 +462,7 @@ const SearchScreen = () => {
           )}
           {available && (
             <View style={styles.availableBadge}>
-              <Text style={styles.availableBadgeText}>Available</Text>
+              <Text style={styles.availableBadgeText}>{t('common.available')}</Text>
             </View>
           )}
         </View>
@@ -479,15 +481,15 @@ const SearchScreen = () => {
             <Text style={styles.locationText} numberOfLines={1}>{locationStr}</Text>
           </View>
           <View style={styles.feeContainer}>
-            <Text style={styles.feeLabel}>Consultation Fee</Text>
-            <Text style={styles.feeAmount}>${fee || 'N/A'}</Text>
+            <Text style={styles.feeLabel}>{t('searchScreen.consultationFee')}</Text>
+            <Text style={styles.feeAmount}>${fee || t('common.na')}</Text>
           </View>
           <TouchableOpacity
             style={styles.bookBtn}
             activeOpacity={0.8}
             onPress={() => navigation.navigate('Booking', { doctorId })}
           >
-            <Text style={styles.bookBtnText}>Book Appointment</Text>
+            <Text style={styles.bookBtnText}>{t('searchScreen.bookAppointment')}</Text>
           </TouchableOpacity>
         </View>
       </TouchableOpacity>
@@ -499,7 +501,7 @@ const SearchScreen = () => {
     return (
       <TouchableOpacity style={styles.loadMoreBtn} onPress={handleLoadMore} activeOpacity={0.8}>
         <Ionicons name="cube-outline" size={20} color={colors.textWhite} />
-        <Text style={styles.loadMoreText}>Load More</Text>
+        <Text style={styles.loadMoreText}>{t('searchScreen.loadMore')}</Text>
       </TouchableOpacity>
     );
   };
@@ -513,7 +515,7 @@ const SearchScreen = () => {
             <Ionicons name="medical-outline" size={20} color={colors.primary} />
             <TextInput
               style={styles.searchInput}
-              placeholder="Search for Doctors, Hospitals, Clinics"
+              placeholder={t('searchScreen.searchPlaceholder')}
               placeholderTextColor={colors.textLight}
               value={searchQuery}
               onChangeText={setSearchQuery}
@@ -524,7 +526,7 @@ const SearchScreen = () => {
               <Ionicons name="location-outline" size={18} color={colors.primary} />
               <TextInput
                 style={styles.searchInput}
-                placeholder="Location"
+                placeholder={t('searchScreen.locationPlaceholder')}
                 placeholderTextColor={colors.textLight}
                 value={location}
                 onChangeText={setLocation}
@@ -534,7 +536,7 @@ const SearchScreen = () => {
               <Ionicons name="medical-outline" size={18} color={colors.primary} />
               <TextInput
                 style={styles.searchInput}
-                placeholder="Specialty"
+                placeholder={t('searchScreen.specialtyPlaceholder')}
                 placeholderTextColor={colors.textLight}
                 value={selectedSpecialization}
                 editable={false}
@@ -543,7 +545,7 @@ const SearchScreen = () => {
           </View>
           <TouchableOpacity style={styles.searchBtn} onPress={handleSearch} activeOpacity={0.8}>
             <Ionicons name="search" size={20} color={colors.textWhite} />
-            <Text style={styles.searchBtnText}>Search</Text>
+            <Text style={styles.searchBtnText}>{t('common.search')}</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -551,7 +553,7 @@ const SearchScreen = () => {
       {/* Results Header */}
       <View style={styles.resultsHeader}>
         <Text style={styles.resultsTitle}>
-          Showing <Text style={styles.resultsCount}>{pagination.total}</Text> Doctors
+          {t('searchScreen.results.showing')} <Text style={styles.resultsCount}>{pagination.total}</Text> {t('searchScreen.results.doctors')}
         </Text>
         <View style={styles.headerActions}>
           <TouchableOpacity
@@ -587,24 +589,24 @@ const SearchScreen = () => {
       {isLoading && doctors.length === 0 ? (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={colors.primary} />
-          <Text style={styles.loadingText}>Loading doctors...</Text>
+          <Text style={styles.loadingText}>{t('searchScreen.loadingDoctors')}</Text>
         </View>
       ) : error ? (
         <View style={styles.errorContainer}>
           <Ionicons name="alert-circle-outline" size={64} color={colors.textSecondary} />
-          <Text style={styles.errorTitle}>Error Loading Doctors</Text>
+          <Text style={styles.errorTitle}>{t('searchScreen.errorLoadingDoctorsTitle')}</Text>
           <Text style={styles.errorText}>
-            {error instanceof Error ? error.message : 'Failed to load doctors'}
+            {error instanceof Error ? error.message : t('searchScreen.errorLoadingDoctorsFallback')}
           </Text>
           <TouchableOpacity style={styles.retryButton} onPress={() => refetch()}>
-            <Text style={styles.retryButtonText}>Retry</Text>
+            <Text style={styles.retryButtonText}>{t('common.retry')}</Text>
           </TouchableOpacity>
         </View>
       ) : doctors.length === 0 ? (
         <View style={styles.emptyContainer}>
           <Ionicons name="search-outline" size={64} color={colors.textSecondary} />
-          <Text style={styles.emptyTitle}>No doctors found</Text>
-          <Text style={styles.emptyText}>Try adjusting your search criteria</Text>
+          <Text style={styles.emptyTitle}>{t('searchScreen.emptyTitle')}</Text>
+          <Text style={styles.emptyText}>{t('searchScreen.emptyBody')}</Text>
         </View>
       ) : (
         <FlatList
@@ -630,7 +632,7 @@ const SearchScreen = () => {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Filters</Text>
+              <Text style={styles.modalTitle}>{t('searchScreen.filtersTitle')}</Text>
               <TouchableOpacity onPress={() => setShowFilters(false)} activeOpacity={0.7}>
                 <Ionicons name="close" size={24} color={colors.text} />
               </TouchableOpacity>
@@ -642,7 +644,7 @@ const SearchScreen = () => {
                 <>
                   <View style={styles.filterSection}>
                     <View style={styles.filterSectionHeader}>
-                      <Text style={styles.filterSectionTitle}>Availability</Text>
+                      <Text style={styles.filterSectionTitle}>{t('searchScreen.availability')}</Text>
                       <Switch
                         value={showAvailability}
                         onValueChange={setShowAvailability}
@@ -652,9 +654,9 @@ const SearchScreen = () => {
                     </View>
                   </View>
                   <View style={styles.filterSection}>
-                    <Text style={styles.filterSectionTitle}>Specialities</Text>
+                    <Text style={styles.filterSectionTitle}>{t('searchScreen.specialities')}</Text>
                     {specializations.length === 0 ? (
-                      <Text style={styles.emptyFilterText}>Loading specializations...</Text>
+                      <Text style={styles.emptyFilterText}>{t('searchScreen.loadingSpecializations')}</Text>
                     ) : (
                       specializations.map((spec: any) => {
                         const specId = spec._id || spec;
@@ -698,7 +700,7 @@ const SearchScreen = () => {
                 }}
                 activeOpacity={0.7}
               >
-                <Text style={styles.clearBtnText}>Clear All</Text>
+                <Text style={styles.clearBtnText}>{t('common.clearAll')}</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.applyBtn}
@@ -708,7 +710,7 @@ const SearchScreen = () => {
                 }}
                 activeOpacity={0.8}
               >
-                <Text style={styles.applyBtnText}>Apply Filters</Text>
+                <Text style={styles.applyBtnText}>{t('common.applyFilters')}</Text>
               </TouchableOpacity>
             </View>
           </View>

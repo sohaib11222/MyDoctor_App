@@ -14,11 +14,22 @@ import { StackNavigationProp } from '@react-navigation/stack';
 import { AppointmentsStackParamList } from '../../navigation/types';
 import { colors } from '../../constants/colors';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 
 type CheckoutScreenNavigationProp = StackNavigationProp<AppointmentsStackParamList, 'Checkout'>;
 
 const CheckoutScreen = () => {
   const navigation = useNavigation<CheckoutScreenNavigationProp>();
+  const { t, i18n } = useTranslation();
+
+  const locale = i18n.language?.toLowerCase().startsWith('it') ? 'it-IT' : 'en-US';
+  const formatCurrency = (value: number) => {
+    return new Intl.NumberFormat(locale, {
+      style: 'currency',
+      currency: 'EUR',
+    }).format(Number.isFinite(value) ? value : 0);
+  };
+
   const [paymentMethod, setPaymentMethod] = useState<'card' | 'paypal'>('card');
   const [formData, setFormData] = useState({
     firstName: '',
@@ -57,23 +68,23 @@ const CheckoutScreen = () => {
       <ScrollView showsVerticalScrollIndicator={false}>
         {/* Personal Information */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Personal Information</Text>
+          <Text style={styles.sectionTitle}>{t('appointments.checkout.personalInformation')}</Text>
           <View style={styles.formRow}>
             <View style={styles.formGroup}>
-              <Text style={styles.label}>First Name</Text>
+              <Text style={styles.label}>{t('appointments.checkout.firstName')}</Text>
               <TextInput
                 style={styles.input}
-                placeholder="Enter first name"
+                placeholder={t('appointments.checkout.firstNamePlaceholder')}
                 placeholderTextColor={colors.textLight}
                 value={formData.firstName}
                 onChangeText={(text) => setFormData({ ...formData, firstName: text })}
               />
             </View>
             <View style={styles.formGroup}>
-              <Text style={styles.label}>Last Name</Text>
+              <Text style={styles.label}>{t('appointments.checkout.lastName')}</Text>
               <TextInput
                 style={styles.input}
-                placeholder="Enter last name"
+                placeholder={t('appointments.checkout.lastNamePlaceholder')}
                 placeholderTextColor={colors.textLight}
                 value={formData.lastName}
                 onChangeText={(text) => setFormData({ ...formData, lastName: text })}
@@ -82,10 +93,10 @@ const CheckoutScreen = () => {
           </View>
           <View style={styles.formRow}>
             <View style={styles.formGroup}>
-              <Text style={styles.label}>Email</Text>
+              <Text style={styles.label}>{t('appointments.checkout.email')}</Text>
               <TextInput
                 style={styles.input}
-                placeholder="Enter email"
+                placeholder={t('appointments.checkout.emailPlaceholder')}
                 placeholderTextColor={colors.textLight}
                 keyboardType="email-address"
                 value={formData.email}
@@ -93,10 +104,10 @@ const CheckoutScreen = () => {
               />
             </View>
             <View style={styles.formGroup}>
-              <Text style={styles.label}>Phone</Text>
+              <Text style={styles.label}>{t('appointments.checkout.phone')}</Text>
               <TextInput
                 style={styles.input}
-                placeholder="Enter phone"
+                placeholder={t('appointments.checkout.phonePlaceholder')}
                 placeholderTextColor={colors.textLight}
                 keyboardType="phone-pad"
                 value={formData.phone}
@@ -106,14 +117,15 @@ const CheckoutScreen = () => {
           </View>
           <TouchableOpacity style={styles.existingCustomer} activeOpacity={0.7}>
             <Text style={styles.existingCustomerText}>
-              Existing Customer? <Text style={styles.loginLink}>Click here to login</Text>
+              {t('appointments.checkout.existingCustomer')}
+              <Text style={styles.loginLink}>{t('appointments.checkout.clickHereToLogin')}</Text>
             </Text>
           </TouchableOpacity>
         </View>
 
         {/* Payment Method */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Payment Method</Text>
+          <Text style={styles.sectionTitle}>{t('appointments.checkout.paymentMethod')}</Text>
 
           {/* Credit Card Option */}
           <TouchableOpacity
@@ -125,7 +137,7 @@ const CheckoutScreen = () => {
               <View style={[styles.radio, paymentMethod === 'card' && styles.radioActive]}>
                 {paymentMethod === 'card' && <View style={styles.radioInner} />}
               </View>
-              <Text style={styles.paymentLabel}>Credit card</Text>
+              <Text style={styles.paymentLabel}>{t('appointments.checkout.methods.creditCard')}</Text>
             </View>
           </TouchableOpacity>
 
@@ -133,20 +145,20 @@ const CheckoutScreen = () => {
             <View style={styles.cardForm}>
               <View style={styles.formRow}>
                 <View style={styles.formGroup}>
-                  <Text style={styles.label}>Name on Card</Text>
+                  <Text style={styles.label}>{t('appointments.checkout.card.nameOnCard')}</Text>
                   <TextInput
                     style={styles.input}
-                    placeholder="Enter name"
+                    placeholder={t('appointments.checkout.card.nameOnCardPlaceholder')}
                     placeholderTextColor={colors.textLight}
                     value={formData.cardName}
                     onChangeText={(text) => setFormData({ ...formData, cardName: text })}
                   />
                 </View>
                 <View style={styles.formGroup}>
-                  <Text style={styles.label}>Card Number</Text>
+                  <Text style={styles.label}>{t('appointments.checkout.card.cardNumber')}</Text>
                   <TextInput
                     style={styles.input}
-                    placeholder="1234 5678 9876 5432"
+                    placeholder={t('appointments.checkout.card.cardNumberPlaceholder')}
                     placeholderTextColor={colors.textLight}
                     keyboardType="number-pad"
                     value={formData.cardNumber}
@@ -156,10 +168,10 @@ const CheckoutScreen = () => {
               </View>
               <View style={styles.formRow}>
                 <View style={styles.formGroup}>
-                  <Text style={styles.label}>Expiry Month</Text>
+                  <Text style={styles.label}>{t('appointments.checkout.card.expiryMonth')}</Text>
                   <TextInput
                     style={styles.input}
-                    placeholder="MM"
+                    placeholder={t('appointments.checkout.card.expiryMonthPlaceholder')}
                     placeholderTextColor={colors.textLight}
                     keyboardType="number-pad"
                     maxLength={2}
@@ -168,10 +180,10 @@ const CheckoutScreen = () => {
                   />
                 </View>
                 <View style={styles.formGroup}>
-                  <Text style={styles.label}>Expiry Year</Text>
+                  <Text style={styles.label}>{t('appointments.checkout.card.expiryYear')}</Text>
                   <TextInput
                     style={styles.input}
-                    placeholder="YY"
+                    placeholder={t('appointments.checkout.card.expiryYearPlaceholder')}
                     placeholderTextColor={colors.textLight}
                     keyboardType="number-pad"
                     maxLength={2}
@@ -180,10 +192,10 @@ const CheckoutScreen = () => {
                   />
                 </View>
                 <View style={styles.formGroup}>
-                  <Text style={styles.label}>CVV</Text>
+                  <Text style={styles.label}>{t('appointments.checkout.card.cvv')}</Text>
                   <TextInput
                     style={styles.input}
-                    placeholder="CVV"
+                    placeholder={t('appointments.checkout.card.cvvPlaceholder')}
                     placeholderTextColor={colors.textLight}
                     keyboardType="number-pad"
                     maxLength={3}
@@ -206,7 +218,7 @@ const CheckoutScreen = () => {
               <View style={[styles.radio, paymentMethod === 'paypal' && styles.radioActive]}>
                 {paymentMethod === 'paypal' && <View style={styles.radioInner} />}
               </View>
-              <Text style={styles.paymentLabel}>Paypal</Text>
+              <Text style={styles.paymentLabel}>{t('appointments.checkout.methods.paypal')}</Text>
             </View>
           </TouchableOpacity>
         </View>
@@ -222,20 +234,21 @@ const CheckoutScreen = () => {
               {acceptTerms && <Ionicons name="checkmark" size={14} color={colors.textWhite} />}
             </View>
             <Text style={styles.termsText}>
-              I have read and accept <Text style={styles.termsLink}>Terms & Conditions</Text>
+              {t('appointments.checkout.termsPrefix')}
+              <Text style={styles.termsLink}>{t('appointments.checkout.termsLink')}</Text>
             </Text>
           </TouchableOpacity>
         </View>
 
         {/* Submit Button */}
         <TouchableOpacity style={styles.submitBtn} onPress={handleSubmit} activeOpacity={0.8}>
-          <Text style={styles.submitBtnText}>Confirm and Pay</Text>
+          <Text style={styles.submitBtnText}>{t('appointments.checkout.confirmAndPay')}</Text>
         </TouchableOpacity>
       </ScrollView>
 
         {/* Booking Summary */}
         <View style={styles.summarySection}>
-          <Text style={styles.summaryTitle}>Booking Summary</Text>
+          <Text style={styles.summaryTitle}>{t('appointments.checkout.bookingSummary')}</Text>
           <View style={styles.summaryDoctor}>
             <Image source={{ uri: bookingSummary.doctorImg }} style={styles.summaryDoctorImage} />
             <View style={styles.summaryDoctorInfo}>
@@ -248,36 +261,36 @@ const CheckoutScreen = () => {
               </View>
               <View style={styles.summaryLocation}>
                 <Ionicons name="location-outline" size={12} color={colors.textSecondary} />
-                <Text style={styles.summaryLocationText}>Newyork, USA</Text>
+                <Text style={styles.summaryLocationText}>{t('appointments.checkout.locationFallback')}</Text>
               </View>
             </View>
           </View>
           <View style={styles.summaryDetails}>
             <View style={styles.summaryRow}>
-              <Text style={styles.summaryLabel}>Date</Text>
+              <Text style={styles.summaryLabel}>{t('appointments.checkout.summary.date')}</Text>
               <Text style={styles.summaryValue}>{bookingSummary.date}</Text>
             </View>
             <View style={styles.summaryRow}>
-              <Text style={styles.summaryLabel}>Time</Text>
+              <Text style={styles.summaryLabel}>{t('appointments.checkout.summary.time')}</Text>
               <Text style={styles.summaryValue}>{bookingSummary.time}</Text>
             </View>
             <View style={styles.summaryDivider} />
             <View style={styles.summaryRow}>
-              <Text style={styles.summaryLabel}>Consulting Fee</Text>
-              <Text style={styles.summaryValue}>${bookingSummary.consultingFee}</Text>
+              <Text style={styles.summaryLabel}>{t('appointments.checkout.summary.consultingFee')}</Text>
+              <Text style={styles.summaryValue}>{formatCurrency(bookingSummary.consultingFee)}</Text>
             </View>
             <View style={styles.summaryRow}>
-              <Text style={styles.summaryLabel}>Booking Fee</Text>
-              <Text style={styles.summaryValue}>${bookingSummary.bookingFee}</Text>
+              <Text style={styles.summaryLabel}>{t('appointments.checkout.summary.bookingFee')}</Text>
+              <Text style={styles.summaryValue}>{formatCurrency(bookingSummary.bookingFee)}</Text>
             </View>
             <View style={styles.summaryRow}>
-              <Text style={styles.summaryLabel}>Online Consultation</Text>
-              <Text style={styles.summaryValue}>${bookingSummary.onlineConsultation}</Text>
+              <Text style={styles.summaryLabel}>{t('appointments.checkout.summary.onlineConsultation')}</Text>
+              <Text style={styles.summaryValue}>{formatCurrency(bookingSummary.onlineConsultation)}</Text>
             </View>
             <View style={styles.summaryDivider} />
             <View style={styles.summaryTotal}>
-              <Text style={styles.summaryTotalLabel}>Total</Text>
-              <Text style={styles.summaryTotalValue}>${bookingSummary.total}</Text>
+              <Text style={styles.summaryTotalLabel}>{t('appointments.checkout.summary.total')}</Text>
+              <Text style={styles.summaryTotalValue}>{formatCurrency(bookingSummary.total)}</Text>
             </View>
           </View>
         </View>

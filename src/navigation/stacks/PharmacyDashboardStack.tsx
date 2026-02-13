@@ -3,10 +3,12 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { PharmacyDashboardStackParamList } from '../types';
 import { PharmacyDashboardScreen } from '../../screens/pharmacy-admin/PharmacyDashboardScreen';
 import { CustomHeader } from '../../components/common/CustomHeader';
+import { useTranslation } from 'react-i18next';
 
 const Stack = createNativeStackNavigator<PharmacyDashboardStackParamList>();
 
 export const PharmacyDashboardStack = () => {
+  const { t } = useTranslation();
   return (
     <Stack.Navigator
       screenOptions={{
@@ -22,7 +24,7 @@ export const PharmacyDashboardStack = () => {
       <Stack.Screen 
         name="PharmacyDashboard" 
         component={PharmacyDashboardScreen}
-        options={{ title: 'Dashboard', headerShown: false }}
+        options={{ title: t('screens.pharmacyDashboard'), headerShown: false }}
       />
     </Stack.Navigator>
   );

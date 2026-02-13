@@ -17,6 +17,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Button } from '../../components/common/Button';
 import { useCart } from '../../contexts/CartContext';
 import { API_BASE_URL } from '../../config/api';
+import { useTranslation } from 'react-i18next';
 
 type CartScreenNavigationProp = NativeStackNavigationProp<PharmacyStackParamList>;
 
@@ -54,6 +55,7 @@ const normalizeImageUrl = (imageUri: string | undefined | null): string | null =
 export const CartScreen = () => {
   const navigation = useNavigation<CartScreenNavigationProp>();
   const { cartItems, updateQuantity, removeFromCart, getCartTotal, clearCart } = useCart();
+  const { t } = useTranslation();
   const [termsAccepted, setTermsAccepted] = useState(false);
 
   const handleQuantityChange = (productId: string, newQuantity: number) => {
@@ -88,9 +90,9 @@ export const CartScreen = () => {
           {cartItems.length === 0 ? (
             <View style={styles.emptyCart}>
               <Ionicons name="cart-outline" size={64} color={colors.textSecondary} />
-              <Text style={styles.emptyCartText}>Your cart is empty</Text>
+              <Text style={styles.emptyCartText}>{t('pharmacy.cart.emptyTitle')}</Text>
               <Button
-                title="Start Shopping"
+                title={t('pharmacy.cart.startShopping')}
                 onPress={() => navigation.navigate('ProductCatalog')}
                 style={styles.shopButton}
               />
@@ -114,7 +116,7 @@ export const CartScreen = () => {
                     >
                       <Text style={styles.itemName}>{item.name}</Text>
                     </TouchableOpacity>
-                    {item.sku && <Text style={styles.itemSku}>SKU: {item.sku}</Text>}
+                    {item.sku && <Text style={styles.itemSku}>{t('pharmacy.cart.skuLabel', { sku: item.sku })}</Text>}
                     <Text style={styles.itemPrice}>${item.price.toFixed(2)}</Text>
 
                     {/* Quantity Controls */}
@@ -130,7 +132,7 @@ export const CartScreen = () => {
                         <TouchableOpacity
                           style={styles.quantityButton}
                           onPress={() => handleQuantityChange(item._id, item.quantity + 1)}
-                          disabled={item.stock && item.quantity >= item.stock}
+                          disabled={!!item.stock && item.quantity >= item.stock}
                         >
                           <Ionicons name="add" size={16} color={colors.textWhite} />
                         </TouchableOpacity>
@@ -169,7 +171,7 @@ export const CartScreen = () => {
                   )}
                 </View>
                 <Text style={styles.termsText}>
-                  I have read and accept the Terms & Conditions
+                  {t('pharmacy.cart.termsAndConditions')}
                 </Text>
               </TouchableOpacity>
               <TouchableOpacity
@@ -178,20 +180,20 @@ export const CartScreen = () => {
                   clearCart();
                 }}
               >
-                <Text style={styles.clearCartButtonText}>Clear Cart</Text>
+                <Text style={styles.clearCartButtonText}>{t('pharmacy.cart.clearCart')}</Text>
               </TouchableOpacity>
             </View>
 
             <View style={styles.totalSection}>
               <View style={styles.totalRow}>
-                <Text style={styles.totalLabel}>Subtotal</Text>
+                <Text style={styles.totalLabel}>{t('pharmacy.cart.subtotal')}</Text>
                 <Text style={styles.totalValue}>${subtotal.toFixed(2)}</Text>
               </View>
               <View style={styles.totalRow}>
-                <Text style={styles.totalLabel}>Shipping</Text>
+                <Text style={styles.totalLabel}>{t('pharmacy.cart.shipping')}</Text>
                 <Text style={styles.totalValue}>
                   {shipping === 0 ? (
-                    <Text style={styles.freeShippingText}>Free</Text>
+                    <Text style={styles.freeShippingText}>{t('pharmacy.common.free')}</Text>
                   ) : (
                     `$${shipping.toFixed(2)}`
                   )}
@@ -199,16 +201,16 @@ export const CartScreen = () => {
               </View>
               {tax > 0 && (
                 <View style={styles.totalRow}>
-                  <Text style={styles.totalLabel}>Tax</Text>
+                  <Text style={styles.totalLabel}>{t('pharmacy.cart.tax')}</Text>
                   <Text style={styles.totalValue}>${tax.toFixed(2)}</Text>
                 </View>
               )}
               <View style={styles.totalRow}>
-                <Text style={styles.totalLabel}>Total</Text>
+                <Text style={styles.totalLabel}>{t('pharmacy.cart.total')}</Text>
                 <Text style={styles.totalValueMain}>${total.toFixed(2)}</Text>
               </View>
               <Button
-                title="Proceed to Checkout"
+                title={t('pharmacy.cart.proceedToCheckout')}
                 onPress={handleCheckout}
                 disabled={!termsAccepted}
                 style={styles.checkoutButton}

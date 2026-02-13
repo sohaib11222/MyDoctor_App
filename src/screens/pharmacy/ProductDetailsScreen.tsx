@@ -22,6 +22,7 @@ import * as productApi from '../../services/product';
 import { useCart } from '../../contexts/CartContext';
 import { API_BASE_URL } from '../../config/api';
 import Toast from 'react-native-toast-message';
+import { useTranslation } from 'react-i18next';
 
 type ProductDetailsScreenNavigationProp = NativeStackNavigationProp<PharmacyStackParamList, 'ProductDetails'>;
 type ProductDetailsRouteProp = RouteProp<PharmacyStackParamList, 'ProductDetails'>;
@@ -64,6 +65,7 @@ export const ProductDetailsScreen = () => {
   const route = useRoute<ProductDetailsRouteProp>();
   const { productId } = route.params;
   const { addToCart } = useCart();
+  const { t } = useTranslation();
   const [quantity, setQuantity] = useState(1);
 
   // Fetch product details
@@ -87,8 +89,8 @@ export const ProductDetailsScreen = () => {
     if (product?.stock && newQuantity > product.stock) {
       Toast.show({
         type: 'warning',
-        text1: 'Stock Limit',
-        text2: `Only ${product.stock} items available in stock`,
+        text1: t('pharmacy.cartToast.stockLimitTitle'),
+        text2: t('pharmacy.cartToast.stockLimitBody', { count: product.stock }),
       });
       return;
     }
@@ -100,8 +102,8 @@ export const ProductDetailsScreen = () => {
     if (product.stock === 0) {
       Toast.show({
         type: 'error',
-        text1: 'Out of Stock',
-        text2: 'This product is currently out of stock',
+        text1: t('pharmacy.cartToast.outOfStockTitle'),
+        text2: t('pharmacy.cartToast.outOfStockBody'),
       });
       return;
     }
@@ -113,8 +115,8 @@ export const ProductDetailsScreen = () => {
     if (product.stock === 0) {
       Toast.show({
         type: 'error',
-        text1: 'Out of Stock',
-        text2: 'This product is currently out of stock',
+        text1: t('pharmacy.cartToast.outOfStockTitle'),
+        text2: t('pharmacy.cartToast.outOfStockBody'),
       });
       return;
     }
@@ -127,7 +129,7 @@ export const ProductDetailsScreen = () => {
       <SafeAreaView style={styles.container}>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={colors.primary} />
-          <Text style={styles.loadingText}>Loading product details...</Text>
+          <Text style={styles.loadingText}>{t('pharmacy.product.loadingProductDetails')}</Text>
         </View>
       </SafeAreaView>
     );
@@ -138,13 +140,13 @@ export const ProductDetailsScreen = () => {
       <SafeAreaView style={styles.container}>
         <View style={styles.errorContainer}>
           <Ionicons name="alert-circle-outline" size={64} color={colors.error} />
-          <Text style={styles.errorTitle}>Product Not Found</Text>
-          <Text style={styles.errorText}>The product you're looking for doesn't exist.</Text>
+          <Text style={styles.errorTitle}>{t('pharmacy.product.productNotFoundTitle')}</Text>
+          <Text style={styles.errorText}>{t('pharmacy.product.productNotFoundBody')}</Text>
           <TouchableOpacity
             style={styles.backButton}
             onPress={() => navigation.navigate('ProductCatalog')}
           >
-            <Text style={styles.backButtonText}>Browse Products</Text>
+            <Text style={styles.backButtonText}>{t('pharmacy.common.browseProducts')}</Text>
           </TouchableOpacity>
         </View>
       </SafeAreaView>
@@ -173,16 +175,16 @@ export const ProductDetailsScreen = () => {
             <Text style={styles.productName}>{product.name}</Text>
             {product.sellerId && typeof product.sellerId === 'object' && (
               <Text style={styles.manufacturer}>
-                <Text style={styles.manufacturerLabel}>Sold By </Text>
-                {product.sellerId.fullName || 'Unknown Seller'}
+                <Text style={styles.manufacturerLabel}>{t('pharmacy.product.soldBy')}</Text>
+                {product.sellerId.fullName || t('pharmacy.product.unknownSeller')}
               </Text>
             )}
             <Text style={styles.description}>
-              {product.description || 'No description available.'}
+              {product.description || t('pharmacy.product.noDescriptionAvailable')}
             </Text>
             {product.tags && product.tags.length > 0 && (
               <View style={styles.appliedForSection}>
-                <Text style={styles.appliedForTitle}>Tags:</Text>
+                <Text style={styles.appliedForTitle}>{t('pharmacy.product.tags')}</Text>
                 {product.tags.map((tag, index) => (
                   <View key={index} style={styles.appliedForItem}>
                     <View style={styles.bulletPoint} />
@@ -196,24 +198,26 @@ export const ProductDetailsScreen = () => {
 
         {/* Product Details */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Product Details</Text>
+          <Text style={styles.sectionTitle}>{t('pharmacy.product.productDetails')}</Text>
           <View style={styles.divider} />
 
           {/* Description */}
           <View style={styles.detailItem}>
-            <Text style={styles.detailTitle}>Description</Text>
+            <Text style={styles.detailTitle}>{t('pharmacy.product.description')}</Text>
             <Text style={styles.detailText}>
-              {product.description || 'No description available for this product.'}
+              {product.description || t('pharmacy.product.noDescriptionForProduct')}
             </Text>
           </View>
 
           {/* Category */}
           {product.category && (
             <View style={styles.detailItem}>
-              <Text style={styles.detailTitle}>Category</Text>
+              <Text style={styles.detailTitle}>{t('pharmacy.product.category')}</Text>
               <Text style={styles.detailText}>{product.category}</Text>
               {product.subCategory && (
-                <Text style={styles.detailText}>Subcategory: {product.subCategory}</Text>
+                <Text style={styles.detailText}>
+                  {t('pharmacy.product.subcategory', { name: product.subCategory })}
+                </Text>
               )}
             </View>
           )}
@@ -229,7 +233,9 @@ export const ProductDetailsScreen = () => {
                   <Text style={styles.originalPrice}>${originalPrice.toFixed(2)}</Text>
                   {discountPercent > 0 && (
                     <View style={styles.discountBadge}>
-                      <Text style={styles.discountText}>{discountPercent}% off</Text>
+                      <Text style={styles.discountText}>
+                        {t('pharmacy.product.percentOff', { percent: discountPercent })}
+                      </Text>
                     </View>
                   )}
                 </>
@@ -237,13 +243,15 @@ export const ProductDetailsScreen = () => {
             </View>
             <View style={[styles.stockBadge, isInStock ? styles.stockBadgeActive : styles.stockBadgeInactive]}>
               <Text style={styles.stockText}>
-                {isInStock ? `In stock (${product.stock} available)` : 'Out of stock'}
+                {isInStock
+                  ? t('pharmacy.product.inStock', { count: product.stock })
+                  : t('pharmacy.product.outOfStock')}
               </Text>
             </View>
 
             {/* Quantity Selector */}
             <View style={styles.quantitySection}>
-              <Text style={styles.quantityLabel}>Quantity</Text>
+              <Text style={styles.quantityLabel}>{t('pharmacy.product.quantity')}</Text>
               <View style={styles.quantityControls}>
                 <TouchableOpacity
                   style={styles.quantityButton}
@@ -265,13 +273,13 @@ export const ProductDetailsScreen = () => {
 
             {/* Add to Cart Button */}
             <Button
-              title="Add To Cart"
+              title={t('pharmacy.product.addToCart')}
               onPress={handleAddToCart}
               disabled={!isInStock}
               style={styles.addToCartButton}
             />
             <Button
-              title="Buy Now"
+              title={t('pharmacy.product.buyNow')}
               onPress={handleBuyNow}
               disabled={!isInStock}
               style={styles.buyNowButton}
@@ -281,17 +289,19 @@ export const ProductDetailsScreen = () => {
             <View style={styles.specsCard}>
               {product.sku && (
                 <View style={styles.specItem}>
-                  <Text style={styles.specLabel}>SKU</Text>
+                  <Text style={styles.specLabel}>{t('pharmacy.product.sku')}</Text>
                   <Text style={styles.specValue}>{product.sku}</Text>
                 </View>
               )}
               <View style={styles.specItem}>
-                <Text style={styles.specLabel}>Stock</Text>
-                <Text style={styles.specValue}>{product.stock || 0} units</Text>
+                <Text style={styles.specLabel}>{t('pharmacy.product.stock')}</Text>
+                <Text style={styles.specValue}>
+                  {t('pharmacy.product.units', { count: product.stock || 0 })}
+                </Text>
               </View>
               {product.category && (
                 <View style={styles.specItem}>
-                  <Text style={styles.specLabel}>Category</Text>
+                  <Text style={styles.specLabel}>{t('pharmacy.product.category')}</Text>
                   <Text style={styles.specValue}>{product.category}</Text>
                 </View>
               )}
@@ -302,29 +312,29 @@ export const ProductDetailsScreen = () => {
               <View style={styles.benefitItem}>
                 <Ionicons name="car" size={20} color={colors.primary} />
                 <View style={styles.benefitText}>
-                  <Text style={styles.benefitTitle}>Free Shipping</Text>
-                  <Text style={styles.benefitSubtitle}>For orders from $50</Text>
+                  <Text style={styles.benefitTitle}>{t('pharmacy.product.freeShipping')}</Text>
+                  <Text style={styles.benefitSubtitle}>{t('pharmacy.product.freeShippingSubtitle')}</Text>
                 </View>
               </View>
               <View style={styles.benefitItem}>
                 <Ionicons name="help-circle" size={20} color={colors.primary} />
                 <View style={styles.benefitText}>
-                  <Text style={styles.benefitTitle}>Support 24/7</Text>
-                  <Text style={styles.benefitSubtitle}>Call us anytime</Text>
+                  <Text style={styles.benefitTitle}>{t('pharmacy.product.support247')}</Text>
+                  <Text style={styles.benefitSubtitle}>{t('pharmacy.product.support247Subtitle')}</Text>
                 </View>
               </View>
               <View style={styles.benefitItem}>
                 <Ionicons name="shield-checkmark" size={20} color={colors.primary} />
                 <View style={styles.benefitText}>
-                  <Text style={styles.benefitTitle}>100% Safety</Text>
-                  <Text style={styles.benefitSubtitle}>Only secure payments</Text>
+                  <Text style={styles.benefitTitle}>{t('pharmacy.product.safety')}</Text>
+                  <Text style={styles.benefitSubtitle}>{t('pharmacy.product.safetySubtitle')}</Text>
                 </View>
               </View>
               <View style={styles.benefitItem}>
                 <Ionicons name="pricetag" size={20} color={colors.primary} />
                 <View style={styles.benefitText}>
-                  <Text style={styles.benefitTitle}>Hot Offers</Text>
-                  <Text style={styles.benefitSubtitle}>Discounts up to 90%</Text>
+                  <Text style={styles.benefitTitle}>{t('pharmacy.product.hotOffers')}</Text>
+                  <Text style={styles.benefitSubtitle}>{t('pharmacy.product.hotOffersSubtitle')}</Text>
                 </View>
               </View>
             </View>

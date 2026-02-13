@@ -28,6 +28,7 @@ import Toast from 'react-native-toast-message';
 import { Button } from '../../components/common/Button';
 import { Input } from '../../components/common/Input';
 import { copyImageToCacheUri, deleteCacheFiles } from '../../utils/imageUpload';
+import { useTranslation } from 'react-i18next';
 
 type PatientProfileSettingsScreenNavigationProp = NativeStackNavigationProp<MoreStackParamList>;
 
@@ -75,6 +76,7 @@ export const PatientProfileSettingsScreen = () => {
   const navigation = useNavigation<PatientProfileSettingsScreenNavigationProp>();
   const { user } = useAuth();
   const queryClient = useQueryClient();
+  const { t } = useTranslation();
 
   // Form state
   const [formData, setFormData] = useState({
@@ -168,15 +170,16 @@ export const PatientProfileSettingsScreen = () => {
       queryClient.invalidateQueries({ queryKey: ['userProfile', user?._id || user?.id] });
       Toast.show({
         type: 'success',
-        text1: 'Success',
-        text2: 'Profile updated successfully!',
+        text1: t('common.success'),
+        text2: t('more.profileSettings.profileUpdatedSuccessfully'),
       });
     },
     onError: (error: any) => {
-      const errorMessage = error.response?.data?.message || error.message || 'Failed to update profile';
+      const errorMessage =
+        error.response?.data?.message || error.message || t('more.profileSettings.failedToUpdateProfile');
       Toast.show({
         type: 'error',
-        text1: 'Error',
+        text1: t('common.error'),
         text2: errorMessage,
       });
     },
@@ -219,17 +222,20 @@ export const PatientProfileSettingsScreen = () => {
       // Request permissions
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert('Permission Required', 'Please grant permission to access your photos.');
+        Alert.alert(
+          t('more.profileSettings.permissionRequiredTitle'),
+          t('more.profileSettings.permissionPhotosBody')
+        );
         return;
       }
 
       // Show action sheet
       Alert.alert(
-        'Select Image',
-        'Choose image source',
+        t('more.profileSettings.selectImageTitle'),
+        t('more.profileSettings.selectImageBody'),
         [
           {
-            text: 'Camera',
+            text: t('more.profileSettings.camera'),
             onPress: async () => {
               const result = await ImagePicker.launchCameraAsync({
                 mediaTypes: ImagePicker.MediaTypeOptions.Images,
@@ -243,8 +249,8 @@ export const PatientProfileSettingsScreen = () => {
                 if (asset.fileSize && asset.fileSize > 4 * 1024 * 1024) {
                   Toast.show({
                     type: 'error',
-                    text1: 'File Too Large',
-                    text2: 'Image size should be below 4 MB',
+                    text1: t('more.profileSettings.fileTooLargeTitle'),
+                    text2: t('more.profileSettings.imageSizeBelow4mb'),
                   });
                   return;
                 }
@@ -255,7 +261,7 @@ export const PatientProfileSettingsScreen = () => {
             },
           },
           {
-            text: 'Gallery',
+            text: t('more.profileSettings.gallery'),
             onPress: async () => {
               const result = await ImagePicker.launchImageLibraryAsync({
                 mediaTypes: ImagePicker.MediaTypeOptions.Images,
@@ -269,8 +275,8 @@ export const PatientProfileSettingsScreen = () => {
                 if (asset.fileSize && asset.fileSize > 4 * 1024 * 1024) {
                   Toast.show({
                     type: 'error',
-                    text1: 'File Too Large',
-                    text2: 'Image size should be below 4 MB',
+                    text1: t('more.profileSettings.fileTooLargeTitle'),
+                    text2: t('more.profileSettings.imageSizeBelow4mb'),
                   });
                   return;
                 }
@@ -280,15 +286,15 @@ export const PatientProfileSettingsScreen = () => {
               }
             },
           },
-          { text: 'Cancel', style: 'cancel' },
+          { text: t('common.cancel'), style: 'cancel' },
         ],
         { cancelable: true }
       );
     } catch (error: any) {
       Toast.show({
         type: 'error',
-        text1: 'Error',
-        text2: error.message || 'Failed to pick image',
+        text1: t('common.error'),
+        text2: error.message || t('more.profileSettings.failedToPickImage'),
       });
     }
   };
@@ -365,7 +371,7 @@ export const PatientProfileSettingsScreen = () => {
       <SafeAreaView style={styles.container}>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={colors.primary} />
-          <Text style={styles.loadingText}>Loading profile...</Text>
+          <Text style={styles.loadingText}>{t('more.profileSettings.loadingProfile')}</Text>
         </View>
       </SafeAreaView>
     );
@@ -382,7 +388,7 @@ export const PatientProfileSettingsScreen = () => {
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
         {/* Profile Photo Section */}
         <View style={styles.profilePhotoSection}>
-          <Text style={styles.sectionTitle}>Profile Photo</Text>
+          <Text style={styles.sectionTitle}>{t('more.settings.profilePhoto')}</Text>
           <View style={styles.profilePhotoContainer}>
             <Image source={profileImageSource} style={styles.profileImage} defaultSource={defaultAvatar} />
             <View style={styles.profilePhotoActions}>
@@ -393,27 +399,29 @@ export const PatientProfileSettingsScreen = () => {
               >
                 <Ionicons name="camera-outline" size={18} color={colors.primary} />
                 <Text style={styles.uploadButtonText}>
-                  {selectedImageAsset ? 'Change Image' : 'Select Image'}
+                  {selectedImageAsset
+                    ? t('more.profileSettings.changeImage')
+                    : t('more.profileSettings.selectImage')}
                 </Text>
               </TouchableOpacity>
               {profileImagePreview && (
                 <TouchableOpacity style={styles.removeButton} onPress={handleRemoveImage}>
                   <Ionicons name="trash-outline" size={18} color={colors.error} />
-                  <Text style={styles.removeButtonText}>Remove</Text>
+                  <Text style={styles.removeButtonText}>{t('common.remove')}</Text>
                 </TouchableOpacity>
               )}
             </View>
-            <Text style={styles.imageHint}>Your Image should Below 4 MB, Accepted format jpg,png,svg</Text>
+            <Text style={styles.imageHint}>{t('more.settings.photoHint')}</Text>
           </View>
         </View>
 
         {/* Information Section */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Information</Text>
+          <Text style={styles.sectionTitle}>{t('more.settings.information')}</Text>
           <View style={styles.formRow}>
             <Input
-              label="Full Name"
-              placeholder="Enter full name"
+              label={t('more.profileSettings.fullNameLabel')}
+              placeholder={t('more.profileSettings.fullNamePlaceholder')}
               value={formData.fullName}
               onChangeText={(text) => handleChange('fullName', text)}
               containerStyle={styles.input}
@@ -421,22 +429,24 @@ export const PatientProfileSettingsScreen = () => {
           </View>
           <View style={styles.formRow}>
             <Input
-              label="Date of Birth"
-              placeholder="YYYY-MM-DD"
+              label={t('more.profileSettings.dateOfBirthLabel')}
+              placeholder={t('more.profileSettings.dateOfBirthPlaceholder')}
               value={formData.dob}
               onChangeText={(text) => handleChange('dob', text)}
               containerStyle={styles.inputHalf}
             />
             <View style={styles.inputSpacer} />
             <View style={styles.selectContainer}>
-              <Text style={styles.inputLabel}>Gender</Text>
+              <Text style={styles.inputLabel}>{t('more.profileSettings.genderLabel')}</Text>
               <TouchableOpacity
                 style={styles.pickerWrapper}
                 onPress={() => setShowGenderPicker(true)}
                 activeOpacity={0.7}
               >
                 <Text style={[styles.pickerText, !formData.gender && styles.pickerPlaceholder]}>
-                  {formData.gender || 'Select Gender'}
+                  {formData.gender
+                    ? t(`more.profileSettings.gender.${formData.gender.toLowerCase()}`)
+                    : t('more.profileSettings.selectGenderPlaceholder')}
                 </Text>
                 <Ionicons name="chevron-down" size={20} color={colors.textSecondary} />
               </TouchableOpacity>
@@ -444,8 +454,8 @@ export const PatientProfileSettingsScreen = () => {
           </View>
           <View style={styles.formRow}>
             <Input
-              label="Phone Number"
-              placeholder="Enter phone number"
+              label={t('more.profileSettings.phoneNumberLabel')}
+              placeholder={t('more.profileSettings.phoneNumberPlaceholder')}
               value={formData.phone}
               onChangeText={(text) => handleChange('phone', text)}
               keyboardType="phone-pad"
@@ -453,8 +463,8 @@ export const PatientProfileSettingsScreen = () => {
             />
             <View style={styles.inputSpacer} />
               <Input
-                label="Email Address"
-                placeholder="Email"
+                label={t('more.profileSettings.emailAddressLabel')}
+                placeholder={t('more.profileSettings.emailPlaceholder')}
                 value={userProfile ? userProfile.email || '' : ''}
                 editable={false}
                 containerStyle={styles.inputHalfDisabled}
@@ -462,8 +472,8 @@ export const PatientProfileSettingsScreen = () => {
           </View>
           <View style={styles.formRow}>
             <Input
-              label="Blood Group"
-              placeholder="e.g., O+ve, A-ve"
+              label={t('more.profileSettings.bloodGroupLabel')}
+              placeholder={t('more.profileSettings.bloodGroupPlaceholder')}
               value={formData.bloodGroup}
               onChangeText={(text) => handleChange('bloodGroup', text)}
               containerStyle={styles.input}
@@ -473,33 +483,33 @@ export const PatientProfileSettingsScreen = () => {
 
         {/* Address Section */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Address</Text>
+          <Text style={styles.sectionTitle}>{t('more.settings.address')}</Text>
           <Input
-            label="Address Line 1"
-            placeholder="Enter address line 1"
+            label={t('more.profileSettings.addressLine1Label')}
+            placeholder={t('more.profileSettings.addressLine1Placeholder')}
             value={formData.address.line1}
             onChangeText={(text) => handleChange('address.line1', text)}
             style={styles.input}
           />
           <Input
-            label="Address Line 2"
-            placeholder="Enter address line 2 (optional)"
+            label={t('more.profileSettings.addressLine2Label')}
+            placeholder={t('more.profileSettings.addressLine2Placeholder')}
             value={formData.address.line2}
             onChangeText={(text) => handleChange('address.line2', text)}
             style={styles.input}
           />
           <View style={styles.formRow}>
             <Input
-              label="City"
-              placeholder="Enter city"
+              label={t('more.profileSettings.cityLabel')}
+              placeholder={t('more.profileSettings.cityPlaceholder')}
               value={formData.address.city}
               onChangeText={(text) => handleChange('address.city', text)}
               containerStyle={styles.inputHalf}
             />
             <View style={styles.inputSpacer} />
             <Input
-              label="State"
-              placeholder="Enter state"
+              label={t('more.profileSettings.stateLabel')}
+              placeholder={t('more.profileSettings.statePlaceholder')}
               value={formData.address.state}
               onChangeText={(text) => handleChange('address.state', text)}
               containerStyle={styles.inputHalf}
@@ -507,16 +517,16 @@ export const PatientProfileSettingsScreen = () => {
           </View>
           <View style={styles.formRow}>
             <Input
-              label="Country"
-              placeholder="Enter country"
+              label={t('more.profileSettings.countryLabel')}
+              placeholder={t('more.profileSettings.countryPlaceholder')}
               value={formData.address.country}
               onChangeText={(text) => handleChange('address.country', text)}
               containerStyle={styles.inputHalf}
             />
             <View style={styles.inputSpacer} />
             <Input
-              label="ZIP Code"
-              placeholder="Enter ZIP code"
+              label={t('more.profileSettings.zipCodeLabel')}
+              placeholder={t('more.profileSettings.zipCodePlaceholder')}
               value={formData.address.zip}
               onChangeText={(text) => handleChange('address.zip', text)}
               keyboardType="numeric"
@@ -527,18 +537,18 @@ export const PatientProfileSettingsScreen = () => {
 
         {/* Emergency Contact Section */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Emergency Contact</Text>
+          <Text style={styles.sectionTitle}>{t('more.profileSettings.emergencyContactTitle')}</Text>
           <Input
-            label="Name"
-            placeholder="Enter emergency contact name"
+            label={t('more.profileSettings.emergencyNameLabel')}
+            placeholder={t('more.profileSettings.emergencyNamePlaceholder')}
             value={formData.emergencyContact.name}
             onChangeText={(text) => handleChange('emergencyContact.name', text)}
             style={styles.input}
           />
           <View style={styles.formRow}>
             <Input
-              label="Phone"
-              placeholder="Enter phone number"
+              label={t('more.profileSettings.emergencyPhoneLabel')}
+              placeholder={t('more.profileSettings.emergencyPhonePlaceholder')}
               value={formData.emergencyContact.phone}
               onChangeText={(text) => handleChange('emergencyContact.phone', text)}
               keyboardType="phone-pad"
@@ -546,8 +556,8 @@ export const PatientProfileSettingsScreen = () => {
             />
             <View style={styles.inputSpacer} />
             <Input
-              label="Relation"
-              placeholder="e.g., Spouse, Parent"
+              label={t('more.profileSettings.emergencyRelationLabel')}
+              placeholder={t('more.profileSettings.emergencyRelationPlaceholder')}
               value={formData.emergencyContact.relation}
               onChangeText={(text) => handleChange('emergencyContact.relation', text)}
               containerStyle={styles.inputHalf}
@@ -558,14 +568,14 @@ export const PatientProfileSettingsScreen = () => {
         {/* Action Buttons */}
         <View style={styles.actionButtons}>
           <Button
-            title="Cancel"
+            title={t('common.cancel')}
             onPress={() => navigation.goBack()}
             style={styles.cancelButton}
             textStyle={styles.cancelButtonText}
             variant="secondary"
           />
           <Button
-            title={updateProfileMutation.isPending ? 'Saving...' : 'Save Changes'}
+            title={updateProfileMutation.isPending ? t('common.saving') : t('common.saveChanges')}
             onPress={handleSubmit}
             style={styles.saveButton}
             disabled={updateProfileMutation.isPending}
@@ -583,13 +593,13 @@ export const PatientProfileSettingsScreen = () => {
         <View style={styles.modalOverlay}>
           <View style={styles.pickerModalContent}>
             <View style={styles.pickerModalHeader}>
-              <Text style={styles.pickerModalTitle}>Select Gender</Text>
+              <Text style={styles.pickerModalTitle}>{t('more.profileSettings.genderModalTitle')}</Text>
               <TouchableOpacity onPress={() => setShowGenderPicker(false)}>
                 <Ionicons name="close" size={24} color={colors.text} />
               </TouchableOpacity>
             </View>
             <View style={styles.pickerOptions}>
-              {['MALE', 'FEMALE', 'OTHER'].map((gender) => (
+              {(['MALE', 'FEMALE', 'OTHER'] as const).map((gender) => (
                 <TouchableOpacity
                   key={gender}
                   style={[
@@ -607,7 +617,7 @@ export const PatientProfileSettingsScreen = () => {
                       formData.gender === gender && styles.pickerOptionTextActive,
                     ]}
                   >
-                    {gender}
+                    {t(`more.profileSettings.gender.${gender.toLowerCase()}`)}
                   </Text>
                   {formData.gender === gender && (
                     <Ionicons name="checkmark" size={20} color={colors.primary} />

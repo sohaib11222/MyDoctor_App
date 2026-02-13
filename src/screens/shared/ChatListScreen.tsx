@@ -26,6 +26,7 @@ import * as appointmentApi from '../../services/appointment';
 import { API_BASE_URL } from '../../config/api';
 import Toast from 'react-native-toast-message';
 import { NotificationBell } from '../../components/common/NotificationBell';
+import { useTranslation } from 'react-i18next';
 
 type ChatListScreenNavigationProp = StackNavigationProp<ChatStackParamList, 'ChatList'>;
 
@@ -123,7 +124,10 @@ const defaultAvatar = require('../../../assets/avatar.png');
 /**
  * Format date to relative time string
  */
-const formatRelativeTime = (dateString: string): string => {
+const formatRelativeTime = (
+  dateString: string,
+  t: (key: string, options?: any) => string
+): string => {
   if (!dateString) return '';
   
   const date = new Date(dateString);
@@ -133,10 +137,10 @@ const formatRelativeTime = (dateString: string): string => {
   const diffHours = Math.floor(diffMs / 3600000);
   const diffDays = Math.floor(diffMs / 86400000);
   
-  if (diffMins < 1) return 'Just Now';
-  if (diffMins < 60) return `${diffMins}m ago`;
-  if (diffHours < 24) return `${diffHours}h ago`;
-  if (diffDays < 7) return `${diffDays}d ago`;
+  if (diffMins < 1) return t('chat.time.justNow');
+  if (diffMins < 60) return t('chat.time.minutesAgo', { count: diffMins });
+  if (diffHours < 24) return t('chat.time.hoursAgo', { count: diffHours });
+  if (diffDays < 7) return t('chat.time.daysAgo', { count: diffDays });
   
   return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 };
@@ -146,6 +150,7 @@ const ChatListScreen = () => {
   const { user } = useAuth();
   const isDoctor = user?.role === 'doctor';
   const queryClient = useQueryClient();
+  const { t } = useTranslation();
   const [searchQuery, setSearchQuery] = useState('');
   const [refreshing, setRefreshing] = useState(false);
 
@@ -190,16 +195,16 @@ const ChatListScreen = () => {
       
       if (conv.conversationType === 'DOCTOR_PATIENT') {
         // Doctor viewing patient
-        name = conv.patientId?.fullName || 'Unknown Patient';
+        name = conv.patientId?.fullName || t('common.unknownPatient');
         imageUri = conv.patientId?.profileImage || null;
       } else if (conv.conversationType === 'ADMIN_DOCTOR') {
         // Doctor viewing admin
-        name = conv.adminId?.fullName || 'Admin Support';
+        name = conv.adminId?.fullName || t('chat.common.adminSupport');
         imageUri = conv.adminId?.profileImage || null;
       }
       
-      const lastMessage = conv.lastMessage?.message || 'No messages yet';
-      const lastTime = formatRelativeTime(conv.lastMessageAt || conv.lastMessage?.createdAt || '');
+      const lastMessage = conv.lastMessage?.message || t('chat.common.noMessagesYet');
+      const lastTime = formatRelativeTime(conv.lastMessageAt || conv.lastMessage?.createdAt || '', t);
       const unreadCount = conv.unreadCount || 0;
       
       return {
@@ -230,10 +235,10 @@ const ChatListScreen = () => {
         const doctor = typeof apt.doctorId === 'object' ? apt.doctorId : null;
         const appointmentId = apt._id;
         
-        const name = doctor?.fullName || 'Unknown Doctor';
+        const name = doctor?.fullName || t('common.unknownDoctor');
         const imageUri = doctor?.profileImage || null;
-        const lastMessage = 'Click to start conversation';
-        const lastTime = formatRelativeTime(apt.appointmentDate || apt.createdAt || '');
+        const lastMessage = t('chat.list.clickToStartConversation');
+        const lastTime = formatRelativeTime(apt.appointmentDate || apt.createdAt || '', t);
         
         return {
           id: `conv-${appointmentId}`,
@@ -258,7 +263,7 @@ const ChatListScreen = () => {
         };
       });
     }
-  }, [conversationsResponse, appointmentsResponse, isDoctor, user?.id]);
+  }, [conversationsResponse, appointmentsResponse, isDoctor, t, user?.id]);
 
   const pinnedChats = allChats.filter((chat) => chat.isPinned);
   const recentChats = allChats.filter((chat) => !chat.isPinned);
@@ -314,9 +319,9 @@ const ChatListScreen = () => {
         // Navigate to patient/doctor chat
         if (!isDoctor && hasAppointmentWindowPassed(item)) {
           Alert.alert(
-            'Chat not available',
-            'Communication is only available during the scheduled appointment time window.',
-            [{ text: 'OK' }]
+            t('chat.list.chatNotAvailableTitle'),
+            t('chat.list.chatNotAvailableBody'),
+            [{ text: t('common.ok') }]
           );
           return;
         }
@@ -386,7 +391,7 @@ const ChatListScreen = () => {
       {/* Header with Search Bar */}
       <View style={styles.header}>
         <View style={styles.headerTop}>
-          <Text style={styles.headerTitle}>Messages</Text>
+          <Text style={styles.headerTitle}>{t('chat.list.title')}</Text>
           <View style={styles.headerActions}>
             <NotificationBell />
             {isDoctor && (
@@ -405,7 +410,7 @@ const ChatListScreen = () => {
             <Ionicons name="search-outline" size={20} color={colors.textSecondary} />
             <TextInput
               style={styles.searchInput}
-              placeholder="Search"
+              placeholder={t('chat.list.searchPlaceholder')}
               placeholderTextColor={colors.textLight}
               value={searchQuery}
               onChangeText={setSearchQuery}
@@ -421,14 +426,14 @@ const ChatListScreen = () => {
         {isLoading && (
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color={colors.primary} />
-            <Text style={styles.loadingText}>Loading conversations...</Text>
+            <Text style={styles.loadingText}>{t('chat.list.loadingConversations')}</Text>
           </View>
         )}
         
         {error && (
           <View style={styles.errorContainer}>
             <Ionicons name="alert-circle-outline" size={48} color={colors.error} />
-            <Text style={styles.errorText}>Failed to load conversations</Text>
+            <Text style={styles.errorText}>{t('chat.list.failedToLoadConversations')}</Text>
             <TouchableOpacity style={styles.retryButton} onPress={() => {
               if (isDoctor) {
                 refetchConversations();
@@ -436,7 +441,7 @@ const ChatListScreen = () => {
                 refetchAppointments();
               }
             }}>
-              <Text style={styles.retryButtonText}>Retry</Text>
+              <Text style={styles.retryButtonText}>{t('common.retry')}</Text>
             </TouchableOpacity>
           </View>
         )}
@@ -444,9 +449,11 @@ const ChatListScreen = () => {
         {!isLoading && !error && allChats.length === 0 && (
           <View style={styles.emptyContainer}>
             <Ionicons name="chatbubbles-outline" size={64} color={colors.textLight} />
-            <Text style={styles.emptyText}>No conversations yet</Text>
+            <Text style={styles.emptyText}>{t('chat.list.emptyTitle')}</Text>
             <Text style={styles.emptySubtext}>
-              {isDoctor ? 'Start chatting with your patients' : 'Start chatting with your doctor'}
+              {isDoctor
+                ? t('chat.list.emptySubtitleDoctor')
+                : t('chat.list.emptySubtitlePatient')}
             </Text>
           </View>
         )}
@@ -455,7 +462,7 @@ const ChatListScreen = () => {
         {filteredPinnedChats.length > 0 && (
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>Pinned Chat</Text>
+              <Text style={styles.sectionTitle}>{t('chat.list.pinnedChat')}</Text>
             </View>
             <FlatList
               data={filteredPinnedChats}
@@ -470,7 +477,7 @@ const ChatListScreen = () => {
         {filteredRecentChats.length > 0 && (
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>Recent Chat</Text>
+              <Text style={styles.sectionTitle}>{t('chat.list.recentChat')}</Text>
             </View>
             <FlatList
               data={filteredRecentChats}

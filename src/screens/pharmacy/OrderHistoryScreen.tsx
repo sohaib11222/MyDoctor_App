@@ -25,6 +25,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import * as orderApi from '../../services/order';
 import { API_BASE_URL } from '../../config/api';
 import Toast from 'react-native-toast-message';
+import { useTranslation } from 'react-i18next';
 
 type OrderHistoryScreenNavigationProp = CompositeNavigationProp<
   NativeStackNavigationProp<PharmacyStackParamList | MoreStackParamList>,
@@ -56,22 +57,11 @@ const normalizeImageUrl = (imageUri: string | undefined | null): string | null =
   return `${baseUrl}${imagePath}`;
 };
 
-const formatDate = (dateString: string | undefined | null): string => {
-  if (!dateString) return 'N/A';
-  const date = new Date(dateString);
-  return date.toLocaleDateString('en-GB', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-  });
-};
-
-const formatCurrency = (amount: number | undefined): string => {
-  if (amount === undefined || amount === null) return '$0.00';
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: 'USD',
-  }).format(amount);
+const getRealOrderTotal = (order: Partial<orderApi.Order> | undefined | null): number => {
+  if (!order) return 0;
+  const subtotal = Number((order as any).subtotal) || 0;
+  const shipping = Number((order as any).shipping) || 0;
+  return subtotal + shipping;
 };
 
 const getStatusBadgeColor = (status: orderApi.Order['status']) => {
@@ -97,11 +87,36 @@ export const OrderHistoryScreen = () => {
   const navigation = useNavigation<OrderHistoryScreenNavigationProp>();
   const { user } = useAuth();
   const queryClient = useQueryClient();
+  const { t, i18n } = useTranslation();
   const [statusFilter, setStatusFilter] = useState('');
   const [page, setPage] = useState(1);
   const [refreshing, setRefreshing] = useState(false);
   const [payingOrderId, setPayingOrderId] = useState<string | null>(null);
   const limit = 10;
+
+  const formatDate = useCallback(
+    (dateString: string | undefined | null): string => {
+      if (!dateString) return t('common.na');
+      const date = new Date(dateString);
+      return date.toLocaleDateString(i18n.language, {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+      });
+    },
+    [i18n.language, t]
+  );
+
+  const formatCurrency = useCallback(
+    (amount: number | undefined): string => {
+      const safeAmount = amount === undefined || amount === null ? 0 : amount;
+      return new Intl.NumberFormat(i18n.language, {
+        style: 'currency',
+        currency: 'USD',
+      }).format(safeAmount);
+    },
+    [i18n.language]
+  );
 
   const {
     data: ordersResponse,
@@ -172,8 +187,8 @@ export const OrderHistoryScreen = () => {
       setPayingOrderId(null);
       Toast.show({
         type: 'success',
-        text1: 'Payment Successful',
-        text2: 'Your order payment has been processed!',
+        text1: t('pharmacy.orders.paymentSuccessfulTitle'),
+        text2: t('pharmacy.orders.paymentSuccessfulBody'),
       });
       refetch();
     },
@@ -181,37 +196,39 @@ export const OrderHistoryScreen = () => {
       setPayingOrderId(null);
       Toast.show({
         type: 'error',
-        text1: 'Payment Failed',
-        text2: err.response?.data?.message || err.message || 'Please try again.',
+        text1: t('pharmacy.orders.paymentFailedTitle'),
+        text2: err.response?.data?.message || err.message || t('pharmacy.orders.pleaseTryAgain'),
       });
     },
   });
 
   const handlePay = useCallback((order: orderApi.Order) => {
+    const realTotal = getRealOrderTotal(order);
     Alert.alert(
-      'Confirm Payment',
-      `Pay ${formatCurrency(order.total)} for order #${order.orderNumber}?`,
+      t('pharmacy.orders.confirmPaymentTitle'),
+      t('pharmacy.orders.confirmPaymentOrderBody', { amount: formatCurrency(realTotal), orderNumber: order.orderNumber }),
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: t('common.cancel'), style: 'cancel' },
         {
-          text: 'Pay',
+          text: t('pharmacy.orders.pay'),
           onPress: () => {
             setPayingOrderId(order._id);
-            payMutation.mutate({ orderId: order._id, paymentMethod: 'DUMMY' });
+            payMutation.mutate({ orderId: order._id, paymentMethod: 'STRIPE' });
           },
         },
       ]
     );
-  }, [payMutation]);
+  }, [formatCurrency, payMutation, t]);
 
   const renderOrderCard = ({ item: order }: { item: orderApi.Order }) => {
     const pharmacy = typeof order.pharmacyId === 'object' ? order.pharmacyId : null;
-    const pharmacyName = pharmacy?.name || 'Pharmacy';
+    const pharmacyName = pharmacy?.name || t('pharmacy.orders.orderDetails.pharmacy');
     const firstItem = order.items[0];
     const product = typeof firstItem?.productId === 'object' ? firstItem.productId : null;
     const productImage = product?.images?.[0];
     const normalizedImageUrl = normalizeImageUrl(productImage);
     const imageSource = normalizedImageUrl ? { uri: normalizedImageUrl } : defaultAvatar;
+    const realTotal = getRealOrderTotal(order);
 
     return (
       <TouchableOpacity
@@ -227,7 +244,7 @@ export const OrderHistoryScreen = () => {
           </View>
           <View style={[styles.statusBadge, { backgroundColor: getStatusBadgeColor(order.status) + '20' }]}>
             <Text style={[styles.statusText, { color: getStatusBadgeColor(order.status) }]}>
-              {order.status}
+              {t(`pharmacy.orders.status.${order.status}` as any)}
             </Text>
           </View>
         </View>
@@ -235,14 +252,14 @@ export const OrderHistoryScreen = () => {
           <Image source={imageSource} style={styles.productImage} defaultSource={defaultAvatar} />
           <View style={styles.orderDetails}>
             <Text style={styles.itemsCount}>
-              {order.items.length} {order.items.length === 1 ? 'item' : 'items'}
+              {order.items.length} {order.items.length === 1 ? t('pharmacy.orders.item') : t('pharmacy.orders.items')}
             </Text>
-            <Text style={styles.orderDate}>Ordered on {formatDate(order.createdAt)}</Text>
+            <Text style={styles.orderDate}>{t('pharmacy.orders.orderedOn', { date: formatDate(order.createdAt) })}</Text>
             {order.deliveredAt && (
-              <Text style={styles.deliveredDate}>Delivered on {formatDate(order.deliveredAt)}</Text>
+              <Text style={styles.deliveredDate}>{t('pharmacy.orders.deliveredOn', { date: formatDate(order.deliveredAt) })}</Text>
             )}
           </View>
-          <Text style={styles.orderTotal}>{formatCurrency(order.total)}</Text>
+          <Text style={styles.orderTotal}>{formatCurrency(realTotal)}</Text>
         </View>
         <View style={styles.orderFooter}>
           <TouchableOpacity
@@ -251,7 +268,7 @@ export const OrderHistoryScreen = () => {
               navigation.navigate('OrderDetails', { orderId: order._id });
             }}
           >
-            <Text style={styles.actionButtonText}>View Details</Text>
+            <Text style={styles.actionButtonText}>{t('pharmacy.common.viewDetails')}</Text>
           </TouchableOpacity>
           {/* Show Pay Now button if payment is pending and shipping fee is set */}
           {order.paymentStatus === 'PENDING' && 
@@ -267,7 +284,7 @@ export const OrderHistoryScreen = () => {
               ) : (
                 <>
                   <Ionicons name="card-outline" size={16} color={colors.textWhite} style={{ marginRight: 4 }} />
-                  <Text style={[styles.actionButtonText, styles.payButtonText]}>Pay Now</Text>
+                  <Text style={[styles.actionButtonText, styles.payButtonText]}>{t('pharmacy.common.payNow')}</Text>
                 </>
               )}
             </TouchableOpacity>
@@ -276,7 +293,7 @@ export const OrderHistoryScreen = () => {
           {order.paymentStatus === 'PAID' && (
             <View style={[styles.actionButton, styles.paidButton]}>
               <Ionicons name="checkmark-circle" size={16} color={colors.success} style={{ marginRight: 4 }} />
-              <Text style={[styles.actionButtonText, styles.paidButtonText]}>Paid</Text>
+              <Text style={[styles.actionButtonText, styles.paidButtonText]}>{t('pharmacy.common.paid')}</Text>
             </View>
           )}
         </View>
@@ -288,7 +305,7 @@ export const OrderHistoryScreen = () => {
     return (
       <SafeAreaView style={styles.loadingContainer}>
         <ActivityIndicator size="large" color={colors.primary} />
-        <Text style={styles.loadingText}>Loading orders...</Text>
+        <Text style={styles.loadingText}>{t('pharmacy.orders.loadingOrders')}</Text>
       </SafeAreaView>
     );
   }
@@ -297,12 +314,12 @@ export const OrderHistoryScreen = () => {
     return (
       <SafeAreaView style={styles.errorContainer}>
         <Ionicons name="alert-circle-outline" size={64} color={colors.error} />
-        <Text style={styles.errorTitle}>Error Loading Orders</Text>
+        <Text style={styles.errorTitle}>{t('pharmacy.orders.errorLoadingOrdersTitle')}</Text>
         <Text style={styles.errorText}>
-          {error instanceof Error ? error.message : 'Failed to load orders'}
+          {error instanceof Error ? error.message : t('pharmacy.orders.failedToLoadOrders')}
         </Text>
         <TouchableOpacity style={styles.retryButton} onPress={() => refetch()}>
-          <Text style={styles.retryButtonText}>Retry</Text>
+          <Text style={styles.retryButtonText}>{t('common.retry')}</Text>
         </TouchableOpacity>
       </SafeAreaView>
     );
@@ -311,7 +328,7 @@ export const OrderHistoryScreen = () => {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.filterContainer}>
-        <Text style={styles.filterLabel}>Status:</Text>
+        <Text style={styles.filterLabel}>{t('pharmacy.orders.statusLabel')}</Text>
         <ScrollView horizontal showsHorizontalScrollIndicator={false}>
           <TouchableOpacity
             style={[styles.filterOption, statusFilter === '' && styles.filterOptionActive]}
@@ -321,7 +338,7 @@ export const OrderHistoryScreen = () => {
             }}
           >
             <Text style={[styles.filterOptionText, statusFilter === '' && styles.filterOptionTextActive]}>
-              All
+              {t('pharmacy.orders.all')}
             </Text>
             {statusCounts['ALL'] > 0 && (
               <View style={styles.countBadge}>
@@ -341,7 +358,7 @@ export const OrderHistoryScreen = () => {
               <Text
                 style={[styles.filterOptionText, statusFilter === status && styles.filterOptionTextActive]}
               >
-                {status}
+                {t(`pharmacy.orders.status.${status}` as any)}
               </Text>
               {statusCounts[status] > 0 && (
                 <View style={styles.countBadge}>
@@ -369,12 +386,12 @@ export const OrderHistoryScreen = () => {
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
             <Ionicons name="receipt-outline" size={64} color={colors.textLight} />
-            <Text style={styles.emptyText}>No orders found</Text>
+            <Text style={styles.emptyText}>{t('pharmacy.orders.noOrdersFound')}</Text>
             <TouchableOpacity
               style={styles.shopButton}
-              onPress={() => navigation.navigate('PharmacyHome')}
+              onPress={() => (navigation as any).navigate('PharmacyHome')}
             >
-              <Text style={styles.shopButtonText}>Start Shopping</Text>
+              <Text style={styles.shopButtonText}>{t('pharmacy.cart.startShopping')}</Text>
             </TouchableOpacity>
           </View>
         }

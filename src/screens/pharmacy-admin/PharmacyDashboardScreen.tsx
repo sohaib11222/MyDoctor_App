@@ -24,6 +24,7 @@ import * as orderApi from '../../services/order';
 import * as productApi from '../../services/product';
 import * as pharmacySubscriptionApi from '../../services/pharmacySubscription';
 import { Button } from '../../components/common/Button';
+import { useTranslation } from 'react-i18next';
 
 type PharmacyDashboardScreenNavigationProp = NativeStackNavigationProp<PharmacyDashboardStackParamList>;
 
@@ -48,6 +49,7 @@ interface Customer {
 export const PharmacyDashboardScreen = () => {
   const navigation = useNavigation<PharmacyDashboardScreenNavigationProp>();
   const { user } = useAuth();
+  const { t, i18n } = useTranslation();
   const [refreshing, setRefreshing] = useState(false);
   const userId = user?._id || user?.id;
   const isPharmacy = user?.role === 'pharmacy' || (user as any)?.role === 'PHARMACY';
@@ -169,15 +171,15 @@ export const PharmacyDashboardScreen = () => {
     return [
       {
         id: '1',
-        title: 'Revenue Today',
-        value: new Intl.NumberFormat('en-US', { style: 'currency', currency: 'EUR' }).format(revenueToday || 0),
+        title: t('pharmacyAdmin.dashboard.stats.revenueToday'),
+        value: new Intl.NumberFormat(i18n.language, { style: 'currency', currency: 'EUR' }).format(revenueToday || 0),
         icon: 'cash',
         iconColor: colors.primary,
         progress: Math.min(100, Math.round((revenueToday / 500) * 100) || 0),
       },
       {
         id: '2',
-        title: 'Total Orders',
+        title: t('pharmacyAdmin.dashboard.stats.totalOrders'),
         value: String(totalOrders),
         icon: 'file-text',
         iconColor: colors.success,
@@ -185,7 +187,7 @@ export const PharmacyDashboardScreen = () => {
       },
       {
         id: '3',
-        title: 'Pending Orders',
+        title: t('pharmacyAdmin.dashboard.stats.pendingOrders'),
         value: String(pendingCount),
         icon: 'time',
         iconColor: colors.warning,
@@ -193,14 +195,14 @@ export const PharmacyDashboardScreen = () => {
       },
       {
         id: '4',
-        title: 'Total Products',
+        title: t('pharmacyAdmin.dashboard.stats.totalProducts'),
         value: String(totalProducts),
         icon: 'medical',
         iconColor: colors.error,
         progress: Math.min(100, totalProducts > 0 ? 100 : 0),
       },
     ];
-  }, [revenueToday, totalOrders, pendingCount, totalProducts]);
+  }, [i18n.language, pendingCount, revenueToday, t, totalOrders, totalProducts]);
 
   const customers = useMemo<Customer[]>(() => {
     const map = new Map<string, Customer>();
@@ -223,9 +225,9 @@ export const PharmacyDashboardScreen = () => {
             ]
               .filter(Boolean)
               .join(', ')
-          : 'N/A';
+          : t('common.na');
 
-        const dateAdded = new Date(order.createdAt).toLocaleDateString('en-GB', {
+        const dateAdded = new Date(order.createdAt).toLocaleDateString(i18n.language, {
           day: '2-digit',
           month: 'short',
           year: 'numeric',
@@ -233,15 +235,15 @@ export const PharmacyDashboardScreen = () => {
 
         map.set(patientId, {
           id: patientId,
-          name: patient?.fullName || 'Customer',
+          name: patient?.fullName || t('pharmacyAdmin.common.customer'),
           address: addr,
-          telephone: patient?.phone || 'N/A',
-          email: patient?.email || 'N/A',
+          telephone: patient?.phone || t('common.na'),
+          email: patient?.email || t('common.na'),
           dateAdded,
         });
       });
     return Array.from(map.values()).slice(0, 5);
-  }, [orders]);
+  }, [i18n.language, orders, t]);
 
   const isLoading = ordersLoading || productsLoading;
 
@@ -291,15 +293,20 @@ export const PharmacyDashboardScreen = () => {
       >
         <View style={styles.header}>
           <Text style={styles.welcomeTitle}>
-            Welcome, {pharmacy?.name || user?.name || (isParapharmacy ? 'Parapharmacy' : 'Pharmacy')}
+            {t('pharmacyAdmin.dashboard.welcome', {
+              name:
+                pharmacy?.name ||
+                (user as any)?.name ||
+                (isParapharmacy ? t('pharmacyAdmin.common.parapharmacy') : t('pharmacyAdmin.common.pharmacy')),
+            })}
           </Text>
-          <Text style={styles.breadcrumb}>Dashboard</Text>
+          <Text style={styles.breadcrumb}>{t('screens.pharmacyDashboard')}</Text>
         </View>
 
         {isPharmacyOrParaUser && showProfileBanner && (
           <TouchableOpacity style={styles.profileBanner} activeOpacity={0.8} onPress={goToPharmacyProfile}>
             <Ionicons name="warning-outline" size={18} color={colors.warning} />
-            <Text style={styles.profileBannerText}>Complete your pharmacy profile to add products</Text>
+            <Text style={styles.profileBannerText}>{t('pharmacyAdmin.dashboard.profileBanner.completeProfile')}</Text>
             <Ionicons name="chevron-forward" size={18} color={colors.textLight} />
           </TouchableOpacity>
         )}
@@ -307,7 +314,7 @@ export const PharmacyDashboardScreen = () => {
         {requiresSubscription && subscriptionLoading && (
           <View style={styles.pendingBanner}>
             <ActivityIndicator size="small" color={colors.primary} />
-            <Text style={styles.pendingBannerText}>Loading subscription...</Text>
+            <Text style={styles.pendingBannerText}>{t('pharmacyAdmin.dashboard.banners.loadingSubscription')}</Text>
           </View>
         )}
 
@@ -315,28 +322,28 @@ export const PharmacyDashboardScreen = () => {
           <View style={styles.subscriptionBanner}>
             <View style={styles.subscriptionBannerRow}>
               <Ionicons name="card-outline" size={18} color={colors.warning} />
-              <Text style={styles.subscriptionBannerText}>Subscription required to manage products and orders</Text>
+              <Text style={styles.subscriptionBannerText}>{t('pharmacyAdmin.dashboard.banners.subscriptionRequired')}</Text>
             </View>
-            <Button title="View Plans" onPress={goToSubscription} />
+            <Button title={t('pharmacyAdmin.dashboard.actions.viewPlans')} onPress={goToSubscription} />
           </View>
         )}
 
         {isPharmacyOrParaUser && !isApproved && (
           <View style={styles.pendingBanner}>
             <Ionicons name="time-outline" size={18} color={colors.warning} />
-            <Text style={styles.pendingBannerText}>Your account is pending admin approval</Text>
+            <Text style={styles.pendingBannerText}>{t('pharmacyAdmin.dashboard.banners.pendingApproval')}</Text>
           </View>
         )}
 
         {!isPharmacyOrParaUser ? (
           <View style={styles.loadingContainer}>
             <Ionicons name="alert-circle-outline" size={48} color={colors.error} />
-            <Text style={styles.loadingText}>This section is available for pharmacy accounts only.</Text>
+            <Text style={styles.loadingText}>{t('pharmacyAdmin.common.pharmacyAccountsOnly')}</Text>
           </View>
         ) : isLoading && !refreshing ? (
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color={colors.primary} />
-            <Text style={styles.loadingText}>Loading dashboard...</Text>
+            <Text style={styles.loadingText}>{t('pharmacyAdmin.dashboard.loadingDashboard')}</Text>
           </View>
         ) : (
 
@@ -357,21 +364,21 @@ export const PharmacyDashboardScreen = () => {
             <View style={styles.chartsSection}>
               <View style={styles.chartCard}>
                 <View style={styles.chartHeader}>
-                  <Text style={styles.chartTitle}>Revenue</Text>
+                  <Text style={styles.chartTitle}>{t('pharmacyAdmin.dashboard.charts.revenue.title')}</Text>
                 </View>
                 <View style={styles.chartPlaceholder}>
                   <Ionicons name="bar-chart" size={48} color={colors.textLight} />
-                  <Text style={styles.chartPlaceholderText}>Revenue Chart</Text>
+                  <Text style={styles.chartPlaceholderText}>{t('pharmacyAdmin.dashboard.charts.revenue.placeholder')}</Text>
                 </View>
               </View>
 
               <View style={styles.chartCard}>
                 <View style={styles.chartHeader}>
-                  <Text style={styles.chartTitle}>Status</Text>
+                  <Text style={styles.chartTitle}>{t('pharmacyAdmin.dashboard.charts.status.title')}</Text>
                 </View>
                 <View style={styles.chartPlaceholder}>
                   <Ionicons name="trending-up" size={48} color={colors.textLight} />
-                  <Text style={styles.chartPlaceholderText}>Status Chart</Text>
+                  <Text style={styles.chartPlaceholderText}>{t('pharmacyAdmin.dashboard.charts.status.placeholder')}</Text>
                 </View>
               </View>
             </View>
@@ -379,7 +386,7 @@ export const PharmacyDashboardScreen = () => {
             {/* Latest Customers */}
             <View style={styles.customersSection}>
               <View style={styles.sectionHeader}>
-                <Text style={styles.sectionTitle}>Latest Customers</Text>
+                <Text style={styles.sectionTitle}>{t('pharmacyAdmin.dashboard.customers.latestCustomers')}</Text>
                 <TouchableOpacity
                   onPress={() => {
                     const tabNav = (navigation as any).getParent?.();
@@ -391,16 +398,16 @@ export const PharmacyDashboardScreen = () => {
                   }}
                   activeOpacity={0.7}
                 >
-                  <Text style={styles.viewAllText}>View All</Text>
+                  <Text style={styles.viewAllText}>{t('common.viewAll')}</Text>
                 </TouchableOpacity>
               </View>
               <View style={styles.customersCard}>
                 <View style={styles.customersHeader}>
-                  <Text style={styles.tableHeader}>Name</Text>
-                  <Text style={styles.tableHeader}>Address</Text>
-                  <Text style={styles.tableHeader}>Telephone</Text>
-                  <Text style={styles.tableHeader}>Email</Text>
-                  <Text style={styles.tableHeader}>Date added</Text>
+                  <Text style={styles.tableHeader}>{t('pharmacyAdmin.dashboard.customers.table.name')}</Text>
+                  <Text style={styles.tableHeader}>{t('pharmacyAdmin.dashboard.customers.table.address')}</Text>
+                  <Text style={styles.tableHeader}>{t('pharmacyAdmin.dashboard.customers.table.telephone')}</Text>
+                  <Text style={styles.tableHeader}>{t('pharmacyAdmin.dashboard.customers.table.email')}</Text>
+                  <Text style={styles.tableHeader}>{t('pharmacyAdmin.dashboard.customers.table.dateAdded')}</Text>
                 </View>
                 <FlatList
                   data={customers}

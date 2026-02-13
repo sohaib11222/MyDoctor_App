@@ -17,6 +17,7 @@ import { Input } from '../../components/common/Input';
 import { Button } from '../../components/common/Button';
 import * as profileApi from '../../services/profile';
 import Toast from 'react-native-toast-message';
+import { useTranslation } from 'react-i18next';
 
 interface SocialLinks {
   facebook: string;
@@ -27,17 +28,18 @@ interface SocialLinks {
 }
 
 const socialPlatforms = [
-  { key: 'facebook' as keyof SocialLinks, label: 'Facebook', icon: 'logo-facebook' },
-  { key: 'instagram' as keyof SocialLinks, label: 'Instagram', icon: 'logo-instagram' },
-  { key: 'linkedin' as keyof SocialLinks, label: 'LinkedIn', icon: 'logo-linkedin' },
-  { key: 'twitter' as keyof SocialLinks, label: 'Twitter', icon: 'logo-twitter' },
-  { key: 'website' as keyof SocialLinks, label: 'Website', icon: 'globe-outline' },
+  { key: 'facebook' as keyof SocialLinks, labelKey: 'more.socialLinks.platforms.facebook', icon: 'logo-facebook' },
+  { key: 'instagram' as keyof SocialLinks, labelKey: 'more.socialLinks.platforms.instagram', icon: 'logo-instagram' },
+  { key: 'linkedin' as keyof SocialLinks, labelKey: 'more.socialLinks.platforms.linkedin', icon: 'logo-linkedin' },
+  { key: 'twitter' as keyof SocialLinks, labelKey: 'more.socialLinks.platforms.twitter', icon: 'logo-twitter' },
+  { key: 'website' as keyof SocialLinks, labelKey: 'more.socialLinks.platforms.website', icon: 'globe-outline' },
 ];
 
 export const SocialLinksScreen = () => {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const [refreshing, setRefreshing] = useState(false);
+  const { t } = useTranslation();
 
   // Social links state
   const [socialLinks, setSocialLinks] = useState<SocialLinks>({
@@ -57,7 +59,7 @@ export const SocialLinksScreen = () => {
     queryFn: async () => {
       // Ensure user is available before making the call
       if (!user || !userId) {
-        throw new Error('User not authenticated');
+        throw new Error(t('more.socialLinks.userNotAuthenticated'));
       }
       return profileApi.getDoctorProfile();
     },
@@ -70,7 +72,7 @@ export const SocialLinksScreen = () => {
     mutationFn: async (data: any) => {
       // Ensure user is available before making the call
       if (!user || !userId) {
-        throw new Error('User not authenticated');
+        throw new Error(t('more.socialLinks.userNotAuthenticated'));
       }
       return profileApi.updateDoctorProfile(data);
     },
@@ -78,15 +80,16 @@ export const SocialLinksScreen = () => {
       queryClient.invalidateQueries({ queryKey: ['doctorProfile'] });
       Toast.show({
         type: 'success',
-        text1: 'Success',
-        text2: 'Social media links updated successfully!',
+        text1: t('common.success'),
+        text2: t('more.socialLinks.updatedBody'),
       });
     },
     onError: (error: any) => {
-      const errorMessage = error?.response?.data?.message || error?.message || 'Failed to update social media links';
+      const errorMessage =
+        error?.response?.data?.message || error?.message || t('more.socialLinks.failedToUpdate');
       Toast.show({
         type: 'error',
-        text1: 'Error',
+        text1: t('common.error'),
         text2: errorMessage,
       });
     },
@@ -148,8 +151,8 @@ export const SocialLinksScreen = () => {
         } else {
           Toast.show({
             type: 'error',
-            text1: 'Invalid URL',
-            text2: `Please enter a valid ${platform.label} URL`,
+            text1: t('more.socialLinks.invalidUrlTitle'),
+            text2: t('more.socialLinks.invalidUrlBody', { platform: t(platform.labelKey) }),
           });
           return;
         }
@@ -198,7 +201,7 @@ export const SocialLinksScreen = () => {
       <SafeAreaView style={styles.container}>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={colors.primary} />
-          <Text style={styles.loadingText}>Loading social links...</Text>
+          <Text style={styles.loadingText}>{t('more.socialLinks.loading')}</Text>
         </View>
       </SafeAreaView>
     );
@@ -209,9 +212,11 @@ export const SocialLinksScreen = () => {
       <SafeAreaView style={styles.container}>
         <View style={styles.errorContainer}>
           <Ionicons name="alert-circle-outline" size={48} color={colors.error} />
-          <Text style={styles.errorTitle}>Error Loading Profile</Text>
+          <Text style={styles.errorTitle}>{t('more.socialLinks.errorLoadingProfileTitle')}</Text>
           <Text style={styles.errorText}>
-            {(error as any)?.response?.data?.message || (error as any)?.message || 'Failed to load profile'}
+            {(error as any)?.response?.data?.message ||
+              (error as any)?.message ||
+              t('more.socialLinks.failedToLoadProfile')}
           </Text>
         </View>
       </SafeAreaView>
@@ -225,17 +230,17 @@ export const SocialLinksScreen = () => {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />}
       >
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Social Media Links</Text>
-          <Text style={styles.sectionSubtitle}>Add your social media profiles to connect with patients</Text>
+          <Text style={styles.sectionTitle}>{t('screens.socialLinks')}</Text>
+          <Text style={styles.sectionSubtitle}>{t('more.socialLinks.subtitle')}</Text>
 
           {socialPlatforms.map((platform) => (
             <View key={platform.key} style={styles.linkContainer}>
               <View style={styles.linkHeader}>
                 <Ionicons name={platform.icon as any} size={24} color={colors.primary} />
-                <Text style={styles.linkLabel}>{platform.label}</Text>
+                <Text style={styles.linkLabel}>{t(platform.labelKey)}</Text>
               </View>
               <Input
-                placeholder={`Add ${platform.label} URL`}
+                placeholder={t('more.socialLinks.addUrlPlaceholder', { platform: t(platform.labelKey) })}
                 value={socialLinks[platform.key]}
                 onChangeText={(text) => handleLinkChange(platform.key, text)}
                 keyboardType="url"
@@ -250,10 +255,9 @@ export const SocialLinksScreen = () => {
         <View style={styles.infoCard}>
           <Ionicons name="information-circle" size={24} color={colors.primary} />
           <View style={styles.infoContent}>
-            <Text style={styles.infoTitle}>About Social Links</Text>
+            <Text style={styles.infoTitle}>{t('more.socialLinks.aboutTitle')}</Text>
             <Text style={styles.infoText}>
-              Add your social media profiles and website URL. These links will be displayed on your public profile
-              page. Make sure to enter valid URLs starting with http:// or https://
+              {t('more.socialLinks.aboutBody')}
             </Text>
           </View>
         </View>
@@ -261,10 +265,10 @@ export const SocialLinksScreen = () => {
         {/* Action Buttons */}
         <View style={styles.actionsSection}>
           <TouchableOpacity style={styles.cancelButton} onPress={handleCancel}>
-            <Text style={styles.cancelButtonText}>Cancel</Text>
+            <Text style={styles.cancelButtonText}>{t('common.cancel')}</Text>
           </TouchableOpacity>
           <Button
-            title={updateProfileMutation.isPending ? 'Saving...' : 'Save Changes'}
+            title={updateProfileMutation.isPending ? t('common.saving') : t('common.saveChanges')}
             onPress={handleSubmit}
             disabled={updateProfileMutation.isPending}
             style={styles.saveButton}

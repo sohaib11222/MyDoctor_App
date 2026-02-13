@@ -20,6 +20,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../contexts/AuthContext';
 import * as appointmentApi from '../../services/appointment';
 import { API_BASE_URL } from '../../config/api';
+import { useTranslation } from 'react-i18next';
 
 type MyPatientsScreenNavigationProp = StackNavigationProp<AppointmentsStackParamList, 'MyPatients'>;
 
@@ -82,6 +83,7 @@ const defaultAvatar = require('../../../assets/avatar.png');
 export const MyPatientsScreen = () => {
   const navigation = useNavigation<MyPatientsScreenNavigationProp>();
   const { user } = useAuth();
+  const { t, i18n } = useTranslation();
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState<'active' | 'inactive'>('active');
   const [dateRange, setDateRange] = useState({ fromDate: '', toDate: '' });
@@ -127,7 +129,7 @@ export const MyPatientsScreen = () => {
       if (!patientMap.has(patientId)) {
         patientMap.set(patientId, {
           _id: patientId,
-          fullName: patient.fullName || 'Unknown',
+          fullName: patient.fullName || t('doctor.myPatients.fallbacks.unknown'),
           email: patient.email || '',
           phone: patient.phone || '',
           profileImage: patient.profileImage || null,
@@ -159,7 +161,7 @@ export const MyPatientsScreen = () => {
     });
 
     return Array.from(patientMap.values());
-  }, [appointments]);
+  }, [appointments, t]);
 
   // Calculate age from date of birth
   const calculateAge = (dob: string | null): number | null => {
@@ -178,25 +180,25 @@ export const MyPatientsScreen = () => {
   const formatDate = (date: Date | null): string => {
     if (!date) return '';
     const d = new Date(date);
-    return d.toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' });
+    return d.toLocaleDateString(i18n.language || 'en-US', { day: 'numeric', month: 'short', year: 'numeric' });
   };
 
   // Format date and time
   const formatDateTime = (date: string, time?: string): string => {
     if (!date) return '';
     const d = new Date(date);
-    const dateStr = d.toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' });
+    const dateStr = d.toLocaleDateString(i18n.language || 'en-US', { day: 'numeric', month: 'short', year: 'numeric' });
     return time ? `${dateStr} ${time}` : dateStr;
   };
 
   // Get location string
   const getLocation = (address: any): string => {
-    if (!address) return 'N/A';
+    if (!address) return t('common.na');
     const parts: string[] = [];
     if (address.city) parts.push(address.city);
     if (address.state) parts.push(address.state);
     if (address.country) parts.push(address.country);
-    return parts.length > 0 ? parts.join(', ') : 'N/A';
+    return parts.length > 0 ? parts.join(', ') : t('common.na');
   };
 
   // Filter patients based on active/inactive tab
@@ -271,7 +273,7 @@ export const MyPatientsScreen = () => {
       <SafeAreaView style={styles.container}>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={colors.primary} />
-          <Text style={styles.loadingText}>Loading patients...</Text>
+          <Text style={styles.loadingText}>{t('doctor.myPatients.loading')}</Text>
         </View>
       </SafeAreaView>
     );
@@ -282,9 +284,11 @@ export const MyPatientsScreen = () => {
       <SafeAreaView style={styles.container}>
         <View style={styles.errorContainer}>
           <Ionicons name="alert-circle-outline" size={48} color={colors.error} />
-          <Text style={styles.errorTitle}>Error Loading Patients</Text>
+          <Text style={styles.errorTitle}>{t('doctor.myPatients.errorTitle')}</Text>
           <Text style={styles.errorText}>
-            {(error as any)?.response?.data?.message || (error as any)?.message || 'Failed to load patients'}
+            {(error as any)?.response?.data?.message ||
+              (error as any)?.message ||
+              t('doctor.myPatients.errors.failedToLoadPatients')}
           </Text>
         </View>
       </SafeAreaView>
@@ -295,12 +299,12 @@ export const MyPatientsScreen = () => {
     <SafeAreaView style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>My Patients</Text>
+        <Text style={styles.headerTitle}>{t('doctor.myPatients.title')}</Text>
         <View style={styles.searchContainer}>
           <Ionicons name="search" size={20} color={colors.textSecondary} style={styles.searchIcon} />
           <TextInput
             style={styles.searchInput}
-            placeholder="Search"
+            placeholder={t('common.search')}
             placeholderTextColor={colors.textLight}
             value={searchQuery}
             onChangeText={setSearchQuery}
@@ -318,7 +322,7 @@ export const MyPatientsScreen = () => {
           }}
         >
           <Text style={[styles.tabText, activeTab === 'active' && styles.tabTextActive]}>
-            Active <Text style={styles.tabCount}>({activeCount})</Text>
+            {t('doctor.myPatients.tabs.active')} <Text style={styles.tabCount}>({activeCount})</Text>
           </Text>
         </TouchableOpacity>
         <TouchableOpacity
@@ -329,7 +333,7 @@ export const MyPatientsScreen = () => {
           }}
         >
           <Text style={[styles.tabText, activeTab === 'inactive' && styles.tabTextActive]}>
-            InActive <Text style={styles.tabCount}>({inactiveCount})</Text>
+            {t('doctor.myPatients.tabs.inactive')} <Text style={styles.tabCount}>({inactiveCount})</Text>
           </Text>
         </TouchableOpacity>
       </View>
@@ -343,11 +347,11 @@ export const MyPatientsScreen = () => {
         {paginatedPatients.length === 0 ? (
           <View style={styles.emptyContainer}>
             <Ionicons name="people-outline" size={64} color={colors.textLight} />
-            <Text style={styles.emptyTitle}>No patients found</Text>
+            <Text style={styles.emptyTitle}>{t('doctor.myPatients.empty.title')}</Text>
             <Text style={styles.emptyText}>
               {activeTab === 'active'
-                ? "You don't have any active patients yet."
-                : "You don't have any inactive patients."}
+                ? t('doctor.myPatients.empty.activeSubtitle')
+                : t('doctor.myPatients.empty.inactiveSubtitle')}
             </Text>
           </View>
         ) : (
@@ -373,7 +377,7 @@ export const MyPatientsScreen = () => {
                       <Text style={styles.patientId}>#{patient._id.slice(-6).toUpperCase()}</Text>
                       <Text style={styles.patientName}>{patient.fullName}</Text>
                       <View style={styles.patientDetails}>
-                        {age && <Text style={styles.patientDetail}>Age: {age}</Text>}
+                        {age && <Text style={styles.patientDetail}>{t('doctor.myPatients.labels.age', { age })}</Text>}
                         {patient.gender && <Text style={styles.patientDetail}>{patient.gender}</Text>}
                         {patient.bloodGroup && <Text style={styles.patientDetail}>{patient.bloodGroup}</Text>}
                       </View>
@@ -398,9 +402,9 @@ export const MyPatientsScreen = () => {
                   <View style={styles.patientFooter}>
                     <Ionicons name="calendar-outline" size={16} color={colors.textSecondary} />
                     <Text style={styles.footerText}>
-                      Last Booking{' '}
+                      {t('doctor.myPatients.labels.lastBooking')}{' '}
                       <Text style={styles.footerValue}>
-                        {patient.lastBookingDate ? formatDate(patient.lastBookingDate) : 'N/A'}
+                        {patient.lastBookingDate ? formatDate(patient.lastBookingDate) : t('common.na')}
                       </Text>
                     </Text>
                   </View>
@@ -419,11 +423,11 @@ export const MyPatientsScreen = () => {
               disabled={page === 1}
             >
               <Text style={[styles.paginationButtonText, page === 1 && styles.paginationButtonTextDisabled]}>
-                Previous
+                {t('common.prev')}
               </Text>
             </TouchableOpacity>
             <Text style={styles.paginationText}>
-              Page {page} of {totalPages}
+              {t('doctor.myPatients.pagination.pageOf', { page, pages: totalPages })}
             </Text>
             <TouchableOpacity
               style={[styles.paginationButton, page === totalPages && styles.paginationButtonDisabled]}
@@ -433,7 +437,7 @@ export const MyPatientsScreen = () => {
               <Text
                 style={[styles.paginationButtonText, page === totalPages && styles.paginationButtonTextDisabled]}
               >
-                Next
+                {t('common.next')}
               </Text>
             </TouchableOpacity>
           </View>

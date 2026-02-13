@@ -24,6 +24,8 @@ import * as scheduleApi from '../../services/schedule';
 import * as appointmentApi from '../../services/appointment';
 import { API_BASE_URL } from '../../config/api';
 import Toast from 'react-native-toast-message';
+import { useTranslation } from 'react-i18next';
+import * as Localization from 'expo-localization';
 
 const defaultAvatar = require('../../../assets/avatar.png');
 
@@ -74,6 +76,16 @@ const BookingScreen = () => {
   const { doctorId } = route.params;
   const { user } = useAuth();
   const userId = user?._id || user?.id;
+  const { t, i18n } = useTranslation();
+
+  const locale = i18n.language?.toLowerCase().startsWith('it') ? 'it-IT' : 'en-US';
+
+  const formatCurrency = (value: number) => {
+    return new Intl.NumberFormat(locale, {
+      style: 'currency',
+      currency: 'EUR',
+    }).format(Number.isFinite(value) ? value : 0);
+  };
   
   const [currentStep, setCurrentStep] = useState(1);
   const [formData, setFormData] = useState({
@@ -90,14 +102,17 @@ const BookingScreen = () => {
     amount: 0,
   });
 
-  const steps = [
-    { id: 1, label: 'Specialty' },
-    { id: 2, label: 'Appointment Type' },
-    { id: 3, label: 'Date & Time' },
-    { id: 4, label: 'Basic Information' },
-    { id: 5, label: 'Payment' },
-    { id: 6, label: 'Confirmation' },
-  ];
+  const steps = useMemo(
+    () => [
+      { id: 1, label: t('appointments.booking.steps.specialty') },
+      { id: 2, label: t('appointments.booking.steps.appointmentType') },
+      { id: 3, label: t('appointments.booking.steps.dateTime') },
+      { id: 4, label: t('appointments.booking.steps.basicInfo') },
+      { id: 5, label: t('appointments.booking.steps.payment') },
+      { id: 6, label: t('appointments.booking.steps.confirmation') },
+    ],
+    [t]
+  );
 
   // Fetch doctor profile
   const { data: doctorResponse, isLoading: doctorLoading, error: doctorError } = useQuery({
@@ -148,7 +163,7 @@ const BookingScreen = () => {
 
   // Get doctor info helpers
   const doctorName = useMemo(() => {
-    return doctor?.userId?.fullName || doctor?.fullName || 'Unknown Doctor';
+    return doctor?.userId?.fullName || doctor?.fullName || t('common.unknownDoctor');
   }, [doctor]);
 
   const doctorImage = useMemo(() => {
@@ -156,11 +171,11 @@ const BookingScreen = () => {
   }, [doctor]);
 
   const doctorLocation = useMemo(() => {
-    if (!doctor?.clinics?.[0]) return 'Location not available';
+    if (!doctor?.clinics?.[0]) return t('appointments.booking.doctor.locationNotAvailable');
     const clinic = doctor.clinics[0];
     const address = `${clinic.address || ''}, ${clinic.city || ''}`.trim();
     const cityState = `${clinic.city || ''}, ${clinic.state || ''}`.trim();
-    return address || cityState || 'Location not available';
+    return address || cityState || t('appointments.booking.doctor.locationNotAvailable');
   }, [doctor]);
 
   const doctorRating = useMemo(() => {
@@ -170,7 +185,7 @@ const BookingScreen = () => {
   const doctorSpecializationName = useMemo(() => {
     if (doctorSpecialization?.name) return doctorSpecialization.name;
     if (doctor?.specialization?.name) return doctor.specialization.name;
-    return 'Not Specified';
+    return t('appointments.details.notSpecified');
   }, [doctorSpecialization, doctor]);
 
   // Set specialization when doctor loads
@@ -190,6 +205,8 @@ const BookingScreen = () => {
       patientId: string;
       appointmentDate: string;
       appointmentTime: string;
+      timezone?: string;
+      timezoneOffset?: number;
       bookingType: 'VISIT' | 'ONLINE';
       patientNotes?: string;
       clinicName?: string;
@@ -198,8 +215,8 @@ const BookingScreen = () => {
       const appointment = response.data || response;
       Toast.show({
         type: 'success',
-        text1: 'Success',
-        text2: 'Appointment request created successfully!',
+        text1: t('common.success'),
+        text2: t('appointments.booking.toasts.requestCreated'),
       });
       // Navigate to the Appointments tab (works even if Booking was opened from Home stack)
       try {
@@ -216,10 +233,13 @@ const BookingScreen = () => {
       navigation.navigate('AppointmentsScreen');
     },
     onError: (error: any) => {
-      const errorMessage = error?.response?.data?.message || error?.message || 'Failed to create appointment';
+      const errorMessage =
+        error?.response?.data?.message ||
+        error?.message ||
+        t('appointments.booking.errors.failedToCreateAppointmentFallback');
       Toast.show({
         type: 'error',
-        text1: 'Error',
+        text1: t('common.error'),
         text2: errorMessage,
       });
     },
@@ -247,8 +267,8 @@ const BookingScreen = () => {
       if (!formData.appointmentDate || !formData.appointmentTime) {
         Toast.show({
           type: 'error',
-          text1: 'Validation Error',
-          text2: 'Please select date and time',
+          text1: t('appointments.booking.validation.title'),
+          text2: t('appointments.booking.validation.selectDateTime'),
         });
         return;
       }
@@ -272,17 +292,31 @@ const BookingScreen = () => {
     if (!user) {
       Toast.show({
         type: 'error',
-        text1: 'Login Required',
-        text2: 'Please login to book an appointment',
+        text1: t('appointments.booking.auth.loginRequiredTitle'),
+        text2: t('appointments.booking.auth.loginRequiredBody'),
       });
       return;
     }
+
+    const getTimezoneOffsetForLocalDateTime = (dateStr: string, timeStr: string) => {
+      const [year, month, day] = String(dateStr).split('-').map((x) => Number(x));
+      const [hours, minutes] = String(timeStr).split(':').map((x) => Number(x));
+
+      if (!Number.isFinite(year) || !Number.isFinite(month) || !Number.isFinite(day) || !Number.isFinite(hours) || !Number.isFinite(minutes)) {
+        return -new Date().getTimezoneOffset();
+      }
+
+      const dt = new Date(year, month - 1, day, hours, minutes, 0, 0);
+      return -dt.getTimezoneOffset();
+    };
 
     const appointmentData = {
       doctorId: formData.doctorId,
       patientId: userId!,
       appointmentDate: formData.appointmentDate,
       appointmentTime: formData.appointmentTime,
+      timezone: Localization.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone,
+      timezoneOffset: getTimezoneOffsetForLocalDateTime(formData.appointmentDate, formData.appointmentTime),
       bookingType: formData.bookingType,
       patientNotes: formData.patientNotes || undefined,
       clinicName: formData.clinicName || undefined,
@@ -295,7 +329,7 @@ const BookingScreen = () => {
   const formatDate = (dateString: string) => {
     if (!dateString) return '';
     const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+    return date.toLocaleDateString(locale, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
   };
 
   // Get minimum date (today)
@@ -365,18 +399,27 @@ const BookingScreen = () => {
     setCalendarDate(newDate);
   };
 
-  const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-  const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  const monthLabel = useMemo(() => {
+    return new Intl.DateTimeFormat(locale, { month: 'long' }).format(calendarDate);
+  }, [calendarDate, locale]);
+
+  const dayNames = useMemo(() => {
+    const baseSunday = new Date(Date.UTC(2021, 7, 1));
+    return Array.from({ length: 7 }, (_, idx) => {
+      const d = new Date(baseSunday.getTime() + idx * 86400000);
+      return new Intl.DateTimeFormat(locale, { weekday: 'short' }).format(d);
+    });
+  }, [locale]);
 
   // Handle missing doctorId
   if (!doctorId) {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.errorContainer}>
-          <Text style={styles.errorTitle}>Doctor ID Required</Text>
-          <Text style={styles.errorText}>Please select a doctor from the search page to book an appointment.</Text>
+          <Text style={styles.errorTitle}>{t('appointments.booking.errors.doctorIdRequiredTitle')}</Text>
+          <Text style={styles.errorText}>{t('appointments.booking.errors.doctorIdRequiredBody')}</Text>
           <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
-            <Text style={styles.backButtonText}>Go Back</Text>
+            <Text style={styles.backButtonText}>{t('common.goBack')}</Text>
           </TouchableOpacity>
         </View>
       </SafeAreaView>
@@ -407,17 +450,19 @@ const BookingScreen = () => {
         {doctorLoading && !doctor ? (
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color={colors.primary} />
-            <Text style={styles.loadingText}>Loading doctor information...</Text>
+            <Text style={styles.loadingText}>{t('appointments.booking.loading.loadingDoctor')}</Text>
           </View>
         ) : doctorError && !doctor ? (
           <View style={styles.errorContainer}>
             <Ionicons name="alert-circle-outline" size={64} color={colors.textSecondary} />
-            <Text style={styles.errorTitle}>Error Loading Doctor</Text>
+            <Text style={styles.errorTitle}>{t('appointments.booking.errors.errorLoadingDoctorTitle')}</Text>
             <Text style={styles.errorText}>
-              {doctorError instanceof Error ? doctorError.message : 'Failed to load doctor information'}
+              {doctorError instanceof Error
+                ? doctorError.message
+                : t('appointments.booking.errors.failedToLoadDoctorFallback')}
             </Text>
             <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
-              <Text style={styles.backButtonText}>Go Back</Text>
+              <Text style={styles.backButtonText}>{t('common.goBack')}</Text>
             </TouchableOpacity>
           </View>
         ) : (
@@ -455,7 +500,7 @@ const BookingScreen = () => {
           {currentStep === 1 && (
             <View style={styles.stepContent}>
               <View style={styles.formSection}>
-                <Text style={styles.formLabel}>Speciality</Text>
+                <Text style={styles.formLabel}>{t('appointments.booking.labels.specialty')}</Text>
                 {doctorSpecialization ? (
                   <View style={styles.specialtyDisplay}>
                     <Text style={styles.specialtyDisplayText}>{doctorSpecializationName}</Text>
@@ -464,14 +509,14 @@ const BookingScreen = () => {
                   <View style={styles.warningBox}>
                     <Ionicons name="warning-outline" size={20} color={colors.warning} />
                     <Text style={styles.warningText}>
-                      This doctor has not specified a specialization yet. You can still proceed with the booking.
+                      {t('appointments.booking.warnings.noSpecialization')}
                     </Text>
                   </View>
                 )}
               </View>
 
               <View style={styles.servicesSection}>
-                <Text style={styles.sectionTitle}>Services</Text>
+                <Text style={styles.sectionTitle}>{t('appointments.booking.sections.services')}</Text>
                 {doctorServices.length > 0 ? (
                   <View style={styles.servicesGrid}>
                     {doctorServices.map((service: any, index: number) => {
@@ -499,7 +544,7 @@ const BookingScreen = () => {
                           <View style={styles.serviceInfo}>
                             <Text style={styles.serviceTitle}>{serviceName}</Text>
                             {servicePrice > 0 && (
-                              <Text style={styles.servicePrice}>${servicePrice}</Text>
+                              <Text style={styles.servicePrice}>{formatCurrency(servicePrice)}</Text>
                             )}
                           </View>
                         </TouchableOpacity>
@@ -509,7 +554,7 @@ const BookingScreen = () => {
                 ) : (
                   <View style={styles.infoBox}>
                     <Text style={styles.infoText}>
-                      No services available for this doctor. You can proceed to book a general consultation.
+                      {t('appointments.booking.info.noServices')}
                     </Text>
                   </View>
                 )}
@@ -520,7 +565,7 @@ const BookingScreen = () => {
           {/* Step 2: Appointment Type */}
           {currentStep === 2 && (
             <View style={styles.stepContent}>
-              <Text style={styles.stepTitle}>Select Appointment Type</Text>
+              <Text style={styles.stepTitle}>{t('appointments.booking.titles.selectAppointmentType')}</Text>
               <View style={styles.appointmentTypeContainer}>
                 <TouchableOpacity
                   style={[
@@ -535,12 +580,12 @@ const BookingScreen = () => {
                     size={48}
                     color={formData.bookingType === 'VISIT' ? colors.primary : colors.textSecondary}
                   />
-                  <Text style={styles.appointmentTypeTitle}>In-Person Visit</Text>
-                  <Text style={styles.appointmentTypeDescription}>Visit the doctor at their clinic</Text>
+                  <Text style={styles.appointmentTypeTitle}>{t('appointments.booking.appointmentType.visitTitle')}</Text>
+                  <Text style={styles.appointmentTypeDescription}>{t('appointments.booking.appointmentType.visitDescription')}</Text>
                   {formData.bookingType === 'VISIT' && (
                     <View style={styles.selectedIndicator}>
                       <Ionicons name="checkmark-circle" size={20} color={colors.primary} />
-                      <Text style={styles.selectedText}>Selected</Text>
+                      <Text style={styles.selectedText}>{t('appointments.booking.labels.selected')}</Text>
                     </View>
                   )}
                 </TouchableOpacity>
@@ -557,12 +602,12 @@ const BookingScreen = () => {
                     size={48}
                     color={formData.bookingType === 'ONLINE' ? colors.primary : colors.textSecondary}
                   />
-                  <Text style={styles.appointmentTypeTitle}>Online Consultation</Text>
-                  <Text style={styles.appointmentTypeDescription}>Online consultation with the doctor</Text>
+                  <Text style={styles.appointmentTypeTitle}>{t('appointments.booking.appointmentType.onlineTitle')}</Text>
+                  <Text style={styles.appointmentTypeDescription}>{t('appointments.booking.appointmentType.onlineDescription')}</Text>
                   {formData.bookingType === 'ONLINE' && (
                     <View style={styles.selectedIndicator}>
                       <Ionicons name="checkmark-circle" size={20} color={colors.primary} />
-                      <Text style={styles.selectedText}>Selected</Text>
+                      <Text style={styles.selectedText}>{t('appointments.booking.labels.selected')}</Text>
                     </View>
                   )}
                 </TouchableOpacity>
@@ -573,10 +618,10 @@ const BookingScreen = () => {
           {/* Step 3: Date & Time */}
           {currentStep === 3 && (
             <View style={styles.stepContent}>
-              <Text style={styles.stepTitle}>Select Date & Time</Text>
+              <Text style={styles.stepTitle}>{t('appointments.booking.titles.selectDateTime')}</Text>
               <View style={styles.dateTimeContainer}>
                 <View style={styles.dateInputContainer}>
-                  <Text style={styles.inputLabel}>Select Date</Text>
+                  <Text style={styles.inputLabel}>{t('appointments.booking.labels.selectDate')}</Text>
                   
                   {/* Calendar */}
                   <View style={styles.calendarContainer}>
@@ -590,7 +635,7 @@ const BookingScreen = () => {
                         <Ionicons name="chevron-back" size={20} color={colors.primary} />
                       </TouchableOpacity>
                       <Text style={styles.calendarMonthText}>
-                        {monthNames[calendarDate.getMonth()]} {calendarDate.getFullYear()}
+                        {monthLabel} {calendarDate.getFullYear()}
                       </Text>
                       <TouchableOpacity
                         style={styles.calendarNavButton}
@@ -649,25 +694,25 @@ const BookingScreen = () => {
                       <View style={styles.selectedDateContainer}>
                         <Ionicons name="calendar-outline" size={16} color={colors.primary} />
                         <Text style={styles.selectedDateText}>
-                          Selected: {formatDate(formData.appointmentDate)}
+                          {t('appointments.booking.labels.selectedDate', { date: formatDate(formData.appointmentDate) })}
                         </Text>
                       </View>
                     )}
                   </View>
                 </View>
                 <View style={styles.timeSlotsContainer}>
-                  <Text style={styles.inputLabel}>Available Time Slots</Text>
+                  <Text style={styles.inputLabel}>{t('appointments.booking.labels.availableTimeSlots')}</Text>
                   {slotsLoading ? (
                     <View style={styles.loadingSlots}>
                       <ActivityIndicator size="small" color={colors.primary} />
-                      <Text style={styles.loadingSlotsText}>Loading slots...</Text>
+                      <Text style={styles.loadingSlotsText}>{t('appointments.booking.loading.loadingSlots')}</Text>
                     </View>
                   ) : availableSlots.length === 0 ? (
                     <View style={styles.noSlotsBox}>
                       <Text style={styles.noSlotsText}>
                         {formData.appointmentDate
-                          ? 'No available slots for this date. Please select another date.'
-                          : 'Please select a date first'}
+                          ? t('appointments.booking.slots.noneForDate')
+                          : t('appointments.booking.slots.selectDateFirst')}
                       </Text>
                     </View>
                   ) : (
@@ -706,15 +751,15 @@ const BookingScreen = () => {
           {/* Step 4: Basic Information */}
           {currentStep === 4 && (
             <View style={styles.stepContent}>
-              <Text style={styles.stepTitle}>Basic Information</Text>
+              <Text style={styles.stepTitle}>{t('appointments.booking.titles.basicInformation')}</Text>
               <View style={styles.basicInfoContainer}>
                 <View style={styles.inputContainer}>
-                  <Text style={styles.inputLabel}>Patient Notes (Optional)</Text>
+                  <Text style={styles.inputLabel}>{t('appointments.booking.labels.patientNotesOptional')}</Text>
                   <TextInput
                     style={styles.textArea}
                     value={formData.patientNotes}
                     onChangeText={(text) => updateFormData('patientNotes', text)}
-                    placeholder="Any additional information you'd like to share with the doctor..."
+                    placeholder={t('appointments.booking.placeholders.patientNotes')}
                     placeholderTextColor={colors.textLight}
                     multiline
                     numberOfLines={4}
@@ -722,12 +767,12 @@ const BookingScreen = () => {
                 </View>
                 {formData.bookingType === 'VISIT' && (
                   <View style={styles.inputContainer}>
-                    <Text style={styles.inputLabel}>Clinic Name (Optional)</Text>
+                    <Text style={styles.inputLabel}>{t('appointments.booking.labels.clinicNameOptional')}</Text>
                     <TextInput
                       style={styles.textInput}
                       value={formData.clinicName}
                       onChangeText={(text) => updateFormData('clinicName', text)}
-                      placeholder="Enter clinic name"
+                      placeholder={t('appointments.booking.placeholders.clinicName')}
                       placeholderTextColor={colors.textLight}
                     />
                   </View>
@@ -739,26 +784,26 @@ const BookingScreen = () => {
           {/* Step 5: Payment */}
           {currentStep === 5 && (
             <View style={styles.stepContent}>
-              <Text style={styles.stepTitle}>Payment</Text>
+              <Text style={styles.stepTitle}>{t('appointments.booking.titles.payment')}</Text>
               <View style={styles.paymentContainer}>
                 <View style={styles.infoBox}>
                   <Text style={styles.infoText}>
-                    Payment is optional. You can proceed without payment and pay later.
+                    {t('appointments.booking.info.paymentOptional')}
                   </Text>
                 </View>
                 <View style={styles.inputContainer}>
-                  <Text style={styles.inputLabel}>Payment Method</Text>
+                  <Text style={styles.inputLabel}>{t('appointments.booking.labels.paymentMethod')}</Text>
                   <View style={styles.pickerContainer}>
                     <Text style={styles.pickerText}>
-                      {formData.paymentMethod === 'DUMMY' ? 'Test Payment (Dummy)' :
-                       formData.paymentMethod === 'CARD' ? 'Credit/Debit Card' :
-                       formData.paymentMethod === 'PAYPAL' ? 'PayPal' :
-                       formData.paymentMethod === 'BANK' ? 'Bank Transfer' : formData.paymentMethod}
+                      {formData.paymentMethod === 'DUMMY' ? t('appointments.booking.paymentMethods.dummy') :
+                       formData.paymentMethod === 'CARD' ? t('appointments.booking.paymentMethods.card') :
+                       formData.paymentMethod === 'PAYPAL' ? t('appointments.booking.paymentMethods.paypal') :
+                       formData.paymentMethod === 'BANK' ? t('appointments.booking.paymentMethods.bank') : formData.paymentMethod}
                     </Text>
                   </View>
                 </View>
                 <View style={styles.inputContainer}>
-                  <Text style={styles.inputLabel}>Amount (Optional)</Text>
+                  <Text style={styles.inputLabel}>{t('appointments.booking.labels.amountOptional')}</Text>
                   <TextInput
                     style={styles.textInput}
                     value={formData.amount > 0 ? formData.amount.toString() : ''}
@@ -766,7 +811,7 @@ const BookingScreen = () => {
                       const amount = parseFloat(text) || 0;
                       updateFormData('amount', amount);
                     }}
-                    placeholder="0.00"
+                    placeholder={t('appointments.booking.placeholders.amount')}
                     placeholderTextColor={colors.textLight}
                     keyboardType="decimal-pad"
                   />
@@ -778,46 +823,48 @@ const BookingScreen = () => {
           {/* Step 6: Confirmation */}
           {currentStep === 6 && (
             <View style={styles.stepContent}>
-              <Text style={styles.stepTitle}>Confirm Appointment</Text>
+              <Text style={styles.stepTitle}>{t('appointments.booking.titles.confirmAppointment')}</Text>
               <View style={styles.confirmationContainer}>
                 <View style={styles.confirmationRow}>
-                  <Text style={styles.confirmationLabel}>Doctor:</Text>
+                  <Text style={styles.confirmationLabel}>{t('appointments.booking.confirmation.doctor')}</Text>
                   <Text style={styles.confirmationValue}>{doctorName}</Text>
                 </View>
                 <View style={styles.confirmationRow}>
-                  <Text style={styles.confirmationLabel}>Specialization:</Text>
+                  <Text style={styles.confirmationLabel}>{t('appointments.booking.confirmation.specialization')}</Text>
                   <Text style={styles.confirmationValue}>{doctorSpecializationName}</Text>
                 </View>
                 <View style={styles.confirmationRow}>
-                  <Text style={styles.confirmationLabel}>Appointment Type:</Text>
+                  <Text style={styles.confirmationLabel}>{t('appointments.booking.confirmation.appointmentType')}</Text>
                   <Text style={styles.confirmationValue}>
-                    {formData.bookingType === 'VISIT' ? 'In-Person Visit' : 'Online Consultation'}
+                    {formData.bookingType === 'VISIT'
+                      ? t('appointments.booking.appointmentType.visitTitle')
+                      : t('appointments.booking.appointmentType.onlineTitle')}
                   </Text>
                 </View>
                 <View style={styles.confirmationRow}>
-                  <Text style={styles.confirmationLabel}>Date:</Text>
+                  <Text style={styles.confirmationLabel}>{t('appointments.booking.confirmation.date')}</Text>
                   <Text style={styles.confirmationValue}>{formatDate(formData.appointmentDate)}</Text>
                 </View>
                 <View style={styles.confirmationRow}>
-                  <Text style={styles.confirmationLabel}>Time:</Text>
-                  <Text style={styles.confirmationValue}>{formData.appointmentTime || 'N/A'}</Text>
+                  <Text style={styles.confirmationLabel}>{t('appointments.booking.confirmation.time')}</Text>
+                  <Text style={styles.confirmationValue}>{formData.appointmentTime || t('common.na')}</Text>
                 </View>
                 {formData.clinicName && (
                   <View style={styles.confirmationRow}>
-                    <Text style={styles.confirmationLabel}>Clinic:</Text>
+                    <Text style={styles.confirmationLabel}>{t('appointments.booking.confirmation.clinic')}</Text>
                     <Text style={styles.confirmationValue}>{formData.clinicName}</Text>
                   </View>
                 )}
                 {formData.patientNotes && (
                   <View style={styles.confirmationRow}>
-                    <Text style={styles.confirmationLabel}>Notes:</Text>
+                    <Text style={styles.confirmationLabel}>{t('appointments.booking.confirmation.notes')}</Text>
                     <Text style={styles.confirmationValue}>{formData.patientNotes}</Text>
                   </View>
                 )}
                 {formData.amount > 0 && (
                   <View style={styles.confirmationRow}>
-                    <Text style={styles.confirmationLabel}>Payment Amount:</Text>
-                    <Text style={styles.confirmationValue}>${formData.amount.toFixed(2)}</Text>
+                    <Text style={styles.confirmationLabel}>{t('appointments.booking.confirmation.paymentAmount')}</Text>
+                    <Text style={styles.confirmationValue}>{formatCurrency(formData.amount)}</Text>
                   </View>
                 )}
               </View>
@@ -828,7 +875,7 @@ const BookingScreen = () => {
           <View style={styles.navigationButtons}>
             <TouchableOpacity style={styles.backBtn} onPress={handleBack} activeOpacity={0.7}>
               <Ionicons name="arrow-back" size={18} color={colors.text} />
-              <Text style={styles.backBtnText}>Back</Text>
+              <Text style={styles.backBtnText}>{t('common.prev')}</Text>
             </TouchableOpacity>
             {currentStep === 6 ? (
               <TouchableOpacity
@@ -840,11 +887,11 @@ const BookingScreen = () => {
                 {createAppointmentMutation.isPending ? (
                   <>
                     <ActivityIndicator size="small" color={colors.textWhite} style={{ marginRight: 8 }} />
-                    <Text style={styles.nextBtnText}>Creating...</Text>
+                    <Text style={styles.nextBtnText}>{t('appointments.booking.actions.creating')}</Text>
                   </>
                 ) : (
                   <>
-                    <Text style={styles.nextBtnText}>Confirm Appointment</Text>
+                    <Text style={styles.nextBtnText}>{t('appointments.booking.actions.confirmAppointment')}</Text>
                     <Ionicons name="checkmark" size={18} color={colors.textWhite} />
                   </>
                 )}
@@ -852,7 +899,9 @@ const BookingScreen = () => {
             ) : (
               <TouchableOpacity style={styles.nextBtn} onPress={handleNext} activeOpacity={0.8}>
                 <Text style={styles.nextBtnText}>
-                  {currentStep === 5 ? 'Review & Confirm' : `Next: ${steps[currentStep]?.label}`}
+                  {currentStep === 5
+                    ? t('appointments.booking.actions.reviewConfirm')
+                    : t('appointments.booking.actions.nextWithLabel', { label: steps[currentStep]?.label })}
                 </Text>
                 <Ionicons name="arrow-forward" size={18} color={colors.textWhite} />
               </TouchableOpacity>

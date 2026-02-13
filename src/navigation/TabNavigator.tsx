@@ -8,6 +8,8 @@ import { Feather } from '@expo/vector-icons';
 
 import { TabParamList } from './types';
 
+import { useTranslation } from 'react-i18next';
+
 import { HomeStack } from './stacks/HomeStack';
 
 import { AppointmentsStack } from './stacks/AppointmentsStack';
@@ -37,6 +39,31 @@ const Tab = createBottomTabNavigator<TabParamList>();
 export const TabNavigator = () => {
 
   const { user } = useAuth();
+
+  const { t } = useTranslation();
+
+  const getTabLabel = (name: string) => {
+    switch (name) {
+      case 'Home':
+        return t('tabs.home');
+      case 'Appointments':
+        return t('tabs.appointments');
+      case 'Chat':
+        return t('tabs.chat');
+      case 'Pharmacy':
+        return t('tabs.pharmacy');
+      case 'More':
+        return t('tabs.more');
+      case 'Dashboard':
+        return t('tabs.dashboard');
+      case 'Products':
+        return t('tabs.products');
+      case 'Orders':
+        return t('tabs.orders');
+      default:
+        return name;
+    }
+  };
 
 
 
@@ -107,6 +134,8 @@ export const TabNavigator = () => {
       screenOptions={({ route }) => ({
 
         headerShown: false,
+
+        tabBarLabel: getTabLabel(route.name),
 
         tabBarIcon: ({ focused, color, size }) => {
 
@@ -276,11 +305,14 @@ export const TabNavigator = () => {
 
               e.preventDefault();
 
+              const nav = navigation as any;
+              if (!nav) return;
+
               
 
               // Get the current navigation state
 
-              const state = navigation.getState();
+              const state = nav.getState();
 
               
 
@@ -314,9 +346,9 @@ export const TabNavigator = () => {
 
               // Find the target tab's route
 
-              const targetRoute = state.routes.find((r) => r.name === tab.name);
+              const targetRoute = state.routes.find((r: any) => r.name === tab.name);
 
-              const targetTabIndex = state.routes.findIndex((r) => r.name === tab.name);
+              const targetTabIndex = state.routes.findIndex((r: any) => r.name === tab.name);
 
               
 
@@ -326,13 +358,13 @@ export const TabNavigator = () => {
 
                 // Reset the target tab's stack to root screen
 
-                navigation.dispatch(
+                nav.dispatch(
 
                   CommonActions.reset({
 
                     index: targetTabIndex,
 
-                    routes: state.routes.map((r) => {
+                    routes: state.routes.map((r: any) => {
 
                       if (r.name === tab.name) {
 
@@ -368,7 +400,7 @@ export const TabNavigator = () => {
 
                 // Tab doesn't exist in state, navigate to it
 
-                (navigation as any).navigate(tab.name);
+                nav.navigate(tab.name);
 
               }
 

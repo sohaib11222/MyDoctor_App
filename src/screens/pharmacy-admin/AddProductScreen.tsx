@@ -29,6 +29,7 @@ import * as uploadApi from '../../services/upload';
 import Toast from 'react-native-toast-message';
 import { API_BASE_URL } from '../../config/api';
 import { copyImageToCacheUri, deleteCacheFiles } from '../../utils/imageUpload';
+import { useTranslation } from 'react-i18next';
 
 type AddProductScreenNavigationProp = NativeStackNavigationProp<ProductsStackParamList>;
 
@@ -48,6 +49,7 @@ const categories = [
 export const AddProductScreen = () => {
   const navigation = useNavigation<AddProductScreenNavigationProp>();
   const { user } = useAuth();
+  const { t } = useTranslation();
   const queryClient = useQueryClient();
   const isPharmacy = user?.role === 'pharmacy' || (user as any)?.role === 'PHARMACY';
   const isParapharmacy = user?.role === 'parapharmacy' || (user as any)?.role === 'PARAPHARMACY';
@@ -155,11 +157,13 @@ export const AddProductScreen = () => {
       <SafeAreaView style={styles.container}>
         <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24 }}>
           <Ionicons name="time-outline" size={54} color={colors.warning} />
-          <Text style={{ marginTop: 12, fontSize: 18, fontWeight: '700', color: colors.text }}>Pending Approval</Text>
-          <Text style={{ marginTop: 8, fontSize: 13, color: colors.textSecondary, textAlign: 'center' }}>
-            Your pharmacy account is pending admin approval. You cannot add products until approved.
+          <Text style={{ marginTop: 12, fontSize: 18, fontWeight: '700', color: colors.text }}>
+            {t('pharmacyAdmin.products.add.gates.pendingApprovalTitle')}
           </Text>
-          <Button title="Go Back" onPress={() => navigation.goBack()} style={{ marginTop: 16, width: '100%' }} />
+          <Text style={{ marginTop: 8, fontSize: 13, color: colors.textSecondary, textAlign: 'center' }}>
+            {t('pharmacyAdmin.products.add.gates.pendingApprovalBody')}
+          </Text>
+          <Button title={t('common.goBack')} onPress={() => navigation.goBack()} style={{ marginTop: 16, width: '100%' }} />
         </View>
       </SafeAreaView>
     );
@@ -170,11 +174,17 @@ export const AddProductScreen = () => {
       <SafeAreaView style={styles.container}>
         <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24 }}>
           <Ionicons name="warning-outline" size={54} color={colors.warning} />
-          <Text style={{ marginTop: 12, fontSize: 18, fontWeight: '700', color: colors.text }}>Complete Profile</Text>
-          <Text style={{ marginTop: 8, fontSize: 13, color: colors.textSecondary, textAlign: 'center' }}>
-            Please complete your pharmacy profile before adding products.
+          <Text style={{ marginTop: 12, fontSize: 18, fontWeight: '700', color: colors.text }}>
+            {t('pharmacyAdmin.products.add.gates.completeProfileTitle')}
           </Text>
-          <Button title="Complete Pharmacy Profile" onPress={goToPharmacyProfile} style={{ marginTop: 16, width: '100%' }} />
+          <Text style={{ marginTop: 8, fontSize: 13, color: colors.textSecondary, textAlign: 'center' }}>
+            {t('pharmacyAdmin.products.add.gates.completeProfileBody')}
+          </Text>
+          <Button
+            title={t('pharmacyAdmin.products.add.actions.completePharmacyProfile')}
+            onPress={goToPharmacyProfile}
+            style={{ marginTop: 16, width: '100%' }}
+          />
         </View>
       </SafeAreaView>
     );
@@ -185,7 +195,9 @@ export const AddProductScreen = () => {
       <SafeAreaView style={styles.container}>
         <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24 }}>
           <ActivityIndicator size="large" color={colors.primary} />
-          <Text style={{ marginTop: 12, fontSize: 14, color: colors.textSecondary }}>Loading subscription...</Text>
+          <Text style={{ marginTop: 12, fontSize: 14, color: colors.textSecondary }}>
+            {t('pharmacyAdmin.dashboard.banners.loadingSubscription')}
+          </Text>
         </View>
       </SafeAreaView>
     );
@@ -196,12 +208,18 @@ export const AddProductScreen = () => {
       <SafeAreaView style={styles.container}>
         <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24 }}>
           <Ionicons name="card-outline" size={54} color={colors.warning} />
-          <Text style={{ marginTop: 12, fontSize: 18, fontWeight: '700', color: colors.text }}>Subscription Required</Text>
-          <Text style={{ marginTop: 8, fontSize: 13, color: colors.textSecondary, textAlign: 'center' }}>
-            You need an active subscription to add products.
+          <Text style={{ marginTop: 12, fontSize: 18, fontWeight: '700', color: colors.text }}>
+            {t('pharmacyAdmin.products.add.gates.subscriptionRequiredTitle')}
           </Text>
-          <Button title="View Subscription Plans" onPress={goToSubscription} style={{ marginTop: 16, width: '100%' }} />
-          <Button title="Go Back" onPress={() => navigation.goBack()} style={{ marginTop: 10, width: '100%' }} />
+          <Text style={{ marginTop: 8, fontSize: 13, color: colors.textSecondary, textAlign: 'center' }}>
+            {t('pharmacyAdmin.products.add.gates.subscriptionRequiredBody')}
+          </Text>
+          <Button
+            title={t('pharmacyAdmin.orders.actions.viewSubscriptionPlans')}
+            onPress={goToSubscription}
+            style={{ marginTop: 16, width: '100%' }}
+          />
+          <Button title={t('common.goBack')} onPress={() => navigation.goBack()} style={{ marginTop: 10, width: '100%' }} />
         </View>
       </SafeAreaView>
     );
@@ -214,13 +232,13 @@ export const AddProductScreen = () => {
       queryClient.invalidateQueries({ queryKey: ['pharmacy-products'] });
       Toast.show({
         type: 'success',
-        text1: 'Success',
-        text2: 'Product created successfully!',
+        text1: t('common.success'),
+        text2: t('pharmacyAdmin.products.add.toasts.productCreated'),
       });
       navigation.goBack();
     },
     onError: (error: any) => {
-      let errorMessage = 'Failed to create product';
+      let errorMessage = t('pharmacyAdmin.products.add.errors.failedToCreateProduct');
       
       // Handle 403 Forbidden - Subscription related errors
       if (error?.response?.status === 403) {
@@ -228,7 +246,7 @@ export const AddProductScreen = () => {
         if (errorData.message) {
           errorMessage = errorData.message;
         } else {
-          errorMessage = 'You need an active FULL subscription plan to create products. Please upgrade your subscription plan.';
+          errorMessage = t('pharmacyAdmin.products.add.errors.fullSubscriptionRequired');
         }
       } else if (error?.response?.data?.message) {
         errorMessage = error.response.data.message;
@@ -238,7 +256,7 @@ export const AddProductScreen = () => {
       
       Toast.show({
         type: 'error',
-        text1: 'Error',
+        text1: t('common.error'),
         text2: errorMessage,
       });
     },
@@ -251,8 +269,8 @@ export const AddProductScreen = () => {
       queryClient.invalidateQueries({ queryKey: ['my-pharmacy'] });
       Toast.show({
         type: 'success',
-        text1: 'Success',
-        text2: 'Pharmacy created successfully!',
+        text1: t('common.success'),
+        text2: t('pharmacyAdmin.products.add.toasts.pharmacyCreated'),
       });
       setShowPharmacyModal(false);
       setPharmacyFormData({
@@ -274,10 +292,11 @@ export const AddProductScreen = () => {
       refetchMyPharmacy();
     },
     onError: (error: any) => {
-      const errorMessage = error?.response?.data?.message || error?.message || 'Failed to create pharmacy';
+      const errorMessage =
+        error?.response?.data?.message || error?.message || t('pharmacyAdmin.products.add.errors.failedToCreatePharmacy');
       Toast.show({
         type: 'error',
-        text1: 'Error',
+        text1: t('common.error'),
         text2: errorMessage,
       });
     },
@@ -298,7 +317,7 @@ export const AddProductScreen = () => {
   const pickImage = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') {
-      Alert.alert('Permission Required', 'Please grant camera roll permissions.');
+      Alert.alert(t('pharmacyAdmin.common.permissionRequiredTitle'), t('pharmacyAdmin.common.cameraRollPermissionBody'));
       return;
     }
 
@@ -316,8 +335,8 @@ export const AddProductScreen = () => {
     } catch (error) {
       Toast.show({
         type: 'error',
-        text1: 'Error',
-        text2: 'Failed to pick image',
+        text1: t('common.error'),
+        text2: t('pharmacyAdmin.products.add.errors.failedToPickImage'),
       });
     }
   };
@@ -330,8 +349,8 @@ export const AddProductScreen = () => {
     if (!pharmacyFormData.name.trim()) {
       Toast.show({
         type: 'error',
-        text1: 'Error',
-        text2: 'Please enter pharmacy name',
+        text1: t('common.error'),
+        text2: t('pharmacyAdmin.products.add.validation.enterPharmacyName'),
       });
       return;
     }
@@ -376,8 +395,8 @@ export const AddProductScreen = () => {
       setShowPharmacyModal(true);
       Toast.show({
         type: 'info',
-        text1: 'Pharmacy Required',
-        text2: 'Please create a pharmacy first before adding products',
+        text1: t('pharmacyAdmin.products.toasts.pharmacyRequiredTitle'),
+        text2: t('pharmacyAdmin.products.toasts.pharmacyRequiredBody'),
       });
       return;
     }
@@ -386,8 +405,8 @@ export const AddProductScreen = () => {
     if (!productName.trim()) {
       Toast.show({
         type: 'error',
-        text1: 'Required',
-        text2: 'Product name is required',
+        text1: t('common.required'),
+        text2: t('pharmacyAdmin.products.add.validation.productNameRequired'),
       });
       return;
     }
@@ -397,8 +416,8 @@ export const AddProductScreen = () => {
     if (priceValue === null || isNaN(priceValue) || priceValue < 0) {
       Toast.show({
         type: 'error',
-        text1: 'Invalid Price',
-        text2: 'Please enter a valid price (must be a number >= 0)',
+        text1: t('pharmacyAdmin.products.add.validation.invalidPriceTitle'),
+        text2: t('pharmacyAdmin.products.add.validation.invalidPriceBody'),
       });
       return;
     }
@@ -412,8 +431,8 @@ export const AddProductScreen = () => {
         if (isNaN(stockValue) || stockValue < 0) {
           Toast.show({
             type: 'error',
-            text1: 'Invalid Stock',
-            text2: 'Stock must be a non-negative integer',
+            text1: t('pharmacyAdmin.products.add.validation.invalidStockTitle'),
+            text2: t('pharmacyAdmin.products.add.validation.invalidStockBody'),
           });
           return;
         }
@@ -429,16 +448,16 @@ export const AddProductScreen = () => {
         if (isNaN(discountPriceValue) || discountPriceValue < 0) {
           Toast.show({
             type: 'error',
-            text1: 'Invalid Discount',
-            text2: 'Discount price must be a non-negative number',
+            text1: t('pharmacyAdmin.products.add.validation.invalidDiscountTitle'),
+            text2: t('pharmacyAdmin.products.add.validation.invalidDiscountNonNegativeBody'),
           });
           return;
         }
         if (discountPriceValue >= priceValue) {
           Toast.show({
             type: 'error',
-            text1: 'Invalid Discount',
-            text2: 'Discount price must be less than regular price',
+            text1: t('pharmacyAdmin.products.add.validation.invalidDiscountTitle'),
+            text2: t('pharmacyAdmin.products.add.validation.invalidDiscountLessThanPriceBody'),
           });
           return;
         }
@@ -526,10 +545,10 @@ export const AddProductScreen = () => {
       const isNetworkError = error?.code === 'ERR_NETWORK' || !error?.response;
       Toast.show({
         type: 'error',
-        text1: 'Error',
+        text1: t('common.error'),
         text2: isNetworkError
-          ? 'Image upload failed. Check your connection and try again.'
-          : error?.response?.data?.message || error?.message || 'Failed to upload images',
+          ? t('pharmacyAdmin.products.add.errors.imageUploadFailed')
+          : error?.response?.data?.message || error?.message || t('pharmacyAdmin.products.add.errors.failedToUploadImages'),
       });
     } finally {
       if (tempFileUris.length > 0) {
@@ -543,7 +562,7 @@ export const AddProductScreen = () => {
       <SafeAreaView style={styles.container}>
         <View style={styles.loadingContainer}>
           <Ionicons name="alert-circle-outline" size={48} color={colors.error} />
-          <Text style={styles.loadingText}>This section is available for pharmacy accounts only.</Text>
+          <Text style={styles.loadingText}>{t('pharmacyAdmin.common.pharmacyAccountsOnly')}</Text>
         </View>
       </SafeAreaView>
     ) :
@@ -554,7 +573,7 @@ export const AddProductScreen = () => {
           <View style={styles.pharmacyBanner}>
             <Ionicons name="storefront" size={20} color={colors.success} />
             <View style={styles.pharmacyInfo}>
-              <Text style={styles.pharmacyName}>Your Pharmacy: {myPharmacy.name}</Text>
+              <Text style={styles.pharmacyName}>{t('pharmacyAdmin.products.pharmacyBanner.yourPharmacy', { name: myPharmacy.name })}</Text>
               {(myPharmacy as any).address?.city && (
                 <Text style={styles.pharmacyLocation}>{(myPharmacy as any).address.city}</Text>
               )}
@@ -564,9 +583,9 @@ export const AddProductScreen = () => {
           <View style={styles.pharmacyWarningBanner}>
             <Ionicons name="warning" size={20} color={colors.warning} />
             <View style={styles.pharmacyInfo}>
-              <Text style={styles.pharmacyWarningText}>No Pharmacy Found</Text>
+              <Text style={styles.pharmacyWarningText}>{t('pharmacyAdmin.products.pharmacyBanner.noPharmacyFoundTitle')}</Text>
               <Text style={styles.pharmacyWarningSubtext}>
-                You need to create a pharmacy before adding products
+                {t('pharmacyAdmin.products.pharmacyBanner.noPharmacyFoundBody')}
               </Text>
               <TouchableOpacity
                 style={styles.createPharmacyButton}
@@ -575,7 +594,7 @@ export const AddProductScreen = () => {
                 }}
                 activeOpacity={0.7}
               >
-                <Text style={styles.createPharmacyButtonText}>Create Pharmacy</Text>
+                <Text style={styles.createPharmacyButtonText}>{t('pharmacyAdmin.products.add.actions.createPharmacy')}</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -584,16 +603,16 @@ export const AddProductScreen = () => {
         <View style={styles.form}>
           {/* Product Name */}
           <Input
-            label="Product Name *"
-            placeholder="Enter product name"
+            label={t('pharmacyAdmin.products.add.form.productNameLabel')}
+            placeholder={t('pharmacyAdmin.products.add.form.productNamePlaceholder')}
             value={productName}
             onChangeText={setProductName}
           />
 
           {/* SKU */}
           <Input
-            label="SKU"
-            placeholder="Product SKU (optional)"
+            label={t('pharmacyAdmin.products.add.form.skuLabel')}
+            placeholder={t('pharmacyAdmin.products.add.form.skuPlaceholder')}
             value={sku}
             onChangeText={setSku}
           />
@@ -601,7 +620,7 @@ export const AddProductScreen = () => {
           {/* Price and Stock */}
           <View style={styles.row}>
             <Input
-              label="Price *"
+              label={t('pharmacyAdmin.products.add.form.priceLabel')}
               placeholder="0.00"
               value={price}
               onChangeText={setPrice}
@@ -609,7 +628,7 @@ export const AddProductScreen = () => {
               style={styles.halfInput}
             />
             <Input
-              label="Stock"
+              label={t('pharmacyAdmin.products.add.form.stockLabel')}
               placeholder="0"
               value={stock}
               onChangeText={setStock}
@@ -620,8 +639,8 @@ export const AddProductScreen = () => {
 
           {/* Discount Price */}
           <Input
-            label="Discount Price"
-            placeholder="0.00 (optional)"
+            label={t('pharmacyAdmin.products.add.form.discountPriceLabel')}
+            placeholder={t('pharmacyAdmin.products.add.form.discountPricePlaceholder')}
             value={discountPrice}
             onChangeText={setDiscountPrice}
             keyboardType="decimal-pad"
@@ -629,7 +648,7 @@ export const AddProductScreen = () => {
 
           {/* Category */}
           <View style={styles.pickerContainer}>
-            <Text style={styles.label}>Category</Text>
+            <Text style={styles.label}>{t('pharmacyAdmin.products.add.form.categoryLabel')}</Text>
             <Menu
               visible={categoryMenuVisible}
               onDismiss={() => setCategoryMenuVisible(false)}
@@ -640,7 +659,7 @@ export const AddProductScreen = () => {
                   activeOpacity={0.7}
                 >
                   <Text style={[styles.pickerText, !category && styles.pickerPlaceholder]}>
-                    {category || 'Select Category (optional)'}
+                    {category || t('pharmacyAdmin.products.add.form.categoryPlaceholder')}
                   </Text>
                   <Ionicons name="chevron-down" size={20} color={colors.textSecondary} />
                 </TouchableOpacity>
@@ -653,7 +672,7 @@ export const AddProductScreen = () => {
                     setCategory(cat);
                     setCategoryMenuVisible(false);
                   }}
-                  title={cat}
+                  title={t(`pharmacyAdmin.products.categories.${cat}` as any, { defaultValue: cat })}
                 />
               ))}
             </Menu>
@@ -661,18 +680,18 @@ export const AddProductScreen = () => {
 
           {/* Sub Category */}
           <Input
-            label="Sub Category"
-            placeholder="Product sub category (optional)"
+            label={t('pharmacyAdmin.products.add.form.subCategoryLabel')}
+            placeholder={t('pharmacyAdmin.products.add.form.subCategoryPlaceholder')}
             value={subCategory}
             onChangeText={setSubCategory}
           />
 
           {/* Description */}
           <View style={styles.textAreaContainer}>
-            <Text style={styles.label}>Description</Text>
+            <Text style={styles.label}>{t('pharmacyAdmin.products.add.form.descriptionLabel')}</Text>
             <View style={styles.textAreaWrapper}>
               <Input
-                placeholder="Enter product description (optional)"
+                placeholder={t('pharmacyAdmin.products.add.form.descriptionPlaceholder')}
                 value={description}
                 onChangeText={setDescription}
                 multiline
@@ -684,19 +703,19 @@ export const AddProductScreen = () => {
 
           {/* Tags */}
           <Input
-            label="Tags (comma-separated)"
-            placeholder="tag1, tag2, tag3 (optional)"
+            label={t('pharmacyAdmin.products.add.form.tagsLabel')}
+            placeholder={t('pharmacyAdmin.products.add.form.tagsPlaceholder')}
             value={tags}
             onChangeText={setTags}
           />
 
           {/* Product Images */}
           <View style={styles.imagesSection}>
-            <Text style={styles.label}>Product Images</Text>
+            <Text style={styles.label}>{t('pharmacyAdmin.products.add.form.imagesLabel')}</Text>
             <TouchableOpacity style={styles.uploadButton} onPress={pickImage} activeOpacity={0.7}>
               <Ionicons name="cloud-upload-outline" size={32} color={colors.primary} />
-              <Text style={styles.uploadButtonText}>Upload Images</Text>
-              <Text style={styles.uploadHint}>You can select multiple images</Text>
+              <Text style={styles.uploadButtonText}>{t('pharmacyAdmin.products.add.actions.uploadImages')}</Text>
+              <Text style={styles.uploadHint}>{t('pharmacyAdmin.products.add.hints.multipleImages')}</Text>
             </TouchableOpacity>
 
             {imageFiles.length > 0 && (
@@ -719,7 +738,7 @@ export const AddProductScreen = () => {
 
           {/* Active Status */}
           <View style={styles.switchContainer}>
-            <Text style={styles.label}>Active</Text>
+            <Text style={styles.label}>{t('pharmacyAdmin.products.add.form.activeLabel')}</Text>
             <Switch value={isActive} onValueChange={setIsActive} trackColor={{ false: colors.border, true: colors.primary }} />
           </View>
         </View>
@@ -728,7 +747,7 @@ export const AddProductScreen = () => {
       {/* Submit Button */}
       <View style={styles.footer}>
         <Button
-          title={createProductMutation.isPending ? 'Creating...' : 'Create Product'}
+          title={createProductMutation.isPending ? t('pharmacyAdmin.products.add.actions.creating') : t('pharmacyAdmin.products.add.actions.createProduct')}
           onPress={handleSubmit}
           loading={createProductMutation.isPending}
           disabled={!myPharmacy || createProductMutation.isPending}
@@ -740,7 +759,7 @@ export const AddProductScreen = () => {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Create Your Pharmacy</Text>
+              <Text style={styles.modalTitle}>{t('pharmacyAdmin.products.add.modal.title')}</Text>
               <TouchableOpacity onPress={() => setShowPharmacyModal(false)} activeOpacity={0.7}>
                 <Ionicons name="close" size={24} color={colors.text} />
               </TouchableOpacity>
@@ -749,25 +768,25 @@ export const AddProductScreen = () => {
               <View style={styles.infoBanner}>
                 <Ionicons name="information-circle" size={20} color={colors.info} />
                 <Text style={styles.infoText}>
-                  You need to create a pharmacy before adding products. All your products will be automatically linked to this pharmacy.
+                  {t('pharmacyAdmin.products.add.modal.info')}
                 </Text>
               </View>
               <Input
-                label="Pharmacy Name *"
-                placeholder="Enter pharmacy name"
+                label={t('pharmacyAdmin.products.add.modal.pharmacyNameLabel')}
+                placeholder={t('pharmacyAdmin.products.add.modal.pharmacyNamePlaceholder')}
                 value={pharmacyFormData.name}
                 onChangeText={(text) => setPharmacyFormData({ ...pharmacyFormData, name: text })}
               />
               <Input
-                label="Phone"
-                placeholder="Enter phone number (optional)"
+                label={t('pharmacyAdmin.products.add.modal.phoneLabel')}
+                placeholder={t('pharmacyAdmin.products.add.modal.phonePlaceholder')}
                 value={pharmacyFormData.phone}
                 onChangeText={(text) => setPharmacyFormData({ ...pharmacyFormData, phone: text })}
                 keyboardType="phone-pad"
               />
               <Input
-                label="Address Line 1"
-                placeholder="Street address (optional)"
+                label={t('pharmacyAdmin.products.add.modal.addressLine1Label')}
+                placeholder={t('pharmacyAdmin.products.add.modal.addressLine1Placeholder')}
                 value={pharmacyFormData.address.line1}
                 onChangeText={(text) =>
                   setPharmacyFormData({
@@ -777,8 +796,8 @@ export const AddProductScreen = () => {
                 }
               />
               <Input
-                label="Address Line 2"
-                placeholder="Apartment, suite, etc. (optional)"
+                label={t('pharmacyAdmin.products.add.modal.addressLine2Label')}
+                placeholder={t('pharmacyAdmin.products.add.modal.addressLine2Placeholder')}
                 value={pharmacyFormData.address.line2}
                 onChangeText={(text) =>
                   setPharmacyFormData({
@@ -789,8 +808,8 @@ export const AddProductScreen = () => {
               />
               <View style={styles.row}>
                 <Input
-                  label="City"
-                  placeholder="City (optional)"
+                  label={t('pharmacyAdmin.products.add.modal.cityLabel')}
+                  placeholder={t('pharmacyAdmin.products.add.modal.cityPlaceholder')}
                   value={pharmacyFormData.address.city}
                   onChangeText={(text) =>
                     setPharmacyFormData({
@@ -801,8 +820,8 @@ export const AddProductScreen = () => {
                   style={styles.halfInput}
                 />
                 <Input
-                  label="State"
-                  placeholder="State (optional)"
+                  label={t('pharmacyAdmin.products.add.modal.stateLabel')}
+                  placeholder={t('pharmacyAdmin.products.add.modal.statePlaceholder')}
                   value={pharmacyFormData.address.state}
                   onChangeText={(text) =>
                     setPharmacyFormData({
@@ -815,8 +834,8 @@ export const AddProductScreen = () => {
               </View>
               <View style={styles.row}>
                 <Input
-                  label="Country"
-                  placeholder="Country (optional)"
+                  label={t('pharmacyAdmin.products.add.modal.countryLabel')}
+                  placeholder={t('pharmacyAdmin.products.add.modal.countryPlaceholder')}
                   value={pharmacyFormData.address.country}
                   onChangeText={(text) =>
                     setPharmacyFormData({
@@ -827,8 +846,8 @@ export const AddProductScreen = () => {
                   style={styles.halfInput}
                 />
                 <Input
-                  label="ZIP Code"
-                  placeholder="ZIP code (optional)"
+                  label={t('pharmacyAdmin.products.add.modal.zipLabel')}
+                  placeholder={t('pharmacyAdmin.products.add.modal.zipPlaceholder')}
                   value={pharmacyFormData.address.zip}
                   onChangeText={(text) =>
                     setPharmacyFormData({
@@ -841,8 +860,8 @@ export const AddProductScreen = () => {
               </View>
               <View style={styles.row}>
                 <Input
-                  label="Latitude"
-                  placeholder="Latitude (optional)"
+                  label={t('pharmacyAdmin.products.add.modal.latitudeLabel')}
+                  placeholder={t('pharmacyAdmin.products.add.modal.latitudePlaceholder')}
                   value={pharmacyFormData.location.lat}
                   onChangeText={(text) =>
                     setPharmacyFormData({
@@ -854,8 +873,8 @@ export const AddProductScreen = () => {
                   style={styles.halfInput}
                 />
                 <Input
-                  label="Longitude"
-                  placeholder="Longitude (optional)"
+                  label={t('pharmacyAdmin.products.add.modal.longitudeLabel')}
+                  placeholder={t('pharmacyAdmin.products.add.modal.longitudePlaceholder')}
                   value={pharmacyFormData.location.lng}
                   onChangeText={(text) =>
                     setPharmacyFormData({
@@ -874,10 +893,10 @@ export const AddProductScreen = () => {
                 onPress={() => setShowPharmacyModal(false)}
                 activeOpacity={0.7}
               >
-                <Text style={styles.modalCancelButtonText}>Cancel</Text>
+                <Text style={styles.modalCancelButtonText}>{t('common.cancel')}</Text>
               </TouchableOpacity>
               <Button
-                title={createPharmacyMutation.isPending ? 'Creating...' : 'Create Pharmacy'}
+                title={createPharmacyMutation.isPending ? t('pharmacyAdmin.products.add.actions.creating') : t('pharmacyAdmin.products.add.actions.createPharmacy')}
                 onPress={handleCreatePharmacy}
                 loading={createPharmacyMutation.isPending}
                 style={styles.modalCreateButton}

@@ -20,6 +20,7 @@ import { colors } from '../../constants/colors';
 import { Ionicons } from '@expo/vector-icons';
 import * as rescheduleApi from '../../services/rescheduleRequest';
 import Toast from 'react-native-toast-message';
+import { useTranslation } from 'react-i18next';
 
 type DoctorRescheduleRequestsScreenNavigationProp = StackNavigationProp<AppointmentsStackParamList, 'DoctorRescheduleRequests'>;
 
@@ -27,6 +28,7 @@ const DoctorRescheduleRequestsScreen = () => {
   const navigation = useNavigation<DoctorRescheduleRequestsScreenNavigationProp>();
   const { user } = useAuth();
   const queryClient = useQueryClient();
+  const { t, i18n } = useTranslation();
   const [selectedRequest, setSelectedRequest] = useState<rescheduleApi.RescheduleRequest | null>(null);
   const [showApproveModal, setShowApproveModal] = useState(false);
   const [showRejectModal, setShowRejectModal] = useState(false);
@@ -54,8 +56,8 @@ const DoctorRescheduleRequestsScreen = () => {
     onSuccess: () => {
       Toast.show({
         type: 'success',
-        text1: 'Request Approved',
-        text2: 'Reschedule request approved successfully',
+        text1: t('more.doctorRescheduleRequests.toasts.requestApprovedTitle'),
+        text2: t('more.doctorRescheduleRequests.toasts.requestApprovedBody'),
       });
       queryClient.invalidateQueries({ queryKey: ['doctorRescheduleRequests'] });
       queryClient.invalidateQueries({ queryKey: ['appointments'] });
@@ -66,11 +68,12 @@ const DoctorRescheduleRequestsScreen = () => {
       console.error('Approve reschedule error:', error);
       console.error('Error response:', error?.response?.data);
       console.error('Request data sent:', error?.config?.data);
-      const errorMessage = error?.response?.data?.message || error?.message || 'Failed to approve request';
+      const errorMessage =
+        error?.response?.data?.message || error?.message || t('more.doctorRescheduleRequests.errors.failedToApprove');
       const validationErrors = error?.response?.data?.errors;
       Toast.show({
         type: 'error',
-        text1: 'Error',
+        text1: t('common.error'),
         text2: validationErrors ? JSON.stringify(validationErrors) : errorMessage,
       });
     },
@@ -83,8 +86,8 @@ const DoctorRescheduleRequestsScreen = () => {
     onSuccess: () => {
       Toast.show({
         type: 'success',
-        text1: 'Request Rejected',
-        text2: 'Reschedule request rejected',
+        text1: t('more.doctorRescheduleRequests.toasts.requestRejectedTitle'),
+        text2: t('more.doctorRescheduleRequests.toasts.requestRejectedBody'),
       });
       queryClient.invalidateQueries({ queryKey: ['doctorRescheduleRequests'] });
       setShowRejectModal(false);
@@ -92,10 +95,11 @@ const DoctorRescheduleRequestsScreen = () => {
       setSelectedRequest(null);
     },
     onError: (error: any) => {
-      const errorMessage = error?.response?.data?.message || error?.message || 'Failed to reject request';
+      const errorMessage =
+        error?.response?.data?.message || error?.message || t('more.doctorRescheduleRequests.errors.failedToReject');
       Toast.show({
         type: 'error',
-        text1: 'Error',
+        text1: t('common.error'),
         text2: errorMessage,
       });
     },
@@ -105,8 +109,8 @@ const DoctorRescheduleRequestsScreen = () => {
     if (!newDate || !newTime) {
       Toast.show({
         type: 'error',
-        text1: 'Error',
-        text2: 'Please select new date and time',
+        text1: t('common.error'),
+        text2: t('more.doctorRescheduleRequests.validation.selectNewDateTime'),
       });
       return;
     }
@@ -116,8 +120,8 @@ const DoctorRescheduleRequestsScreen = () => {
     if (!dateRegex.test(newDate.trim())) {
       Toast.show({
         type: 'error',
-        text1: 'Invalid Date Format',
-        text2: 'Please enter date in YYYY-MM-DD format (e.g., 2026-01-30)',
+        text1: t('more.doctorRescheduleRequests.validation.invalidDateFormatTitle'),
+        text2: t('more.doctorRescheduleRequests.validation.invalidDateFormatBody'),
       });
       return;
     }
@@ -128,8 +132,8 @@ const DoctorRescheduleRequestsScreen = () => {
     if (!timeRegex.test(trimmedTime)) {
       Toast.show({
         type: 'error',
-        text1: 'Invalid Time Format',
-        text2: 'Please enter time in HH:MM format (e.g., 14:30)',
+        text1: t('more.doctorRescheduleRequests.validation.invalidTimeFormatTitle'),
+        text2: t('more.doctorRescheduleRequests.validation.invalidTimeFormatBody'),
       });
       return;
     }
@@ -144,8 +148,8 @@ const DoctorRescheduleRequestsScreen = () => {
     if (isNaN(dateObj.getTime())) {
       Toast.show({
         type: 'error',
-        text1: 'Invalid Date',
-        text2: 'Please enter a valid date in YYYY-MM-DD format',
+        text1: t('more.doctorRescheduleRequests.validation.invalidDateTitle'),
+        text2: t('more.doctorRescheduleRequests.validation.invalidDateBody'),
       });
       return;
     }
@@ -171,8 +175,8 @@ const DoctorRescheduleRequestsScreen = () => {
       } else {
         Toast.show({
           type: 'error',
-          text1: 'Invalid Fee Amount',
-          text2: 'Please enter a valid number for the reschedule fee',
+          text1: t('more.doctorRescheduleRequests.validation.invalidFeeAmountTitle'),
+          text2: t('more.doctorRescheduleRequests.validation.invalidFeeAmountBody'),
         });
         return;
       }
@@ -183,8 +187,8 @@ const DoctorRescheduleRequestsScreen = () => {
       if (doctorNotes.trim().length > 500) {
         Toast.show({
           type: 'error',
-          text1: 'Notes Too Long',
-          text2: 'Doctor notes must not exceed 500 characters',
+          text1: t('more.doctorRescheduleRequests.validation.notesTooLongTitle'),
+          text2: t('more.doctorRescheduleRequests.validation.notesTooLongBody'),
         });
         return;
       }
@@ -204,8 +208,8 @@ const DoctorRescheduleRequestsScreen = () => {
     if (rejectionReason.trim().length < 10) {
       Toast.show({
         type: 'error',
-        text1: 'Error',
-        text2: 'Rejection reason must be at least 10 characters',
+        text1: t('common.error'),
+        text2: t('more.doctorRescheduleRequests.validation.rejectionReasonMin10'),
       });
       return;
     }
@@ -253,22 +257,24 @@ const DoctorRescheduleRequestsScreen = () => {
         {isLoading ? (
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color={colors.primary} />
-            <Text style={styles.loadingText}>Loading requests...</Text>
+            <Text style={styles.loadingText}>{t('more.doctorRescheduleRequests.loadingRequests')}</Text>
           </View>
         ) : requestsError ? (
           <View style={styles.errorContainer}>
             <Ionicons name="alert-circle-outline" size={48} color={colors.warning} />
-            <Text style={styles.errorTitle}>Unable to Load Requests</Text>
+            <Text style={styles.errorTitle}>{t('more.doctorRescheduleRequests.error.unableToLoadTitle')}</Text>
             <Text style={styles.errorText}>
               {requestsError?.response?.status === 404
-                ? 'The reschedule request feature is not available. Please ensure the backend server has been restarted.'
-                : requestsError?.response?.data?.message || requestsError?.message || 'An error occurred while loading requests'}
+                ? t('more.doctorRescheduleRequests.error.featureNotAvailable')
+                : requestsError?.response?.data?.message ||
+                  requestsError?.message ||
+                  t('more.doctorRescheduleRequests.error.generic')}
             </Text>
           </View>
         ) : requests.length === 0 ? (
           <View style={styles.emptyContainer}>
             <Ionicons name="checkmark-circle-outline" size={48} color={colors.textSecondary} />
-            <Text style={styles.emptyText}>No pending reschedule requests</Text>
+            <Text style={styles.emptyText}>{t('more.doctorRescheduleRequests.empty.noPending')}</Text>
           </View>
         ) : (
           <View style={styles.requestsList}>
@@ -276,51 +282,53 @@ const DoctorRescheduleRequestsScreen = () => {
               <View key={request._id} style={styles.requestCard}>
                 <View style={styles.requestHeader}>
                   <Text style={styles.requestTitle}>
-                    Request from {request.appointmentId?.patientId?.fullName || 'Patient'}
+                    {t('more.doctorRescheduleRequests.requestFrom', {
+                      name: request.appointmentId?.patientId?.fullName || t('common.patient'),
+                    })}
                   </Text>
                 </View>
 
                 <View style={styles.requestContent}>
                   <View style={styles.detailRow}>
-                    <Text style={styles.detailLabel}>Original Appointment:</Text>
+                    <Text style={styles.detailLabel}>{t('more.doctorRescheduleRequests.labels.originalAppointment')}</Text>
                     <Text style={styles.detailText}>
                       {request.appointmentId ? (
                         <>
-                          {new Date(request.appointmentId.appointmentDate).toLocaleDateString()} at{' '}
-                          {request.appointmentId.appointmentTime}
+                          {new Date(request.appointmentId.appointmentDate).toLocaleDateString(i18n.language)}{' '}
+                          {t('more.doctorRescheduleRequests.atTime', { time: request.appointmentId.appointmentTime })}
                           {request.appointmentId.appointmentNumber && (
                             <> (#{request.appointmentId.appointmentNumber})</>
                           )}
                         </>
                       ) : (
-                        '—'
+                        t('common.na')
                       )}
                     </Text>
                   </View>
 
                   <View style={styles.detailRow}>
-                    <Text style={styles.detailLabel}>Reason:</Text>
+                    <Text style={styles.detailLabel}>{t('more.doctorRescheduleRequests.labels.reason')}</Text>
                     <Text style={styles.detailText}>{request.reason}</Text>
                   </View>
 
                   {request.preferredDate && (
                     <View style={styles.detailRow}>
-                      <Text style={styles.detailLabel}>Preferred Date:</Text>
+                      <Text style={styles.detailLabel}>{t('more.doctorRescheduleRequests.labels.preferredDate')}</Text>
                       <Text style={styles.detailText}>
-                        {new Date(request.preferredDate).toLocaleDateString()}
+                        {new Date(request.preferredDate).toLocaleDateString(i18n.language)}
                       </Text>
                     </View>
                   )}
 
                   {request.preferredTime && (
                     <View style={styles.detailRow}>
-                      <Text style={styles.detailLabel}>Preferred Time:</Text>
+                      <Text style={styles.detailLabel}>{t('more.doctorRescheduleRequests.labels.preferredTime')}</Text>
                       <Text style={styles.detailText}>{request.preferredTime}</Text>
                     </View>
                   )}
 
                   <View style={styles.detailRow}>
-                    <Text style={styles.detailLabel}>Original Fee:</Text>
+                    <Text style={styles.detailLabel}>{t('more.doctorRescheduleRequests.labels.originalFee')}</Text>
                     <Text style={styles.detailText}>
                       ${request.originalAppointmentFee?.toFixed(2) || '0.00'}
                     </Text>
@@ -333,7 +341,7 @@ const DoctorRescheduleRequestsScreen = () => {
                       activeOpacity={0.8}
                     >
                       <Ionicons name="checkmark-circle-outline" size={18} color={colors.textWhite} />
-                      <Text style={styles.approveButtonText}>Approve</Text>
+                      <Text style={styles.approveButtonText}>{t('more.doctorRescheduleRequests.actions.approve')}</Text>
                     </TouchableOpacity>
                     <TouchableOpacity
                       style={styles.rejectButton}
@@ -341,7 +349,7 @@ const DoctorRescheduleRequestsScreen = () => {
                       activeOpacity={0.8}
                     >
                       <Ionicons name="close-circle-outline" size={18} color={colors.textWhite} />
-                      <Text style={styles.rejectButtonText}>Reject</Text>
+                      <Text style={styles.rejectButtonText}>{t('more.doctorRescheduleRequests.actions.reject')}</Text>
                     </TouchableOpacity>
                   </View>
                 </View>
@@ -364,7 +372,7 @@ const DoctorRescheduleRequestsScreen = () => {
         <View style={styles.modalOverlay}>
           <ScrollView style={styles.modalContent} showsVerticalScrollIndicator={false}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Approve Reschedule Request</Text>
+              <Text style={styles.modalTitle}>{t('more.doctorRescheduleRequests.approveModal.title')}</Text>
               <TouchableOpacity
                 onPress={() => {
                   setShowApproveModal(false);
@@ -379,11 +387,11 @@ const DoctorRescheduleRequestsScreen = () => {
             <View style={styles.modalBody}>
               <View style={styles.inputGroup}>
                 <Text style={styles.inputLabel}>
-                  New Appointment Date <Text style={styles.required}>*</Text>
+                  {t('more.doctorRescheduleRequests.approveModal.newAppointmentDateLabel')} <Text style={styles.required}>*</Text>
                 </Text>
                 <TextInput
                   style={styles.input}
-                  placeholder="YYYY-MM-DD"
+                  placeholder={t('more.doctorRescheduleRequests.approveModal.datePlaceholder')}
                   placeholderTextColor={colors.textLight}
                   value={newDate}
                   onChangeText={(text) => {
@@ -394,16 +402,16 @@ const DoctorRescheduleRequestsScreen = () => {
                     }
                   }}
                 />
-                <Text style={styles.inputHint}>Format: YYYY-MM-DD (e.g., 2026-01-30)</Text>
+                <Text style={styles.inputHint}>{t('more.doctorRescheduleRequests.approveModal.dateHint')}</Text>
               </View>
 
               <View style={styles.inputGroup}>
                 <Text style={styles.inputLabel}>
-                  New Appointment Time <Text style={styles.required}>*</Text>
+                  {t('more.doctorRescheduleRequests.approveModal.newAppointmentTimeLabel')} <Text style={styles.required}>*</Text>
                 </Text>
                 <TextInput
                   style={styles.input}
-                  placeholder="HH:MM"
+                  placeholder={t('more.doctorRescheduleRequests.approveModal.timePlaceholder')}
                   placeholderTextColor={colors.textLight}
                   value={newTime}
                   onChangeText={(text) => {
@@ -414,15 +422,15 @@ const DoctorRescheduleRequestsScreen = () => {
                     }
                   }}
                 />
-                <Text style={styles.inputHint}>Format: HH:MM (e.g., 14:30)</Text>
+                <Text style={styles.inputHint}>{t('more.doctorRescheduleRequests.approveModal.timeHint')}</Text>
               </View>
 
               <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>Reschedule Fee Percentage</Text>
+                <Text style={styles.inputLabel}>{t('more.doctorRescheduleRequests.approveModal.feePercentageLabel')}</Text>
                 <View style={styles.percentageInput}>
                   <TextInput
                     style={styles.percentageInputField}
-                    placeholder="50"
+                    placeholder={t('more.doctorRescheduleRequests.approveModal.feePercentagePlaceholder')}
                     placeholderTextColor={colors.textLight}
                     value={rescheduleFeePercentage.toString()}
                     onChangeText={(text) => {
@@ -435,17 +443,19 @@ const DoctorRescheduleRequestsScreen = () => {
                   <Text style={styles.percentageSymbol}>%</Text>
                 </View>
                 <Text style={styles.inputHint}>
-                  Default: 50% of original fee (${selectedRequest?.originalAppointmentFee?.toFixed(2) || '0.00'})
+                  {t('more.doctorRescheduleRequests.approveModal.feePercentageDefaultHint', {
+                    fee: selectedRequest?.originalAppointmentFee?.toFixed(2) || '0.00',
+                  })}
                 </Text>
               </View>
 
               <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>Or Set Fixed Amount (Optional)</Text>
+                <Text style={styles.inputLabel}>{t('more.doctorRescheduleRequests.approveModal.fixedAmountLabel')}</Text>
                 <View style={styles.currencyInput}>
                   <Text style={styles.currencySymbol}>$</Text>
                   <TextInput
                     style={styles.currencyInputField}
-                    placeholder="0.00"
+                    placeholder={t('more.doctorRescheduleRequests.approveModal.fixedAmountPlaceholder')}
                     placeholderTextColor={colors.textLight}
                     value={rescheduleFee}
                     onChangeText={(text) => {
@@ -461,20 +471,22 @@ const DoctorRescheduleRequestsScreen = () => {
               </View>
 
               <View style={styles.feeInfoCard}>
-                <Text style={styles.feeInfoTitle}>Calculated Fee:</Text>
+                <Text style={styles.feeInfoTitle}>{t('more.doctorRescheduleRequests.approveModal.calculatedFee')}</Text>
                 <Text style={styles.feeInfoAmount}>${calculateFee().toFixed(2)}</Text>
                 <Text style={styles.feeInfoSubtext}>
-                  Original Fee: ${selectedRequest?.originalAppointmentFee?.toFixed(2) || '0.00'} | Reschedule Fee:{' '}
-                  ${calculateFee().toFixed(2)} | Savings:{' '}
-                  ${((selectedRequest?.originalAppointmentFee || 0) - calculateFee()).toFixed(2)}
+                  {t('more.doctorRescheduleRequests.approveModal.feeBreakdown', {
+                    originalFee: selectedRequest?.originalAppointmentFee?.toFixed(2) || '0.00',
+                    rescheduleFee: calculateFee().toFixed(2),
+                    savings: ((selectedRequest?.originalAppointmentFee || 0) - calculateFee()).toFixed(2),
+                  })}
                 </Text>
               </View>
 
               <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>Notes (Optional)</Text>
+                <Text style={styles.inputLabel}>{t('more.doctorRescheduleRequests.approveModal.notesLabel')}</Text>
                 <TextInput
                   style={styles.textArea}
-                  placeholder="Optional notes for the patient"
+                  placeholder={t('more.doctorRescheduleRequests.approveModal.notesPlaceholder')}
                   placeholderTextColor={colors.textLight}
                   value={doctorNotes}
                   onChangeText={setDoctorNotes}
@@ -495,7 +507,7 @@ const DoctorRescheduleRequestsScreen = () => {
                 disabled={approveMutation.isPending}
                 activeOpacity={0.8}
               >
-                <Text style={styles.modalCancelButtonText}>Cancel</Text>
+                <Text style={styles.modalCancelButtonText}>{t('common.cancel')}</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[
@@ -509,7 +521,7 @@ const DoctorRescheduleRequestsScreen = () => {
                 {approveMutation.isPending ? (
                   <ActivityIndicator size="small" color={colors.textWhite} />
                 ) : (
-                  <Text style={styles.modalConfirmButtonText}>Approve & Create Appointment</Text>
+                  <Text style={styles.modalConfirmButtonText}>{t('more.doctorRescheduleRequests.approveModal.approveCreate')}</Text>
                 )}
               </TouchableOpacity>
             </View>
@@ -531,7 +543,7 @@ const DoctorRescheduleRequestsScreen = () => {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Reject Reschedule Request</Text>
+              <Text style={styles.modalTitle}>{t('more.doctorRescheduleRequests.rejectModal.title')}</Text>
               <TouchableOpacity
                 onPress={() => {
                   setShowRejectModal(false);
@@ -547,11 +559,11 @@ const DoctorRescheduleRequestsScreen = () => {
             <View style={styles.modalBody}>
               <View style={styles.inputGroup}>
                 <Text style={styles.inputLabel}>
-                  Rejection Reason <Text style={styles.required}>*</Text>
+                  {t('more.doctorRescheduleRequests.rejectModal.rejectionReasonLabel')} <Text style={styles.required}>*</Text>
                 </Text>
                 <TextInput
                   style={styles.textArea}
-                  placeholder="Please provide a reason for rejecting this request (minimum 10 characters)"
+                  placeholder={t('more.doctorRescheduleRequests.rejectModal.rejectionReasonPlaceholder')}
                   placeholderTextColor={colors.textLight}
                   value={rejectionReason}
                   onChangeText={setRejectionReason}
@@ -560,7 +572,10 @@ const DoctorRescheduleRequestsScreen = () => {
                   maxLength={500}
                 />
                 <Text style={styles.characterCount}>
-                  {rejectionReason.length}/500 characters (minimum 10 required)
+                  {t('more.doctorRescheduleRequests.rejectModal.characterCount', {
+                    current: rejectionReason.length,
+                    max: 500,
+                  })}
                 </Text>
               </View>
             </View>
@@ -576,7 +591,7 @@ const DoctorRescheduleRequestsScreen = () => {
                 disabled={rejectMutation.isPending}
                 activeOpacity={0.8}
               >
-                <Text style={styles.modalCancelButtonText}>Cancel</Text>
+                <Text style={styles.modalCancelButtonText}>{t('common.cancel')}</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[
@@ -592,7 +607,7 @@ const DoctorRescheduleRequestsScreen = () => {
                 {rejectMutation.isPending ? (
                   <ActivityIndicator size="small" color={colors.textWhite} />
                 ) : (
-                  <Text style={styles.modalConfirmButtonText}>Reject Request</Text>
+                  <Text style={styles.modalConfirmButtonText}>{t('more.doctorRescheduleRequests.rejectModal.rejectRequest')}</Text>
                 )}
               </TouchableOpacity>
             </View>

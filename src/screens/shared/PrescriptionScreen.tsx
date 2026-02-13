@@ -19,6 +19,7 @@ import { useNavigation, useRoute } from '@react-navigation/native';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
 import Toast from 'react-native-toast-message';
+import { useTranslation } from 'react-i18next';
 
 import { colors } from '../../constants/colors';
 import { useAuth } from '../../contexts/AuthContext';
@@ -47,6 +48,7 @@ export const PrescriptionScreen = () => {
   const route = useRoute<any>();
   const queryClient = useQueryClient();
   const { user } = useAuth();
+  const { t } = useTranslation();
 
   const isDoctor = user?.role === 'doctor';
   const appointmentId: string | undefined = (route.params as RouteParams | undefined)?.appointmentId;
@@ -170,15 +172,15 @@ export const PrescriptionScreen = () => {
       queryClient.setQueryData(['prescriptionByAppointment', appointmentId], res);
       Toast.show({
         type: 'success',
-        text1: 'Success',
-        text2: 'Prescription saved successfully',
+        text1: t('common.success'),
+        text2: t('more.prescription.toasts.savedSuccessfully'),
       });
     },
     onError: (error: any) => {
-      const errorMessage = error?.response?.data?.message || error?.message || 'Failed to save prescription';
+      const errorMessage = error?.response?.data?.message || error?.message || t('more.prescription.errors.failedToSave');
       Toast.show({
         type: 'error',
-        text1: 'Error',
+        text1: t('common.error'),
         text2: errorMessage,
       });
     },
@@ -206,7 +208,7 @@ export const PrescriptionScreen = () => {
 
   const handleDownload = async () => {
     if (!prescription?._id) {
-      Alert.alert('Not Available', 'No prescription has been issued for this appointment yet.');
+      Alert.alert(t('more.prescription.alerts.notAvailableTitle'), t('more.prescription.alerts.notAvailableBody'));
       return;
     }
 
@@ -232,11 +234,11 @@ export const PrescriptionScreen = () => {
       if (canOpen) {
         await Linking.openURL(result.uri);
       } else {
-        Alert.alert('Downloaded', `Saved to: ${result.uri}`);
+        Alert.alert(t('more.prescription.alerts.downloadedTitle'), t('more.prescription.alerts.savedTo', { uri: result.uri }));
       }
     } catch (error: any) {
-      const errorMessage = error?.response?.data?.message || error?.message || 'Failed to download prescription';
-      Alert.alert('Download Failed', errorMessage);
+      const errorMessage = error?.response?.data?.message || error?.message || t('more.prescription.errors.failedToDownload');
+      Alert.alert(t('more.prescription.alerts.downloadFailedTitle'), errorMessage);
     }
   };
 
@@ -244,7 +246,7 @@ export const PrescriptionScreen = () => {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.center}>
-          <Text style={styles.errorText}>Appointment ID is required.</Text>
+          <Text style={styles.errorText}>{t('more.prescription.errors.appointmentIdRequired')}</Text>
         </View>
       </SafeAreaView>
     );
@@ -255,7 +257,7 @@ export const PrescriptionScreen = () => {
       <SafeAreaView style={styles.container}>
         <View style={styles.center}>
           <ActivityIndicator size="large" color={colors.primary} />
-          <Text style={styles.loadingText}>Loading appointment...</Text>
+          <Text style={styles.loadingText}>{t('more.prescription.loadingAppointment')}</Text>
         </View>
       </SafeAreaView>
     );
@@ -265,7 +267,7 @@ export const PrescriptionScreen = () => {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.center}>
-          <Text style={styles.errorText}>Failed to load appointment.</Text>
+          <Text style={styles.errorText}>{t('more.prescription.errors.failedToLoadAppointment')}</Text>
         </View>
       </SafeAreaView>
     );
@@ -278,18 +280,18 @@ export const PrescriptionScreen = () => {
           <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
             <Ionicons name="arrow-back" size={22} color={colors.text} />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Prescription</Text>
+          <Text style={styles.headerTitle}>{t('screens.prescription')}</Text>
         </View>
         <View style={styles.card}>
-          <Text style={styles.infoText}>Prescription is available only after the appointment is completed.</Text>
+          <Text style={styles.infoText}>{t('more.prescription.completedOnly')}</Text>
         </View>
       </SafeAreaView>
     );
   }
 
   const appointmentNumber = appointment.appointmentNumber || `#${appointment._id.slice(-6)}`;
-  const doctorName = appointment.doctorId?.fullName || 'Doctor';
-  const patientName = appointment.patientId?.fullName || 'Patient';
+  const doctorName = appointment.doctorId?.fullName || t('common.doctor');
+  const patientName = appointment.patientId?.fullName || t('common.patient');
 
   return (
     <SafeAreaView style={styles.container}>
@@ -297,19 +299,19 @@ export const PrescriptionScreen = () => {
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
           <Ionicons name="arrow-back" size={22} color={colors.text} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Prescription</Text>
+        <Text style={styles.headerTitle}>{t('screens.prescription')}</Text>
       </View>
 
       <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         <View style={styles.card}>
-          <Text style={styles.title}>Appointment {appointmentNumber}</Text>
-          <Text style={styles.subTitle}>Doctor: {doctorName}</Text>
-          <Text style={styles.subTitle}>Patient: {patientName}</Text>
+          <Text style={styles.title}>{t('more.prescription.appointmentTitle', { number: appointmentNumber })}</Text>
+          <Text style={styles.subTitle}>{t('more.prescription.doctorLine', { name: doctorName })}</Text>
+          <Text style={styles.subTitle}>{t('more.prescription.patientLine', { name: patientName })}</Text>
 
           <View style={styles.actionsRow}>
             <TouchableOpacity style={styles.actionBtn} onPress={handleDownload} activeOpacity={0.8}>
               <Ionicons name="download-outline" size={18} color={colors.text} />
-              <Text style={styles.actionBtnText}>Download PDF</Text>
+              <Text style={styles.actionBtnText}>{t('more.prescription.actions.downloadPdf')}</Text>
             </TouchableOpacity>
             {canEdit && (
               <TouchableOpacity
@@ -319,7 +321,7 @@ export const PrescriptionScreen = () => {
                 activeOpacity={0.8}
               >
                 <Text style={[styles.actionBtnText, styles.primaryBtnText]}>
-                  {upsertMutation.isPending ? 'Saving...' : 'Save'}
+                  {upsertMutation.isPending ? t('common.saving') : t('more.prescription.actions.save')}
                 </Text>
               </TouchableOpacity>
             )}
@@ -328,27 +330,27 @@ export const PrescriptionScreen = () => {
           {prescriptionLoading && (
             <View style={styles.inlineLoading}>
               <ActivityIndicator size="small" color={colors.primary} />
-              <Text style={styles.loadingText}>Loading prescription...</Text>
+              <Text style={styles.loadingText}>{t('more.prescription.loadingPrescription')}</Text>
             </View>
           )}
 
           {!prescriptionLoading && !prescription && (
             <View style={styles.infoBox}>
               <Text style={styles.infoText}>
-                {isDoctor ? 'Create the prescription below and save it to issue to the patient.' : 'No prescription has been issued yet.'}
+                {isDoctor ? t('more.prescription.noPrescription.doctor') : t('more.prescription.noPrescription.patient')}
               </Text>
             </View>
           )}
 
           {!!prescriptionError && (
             <View style={styles.infoBox}>
-              <Text style={styles.errorText}>Failed to load prescription.</Text>
+              <Text style={styles.errorText}>{t('more.prescription.errors.failedToLoadPrescription')}</Text>
             </View>
           )}
 
-          <Text style={styles.sectionTitle}>Clinical Information</Text>
+          <Text style={styles.sectionTitle}>{t('more.prescription.sections.clinicalInformation')}</Text>
 
-          <Text style={styles.label}>Diagnosis</Text>
+          <Text style={styles.label}>{t('more.prescription.labels.diagnosis')}</Text>
           <TextInput
             style={[styles.textArea, !canEdit && styles.disabledInput]}
             value={form.diagnosis}
@@ -357,7 +359,7 @@ export const PrescriptionScreen = () => {
             multiline
           />
 
-          <Text style={styles.label}>Allergies</Text>
+          <Text style={styles.label}>{t('more.prescription.labels.allergies')}</Text>
           <TextInput
             style={[styles.textArea, !canEdit && styles.disabledInput]}
             value={form.allergies}
@@ -366,7 +368,7 @@ export const PrescriptionScreen = () => {
             multiline
           />
 
-          <Text style={styles.label}>Clinical Notes</Text>
+          <Text style={styles.label}>{t('more.prescription.labels.clinicalNotes')}</Text>
           <TextInput
             style={[styles.textArea, !canEdit && styles.disabledInput]}
             value={form.clinicalNotes}
@@ -376,11 +378,11 @@ export const PrescriptionScreen = () => {
           />
 
           <View style={styles.sectionHeaderRow}>
-            <Text style={styles.sectionTitle}>Medications</Text>
+            <Text style={styles.sectionTitle}>{t('more.prescription.sections.medications')}</Text>
             {canEdit && (
               <TouchableOpacity onPress={addMedication} style={styles.smallBtn} activeOpacity={0.8}>
                 <Ionicons name="add" size={18} color={colors.primary} />
-                <Text style={styles.smallBtnText}>Add</Text>
+                <Text style={styles.smallBtnText}>{t('common.add')}</Text>
               </TouchableOpacity>
             )}
           </View>
@@ -388,7 +390,7 @@ export const PrescriptionScreen = () => {
           {(form.medications || []).map((m, idx) => (
             <View key={idx} style={styles.medCard}>
               <View style={styles.medHeader}>
-                <Text style={styles.medTitle}>Medication {idx + 1}</Text>
+                <Text style={styles.medTitle}>{t('more.prescription.medicationTitle', { number: idx + 1 })}</Text>
                 {canEdit && (
                   <TouchableOpacity onPress={() => removeMedication(idx)} activeOpacity={0.8}>
                     <Ionicons name="trash-outline" size={18} color={colors.error} />
@@ -396,7 +398,7 @@ export const PrescriptionScreen = () => {
                 )}
               </View>
 
-              <Text style={styles.label}>Name</Text>
+              <Text style={styles.label}>{t('more.prescription.labels.name')}</Text>
               <TextInput
                 style={[styles.input, !canEdit && styles.disabledInput]}
                 value={m.name}
@@ -406,7 +408,7 @@ export const PrescriptionScreen = () => {
 
               <View style={styles.row}>
                 <View style={styles.col}>
-                  <Text style={styles.label}>Strength</Text>
+                  <Text style={styles.label}>{t('more.prescription.labels.strength')}</Text>
                   <TextInput
                     style={[styles.input, !canEdit && styles.disabledInput]}
                     value={(m.strength as any) || ''}
@@ -415,7 +417,7 @@ export const PrescriptionScreen = () => {
                   />
                 </View>
                 <View style={styles.col}>
-                  <Text style={styles.label}>Form</Text>
+                  <Text style={styles.label}>{t('more.prescription.labels.form')}</Text>
                   <TextInput
                     style={[styles.input, !canEdit && styles.disabledInput]}
                     value={(m.form as any) || ''}
@@ -427,7 +429,7 @@ export const PrescriptionScreen = () => {
 
               <View style={styles.row}>
                 <View style={styles.col}>
-                  <Text style={styles.label}>Dosage</Text>
+                  <Text style={styles.label}>{t('more.prescription.labels.dosage')}</Text>
                   <TextInput
                     style={[styles.input, !canEdit && styles.disabledInput]}
                     value={(m.dosage as any) || ''}
@@ -436,7 +438,7 @@ export const PrescriptionScreen = () => {
                   />
                 </View>
                 <View style={styles.col}>
-                  <Text style={styles.label}>Frequency</Text>
+                  <Text style={styles.label}>{t('more.prescription.labels.frequency')}</Text>
                   <TextInput
                     style={[styles.input, !canEdit && styles.disabledInput]}
                     value={(m.frequency as any) || ''}
@@ -448,7 +450,7 @@ export const PrescriptionScreen = () => {
 
               <View style={styles.row}>
                 <View style={styles.col}>
-                  <Text style={styles.label}>Duration</Text>
+                  <Text style={styles.label}>{t('more.prescription.labels.duration')}</Text>
                   <TextInput
                     style={[styles.input, !canEdit && styles.disabledInput]}
                     value={(m.duration as any) || ''}
@@ -457,7 +459,7 @@ export const PrescriptionScreen = () => {
                   />
                 </View>
                 <View style={styles.col}>
-                  <Text style={styles.label}>Quantity</Text>
+                  <Text style={styles.label}>{t('more.prescription.labels.quantity')}</Text>
                   <TextInput
                     style={[styles.input, !canEdit && styles.disabledInput]}
                     value={(m.quantity as any) || ''}
@@ -467,7 +469,7 @@ export const PrescriptionScreen = () => {
                 </View>
               </View>
 
-              <Text style={styles.label}>Instructions</Text>
+              <Text style={styles.label}>{t('more.prescription.labels.instructions')}</Text>
               <TextInput
                 style={[styles.textArea, !canEdit && styles.disabledInput]}
                 value={(m.instructions as any) || ''}
@@ -478,7 +480,7 @@ export const PrescriptionScreen = () => {
             </View>
           ))}
 
-          <Text style={styles.sectionTitle}>Recommended Tests (one per line)</Text>
+          <Text style={styles.sectionTitle}>{t('more.prescription.sections.recommendedTests')}</Text>
           <TextInput
             style={[styles.textArea, !canEdit && styles.disabledInput]}
             value={form.testsText}
@@ -487,7 +489,7 @@ export const PrescriptionScreen = () => {
             multiline
           />
 
-          <Text style={styles.sectionTitle}>Follow Up</Text>
+          <Text style={styles.sectionTitle}>{t('more.prescription.sections.followUp')}</Text>
           <TextInput
             style={[styles.textArea, !canEdit && styles.disabledInput]}
             value={form.followUp}
@@ -496,7 +498,7 @@ export const PrescriptionScreen = () => {
             multiline
           />
 
-          <Text style={styles.sectionTitle}>Advice</Text>
+          <Text style={styles.sectionTitle}>{t('more.prescription.sections.advice')}</Text>
           <TextInput
             style={[styles.textArea, !canEdit && styles.disabledInput]}
             value={form.advice}
@@ -507,7 +509,7 @@ export const PrescriptionScreen = () => {
 
           {canEdit && (
             <View style={styles.statusRow}>
-              <Text style={styles.label}>Status</Text>
+              <Text style={styles.label}>{t('more.prescription.labels.status')}</Text>
               <View style={styles.statusButtons}>
                 {(['ISSUED', 'DRAFT'] as const).map((st) => (
                   <TouchableOpacity
@@ -516,7 +518,9 @@ export const PrescriptionScreen = () => {
                     onPress={() => setForm((p) => ({ ...p, status: st }))}
                     activeOpacity={0.8}
                   >
-                    <Text style={[styles.statusBtnText, form.status === st && styles.statusBtnTextActive]}>{st}</Text>
+                    <Text style={[styles.statusBtnText, form.status === st && styles.statusBtnTextActive]}>
+                      {st === 'ISSUED' ? t('more.prescription.status.issued') : t('more.prescription.status.draft')}
+                    </Text>
                   </TouchableOpacity>
                 ))}
               </View>

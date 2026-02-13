@@ -24,6 +24,8 @@ import * as orderApi from '../../services/order';
 import { API_BASE_URL } from '../../config/api';
 import Toast from 'react-native-toast-message';
 import { Button } from '../../components/common/Button';
+import { useTranslation } from 'react-i18next';
+import i18n from '../../i18n/appI18n';
 
 type OrderDetailsScreenNavigationProp = CompositeNavigationProp<
   NativeStackNavigationProp<PharmacyStackParamList | MoreStackParamList>,
@@ -57,7 +59,7 @@ const normalizeImageUrl = (imageUri: string | undefined | null): string | null =
 };
 
 const formatDate = (dateString: string | undefined | null): string => {
-  if (!dateString) return 'N/A';
+  if (!dateString) return i18n.t('common.na');
   const date = new Date(dateString);
   return date.toLocaleDateString('en-GB', {
     day: '2-digit',
@@ -74,6 +76,20 @@ const formatCurrency = (amount: number | undefined): string => {
     style: 'currency',
     currency: 'USD',
   }).format(amount);
+};
+
+const getRealOrderTotal = (order: Partial<orderApi.Order> | undefined | null): number => {
+  if (!order) return 0;
+  const subtotal = Number((order as any).subtotal) || 0;
+  const shipping = Number((order as any).shipping) || 0;
+  return subtotal + shipping;
+};
+
+const getInitialRealTotal = (order: Partial<orderApi.Order> | undefined | null): number => {
+  if (!order) return 0;
+  const subtotal = Number((order as any).subtotal) || 0;
+  const initialShipping = Number((order as any).initialShipping) || 0;
+  return subtotal + initialShipping;
 };
 
 const getStatusBadgeColor = (status: orderApi.Order['status']) => {
@@ -101,6 +117,7 @@ export const OrderDetailsScreen = () => {
   const { orderId } = route.params;
   const { user } = useAuth();
   const queryClient = useQueryClient();
+  const { t } = useTranslation();
   const [paymentMethod, setPaymentMethod] = useState<'CARD' | 'PAYPAL' | 'DUMMY'>('DUMMY');
 
   const { data: orderResponse, isLoading, error, refetch } = useQuery({
@@ -118,16 +135,16 @@ export const OrderDetailsScreen = () => {
       queryClient.invalidateQueries(['patientOrders']);
       Toast.show({
         type: 'success',
-        text1: 'Payment Successful',
-        text2: 'Your order payment has been processed!',
+        text1: t('pharmacy.orders.paymentSuccessfulTitle'),
+        text2: t('pharmacy.orders.paymentSuccessfulBody'),
       });
       refetch();
     },
     onError: (err: any) => {
       Toast.show({
         type: 'error',
-        text1: 'Payment Failed',
-        text2: err.response?.data?.message || err.message || 'Please try again.',
+        text1: t('pharmacy.orders.paymentFailedTitle'),
+        text2: err.response?.data?.message || err.message || t('pharmacy.orders.pleaseTryAgain'),
       });
     },
   });
@@ -135,17 +152,19 @@ export const OrderDetailsScreen = () => {
   const handlePay = () => {
     if (!order) return;
 
-    const amountToPay = order.requiresPaymentUpdate && order.initialTotal
-      ? order.total - order.initialTotal
-      : order.total;
+    const realTotal = getRealOrderTotal(order);
+    const initialRealTotal = getInitialRealTotal(order);
+    const amountToPay = order.requiresPaymentUpdate
+      ? Math.max(0, realTotal - initialRealTotal)
+      : realTotal;
 
     Alert.alert(
-      'Confirm Payment',
-      `Pay ${formatCurrency(amountToPay)} for this order?`,
+      t('pharmacy.orders.confirmPaymentTitle'),
+      t('pharmacy.orders.confirmPaymentBody', { amount: formatCurrency(amountToPay) }),
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: t('common.cancel'), style: 'cancel' },
         {
-          text: 'Pay',
+          text: t('pharmacy.orders.pay'),
           onPress: () => payMutation.mutate(),
         },
       ]
@@ -156,7 +175,7 @@ export const OrderDetailsScreen = () => {
     return (
       <SafeAreaView style={styles.loadingContainer}>
         <ActivityIndicator size="large" color={colors.primary} />
-        <Text style={styles.loadingText}>Loading order details...</Text>
+        <Text style={styles.loadingText}>{t('pharmacy.orders.orderDetails.loadingOrderDetails')}</Text>
       </SafeAreaView>
     );
   }
@@ -165,19 +184,19 @@ export const OrderDetailsScreen = () => {
     return (
       <SafeAreaView style={styles.errorContainer}>
         <Ionicons name="alert-circle-outline" size={64} color={colors.error} />
-        <Text style={styles.errorTitle}>Error Loading Order</Text>
+        <Text style={styles.errorTitle}>{t('pharmacy.orders.orderDetails.errorLoadingOrderTitle')}</Text>
         <Text style={styles.errorText}>
-          {error instanceof Error ? error.message : 'Failed to load order details'}
+          {error instanceof Error ? error.message : t('pharmacy.orders.orderDetails.failedToLoadOrderDetails')}
         </Text>
         <TouchableOpacity style={styles.retryButton} onPress={() => refetch()}>
-          <Text style={styles.retryButtonText}>Retry</Text>
+          <Text style={styles.retryButtonText}>{t('common.retry')}</Text>
         </TouchableOpacity>
       </SafeAreaView>
     );
   }
 
   const pharmacy = typeof order.pharmacyId === 'object' ? order.pharmacyId : null;
-  const pharmacyName = pharmacy?.name || 'Pharmacy';
+  const pharmacyName = pharmacy?.name || t('pharmacy.orders.orderDetails.pharmacy');
   const shippingAddress = order.shippingAddress;
   
   // Show payment button if order is pending and shipping fee is set
@@ -186,9 +205,11 @@ export const OrderDetailsScreen = () => {
                             order.finalShipping !== undefined;
   
   // Calculate amount to pay
-  const amountToPay = order.requiresPaymentUpdate && order.initialTotal
-    ? order.total - order.initialTotal
-    : order.total;
+  const realTotal = getRealOrderTotal(order);
+  const initialRealTotal = getInitialRealTotal(order);
+  const amountToPay = order.requiresPaymentUpdate
+    ? Math.max(0, realTotal - initialRealTotal)
+    : realTotal;
 
   return (
     <SafeAreaView style={styles.container}>
@@ -196,12 +217,12 @@ export const OrderDetailsScreen = () => {
         {/* Order Header */}
         <View style={styles.header}>
           <View style={styles.orderNumberContainer}>
-            <Text style={styles.orderNumberLabel}>Order Number</Text>
+            <Text style={styles.orderNumberLabel}>{t('pharmacy.orders.orderDetails.orderNumberLabel')}</Text>
             <Text style={styles.orderNumber}>#{order.orderNumber}</Text>
           </View>
           <View style={[styles.statusBadge, { backgroundColor: getStatusBadgeColor(order.status) + '20' }]}>
             <Text style={[styles.statusText, { color: getStatusBadgeColor(order.status) }]}>
-              {order.status}
+              {t(`pharmacy.orders.status.${order.status}` as any)}
             </Text>
           </View>
         </View>
@@ -211,10 +232,9 @@ export const OrderDetailsScreen = () => {
           <View style={styles.alertContainer}>
             <Ionicons name="information-circle" size={24} color={colors.warning} />
             <View style={styles.alertContent}>
-              <Text style={styles.alertTitle}>Shipping Fee Updated</Text>
+              <Text style={styles.alertTitle}>{t('pharmacy.orders.orderDetails.shippingFeeUpdatedTitle')}</Text>
               <Text style={styles.alertText}>
-                The shipping fee has been updated. Please pay the additional{' '}
-                {formatCurrency(amountToPay)} to proceed.
+                {t('pharmacy.orders.orderDetails.shippingFeeUpdatedBody', { amount: formatCurrency(amountToPay) })}
               </Text>
             </View>
           </View>
@@ -224,9 +244,9 @@ export const OrderDetailsScreen = () => {
           <View style={[styles.alertContainer, { borderLeftColor: colors.info || colors.primary }]}>
             <Ionicons name="information-circle" size={24} color={colors.info || colors.primary} />
             <View style={styles.alertContent}>
-              <Text style={styles.alertTitle}>Waiting for Shipping Fee</Text>
+              <Text style={styles.alertTitle}>{t('pharmacy.orders.orderDetails.waitingForShippingFeeTitle')}</Text>
               <Text style={styles.alertText}>
-                The pharmacy owner is setting the shipping fee. You will be able to pay once the shipping fee is confirmed.
+                {t('pharmacy.orders.orderDetails.waitingForShippingFeeBody')}
               </Text>
             </View>
           </View>
@@ -234,10 +254,10 @@ export const OrderDetailsScreen = () => {
 
         {/* Order Items */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Order Items</Text>
+          <Text style={styles.sectionTitle}>{t('pharmacy.orders.orderDetails.orderItems')}</Text>
           {order.items.map((item, index) => {
             const product = typeof item.productId === 'object' ? item.productId : null;
-            const productName = product?.name || 'Product';
+            const productName = product?.name || t('common.product');
             const productImage = product?.images?.[0];
             const normalizedImageUrl = normalizeImageUrl(productImage);
             const imageSource = normalizedImageUrl ? { uri: normalizedImageUrl } : defaultAvatar;
@@ -248,8 +268,8 @@ export const OrderDetailsScreen = () => {
                 <Image source={imageSource} style={styles.productImage} defaultSource={defaultAvatar} />
                 <View style={styles.itemDetails}>
                   <Text style={styles.itemName}>{productName}</Text>
-                  <Text style={styles.itemQuantity}>Quantity: {item.quantity}</Text>
-                  <Text style={styles.itemPrice}>{formatCurrency(itemPrice)} each</Text>
+                  <Text style={styles.itemQuantity}>{t('pharmacy.orders.orderDetails.quantityLabel', { count: item.quantity })}</Text>
+                  <Text style={styles.itemPrice}>{t('pharmacy.orders.orderDetails.eachLabel', { price: formatCurrency(itemPrice) })}</Text>
                 </View>
                 <Text style={styles.itemTotal}>{formatCurrency(item.total)}</Text>
               </View>
@@ -260,7 +280,7 @@ export const OrderDetailsScreen = () => {
         {/* Shipping Address */}
         {shippingAddress && (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Shipping Address</Text>
+            <Text style={styles.sectionTitle}>{t('pharmacy.orders.orderDetails.shippingAddress')}</Text>
             <View style={styles.addressContainer}>
               <Text style={styles.addressLine}>{shippingAddress.line1}</Text>
               {shippingAddress.line2 && (
@@ -276,39 +296,35 @@ export const OrderDetailsScreen = () => {
 
         {/* Order Summary */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Order Summary</Text>
+          <Text style={styles.sectionTitle}>{t('pharmacy.orders.orderDetails.orderSummary')}</Text>
           <View style={styles.summaryRow}>
-            <Text style={styles.summaryLabel}>Subtotal</Text>
+            <Text style={styles.summaryLabel}>{t('pharmacy.cart.subtotal')}</Text>
             <Text style={styles.summaryValue}>{formatCurrency(order.subtotal)}</Text>
           </View>
           <View style={styles.summaryRow}>
-            <Text style={styles.summaryLabel}>Tax</Text>
-            <Text style={styles.summaryValue}>{formatCurrency(order.tax)}</Text>
-          </View>
-          <View style={styles.summaryRow}>
             <View>
-              <Text style={styles.summaryLabel}>Shipping</Text>
+              <Text style={styles.summaryLabel}>{t('pharmacy.orders.orderDetails.shipping')}</Text>
               {order.finalShipping !== null && order.finalShipping !== order.initialShipping && (
                 <Text style={styles.shippingNote}>
-                  Updated from {formatCurrency(order.initialShipping || 0)}
+                  {t('pharmacy.orders.orderDetails.updatedFrom', { amount: formatCurrency(order.initialShipping || 0) })}
                 </Text>
               )}
             </View>
             <Text style={styles.summaryValue}>{formatCurrency(order.shipping)}</Text>
           </View>
           <View style={[styles.summaryRow, styles.totalRow]}>
-            <Text style={styles.totalLabel}>Total</Text>
-            <Text style={styles.totalValue}>{formatCurrency(order.total)}</Text>
+            <Text style={styles.totalLabel}>{t('pharmacy.cart.total')}</Text>
+            <Text style={styles.totalValue}>{formatCurrency(realTotal)}</Text>
           </View>
           {order.requiresPaymentUpdate && order.initialTotal && (
             <View style={styles.summaryRow}>
-              <Text style={styles.summaryLabel}>Already Paid</Text>
+              <Text style={styles.summaryLabel}>{t('pharmacy.orders.orderDetails.alreadyPaid')}</Text>
               <Text style={styles.summaryValue}>{formatCurrency(order.initialTotal)}</Text>
             </View>
           )}
           {order.requiresPaymentUpdate && (
             <View style={[styles.summaryRow, styles.amountDueRow]}>
-              <Text style={styles.amountDueLabel}>Amount Due</Text>
+              <Text style={styles.amountDueLabel}>{t('pharmacy.orders.orderDetails.amountDue')}</Text>
               <Text style={styles.amountDueValue}>{formatCurrency(amountToPay)}</Text>
             </View>
           )}
@@ -316,23 +332,23 @@ export const OrderDetailsScreen = () => {
 
         {/* Order Info */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Order Information</Text>
+          <Text style={styles.sectionTitle}>{t('pharmacy.orders.orderDetails.orderInformation')}</Text>
           <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Pharmacy</Text>
+            <Text style={styles.infoLabel}>{t('pharmacy.orders.orderDetails.pharmacy')}</Text>
             <Text style={styles.infoValue}>{pharmacyName}</Text>
           </View>
           <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Order Date</Text>
+            <Text style={styles.infoLabel}>{t('pharmacy.orders.orderDetails.orderDate')}</Text>
             <Text style={styles.infoValue}>{formatDate(order.createdAt)}</Text>
           </View>
           {order.deliveredAt && (
             <View style={styles.infoRow}>
-              <Text style={styles.infoLabel}>Delivered Date</Text>
+              <Text style={styles.infoLabel}>{t('pharmacy.orders.orderDetails.deliveredDate')}</Text>
               <Text style={styles.infoValue}>{formatDate(order.deliveredAt)}</Text>
             </View>
           )}
           <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Payment Status</Text>
+            <Text style={styles.infoLabel}>{t('pharmacy.orders.orderDetails.paymentStatus')}</Text>
             <Text
               style={[
                 styles.infoValue,
@@ -349,16 +365,20 @@ export const OrderDetailsScreen = () => {
         {showPaymentButton && (
           <View style={styles.paymentSection}>
             <View style={styles.paymentInfoContainer}>
-              <Text style={styles.paymentInfoTitle}>Total Amount to Pay</Text>
-              <Text style={styles.paymentInfoAmount}>{formatCurrency(order.total)}</Text>
+              <Text style={styles.paymentInfoTitle}>{t('pharmacy.orders.orderDetails.totalAmountToPay')}</Text>
+              <Text style={styles.paymentInfoAmount}>{formatCurrency(realTotal)}</Text>
               {order.initialTotal && order.initialTotal !== order.total && (
                 <Text style={styles.paymentInfoNote}>
-                  Updated from initial estimate of {formatCurrency(order.initialTotal)}
+                  {t('pharmacy.orders.orderDetails.updatedFromInitialEstimate', { amount: formatCurrency(order.initialTotal) })}
                 </Text>
               )}
             </View>
             <Button
-              title={payMutation.isLoading ? 'Processing Payment...' : `Pay Now - ${formatCurrency(order.total)}`}
+              title={
+                payMutation.isLoading
+                  ? t('pharmacy.orders.orderDetails.processingPayment')
+                  : t('pharmacy.orders.orderDetails.payNowWithAmount', { amount: formatCurrency(realTotal) })
+              }
               onPress={handlePay}
               disabled={payMutation.isLoading}
               loading={payMutation.isLoading}

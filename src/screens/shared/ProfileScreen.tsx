@@ -21,6 +21,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../contexts/AuthContext';
 import * as profileApi from '../../services/profile';
 import { API_BASE_URL } from '../../config/api';
+import { useTranslation } from 'react-i18next';
 
 type ProfileScreenNavigationProp = CompositeNavigationProp<
   NativeStackNavigationProp<MoreStackParamList>,
@@ -119,6 +120,7 @@ const billing: Billing[] = [
 export const ProfileScreen = () => {
   const navigation = useNavigation<ProfileScreenNavigationProp>();
   const { user } = useAuth();
+  const { t } = useTranslation();
   const isDoctor = user?.role === 'doctor';
   const [activeTab, setActiveTab] = useState<'appointments' | 'prescription' | 'medical' | 'billing'>('appointments');
   const [searchQuery, setSearchQuery] = useState('');
@@ -146,13 +148,13 @@ export const ProfileScreen = () => {
       const doctor = doctorProfile.data as profileApi.DoctorProfile;
       const userData = (doctor as any).userId || user;
       return {
-        name: userData?.fullName || user?.name || 'Doctor',
+        name: userData?.fullName || user?.name || t('common.doctor'),
         email: userData?.email || user?.email || '',
         phone: userData?.phone || '',
         profileImage: userData?.profileImage || user?.profileImage,
         specialization: typeof doctor.specialization === 'object' 
           ? doctor.specialization?.name 
-          : doctor.specialization || 'General',
+          : doctor.specialization || t('common.general'),
         title: doctor.title || '',
         biography: doctor.biography || '',
         rating: doctor.ratingAvg || 0,
@@ -163,22 +165,47 @@ export const ProfileScreen = () => {
     } else if (!isDoctor && userProfile) {
       const userData = userProfile.data as profileApi.UserProfile;
       return {
-        name: userData.fullName || user?.name || 'Patient',
+        name: userData.fullName || user?.name || t('common.patient'),
         email: userData.email || user?.email || '',
         phone: userData.phone || '',
         profileImage: userData.profileImage || user?.profileImage,
         bloodGroup: userData.bloodGroup || '',
         gender: userData.gender || '',
         dob: userData.dob || '',
+        rating: 0,
+        ratingCount: 0,
+        experienceYears: 0,
+        isVerified: false,
       };
     }
     return {
-      name: user?.name || 'User',
+      name: user?.name || t('common.user'),
       email: user?.email || '',
       phone: user?.phone || '',
       profileImage: user?.profileImage,
+      rating: 0,
+      ratingCount: 0,
+      experienceYears: 0,
+      isVerified: false,
     };
-  }, [isDoctor, doctorProfile, userProfile, user]);
+  }, [isDoctor, doctorProfile, userProfile, user, t]);
+
+  const getStatusLabel = (status: string) => {
+    switch (status) {
+      case 'Upcoming':
+        return t('more.profile.status.upcoming');
+      case 'Completed':
+        return t('more.profile.status.completed');
+      case 'Cancelled':
+        return t('more.profile.status.cancelled');
+      case 'Paid':
+        return t('more.profile.status.paid');
+      case 'Unpaid':
+        return t('more.profile.status.unpaid');
+      default:
+        return status;
+    }
+  };
 
   // Normalize image URL
   const profileImageUri = useMemo(() => {
@@ -215,7 +242,7 @@ export const ProfileScreen = () => {
               <Ionicons name="search-outline" size={20} color={colors.textSecondary} />
               <TextInput
                 style={styles.searchInput}
-                placeholder="Search appointments..."
+                placeholder={t('more.profile.searchAppointmentsPlaceholder')}
                 placeholderTextColor={colors.textLight}
                 value={searchQuery}
                 onChangeText={setSearchQuery}
@@ -240,21 +267,21 @@ export const ProfileScreen = () => {
                     </View>
                     <View style={[styles.statusBadge, { backgroundColor: getStatusBadge(appointment.status) + '20' }]}>
                       <Text style={[styles.statusText, { color: getStatusBadge(appointment.status) }]}>
-                        {appointment.status}
+                        {getStatusLabel(appointment.status)}
                       </Text>
                     </View>
                   </View>
                   <View style={styles.itemDetails}>
                     <View style={styles.detailRow}>
-                      <Text style={styles.detailLabel}>Appt Date:</Text>
+                      <Text style={styles.detailLabel}>{t('more.profile.labels.apptDate')}</Text>
                       <Text style={styles.detailValue}>{appointment.apptDate}</Text>
                     </View>
                     <View style={styles.detailRow}>
-                      <Text style={styles.detailLabel}>Booking Date:</Text>
+                      <Text style={styles.detailLabel}>{t('more.profile.labels.bookingDate')}</Text>
                       <Text style={styles.detailValue}>{appointment.bookingDate}</Text>
                     </View>
                     <View style={styles.detailRow}>
-                      <Text style={styles.detailLabel}>Amount:</Text>
+                      <Text style={styles.detailLabel}>{t('more.profile.labels.amount')}</Text>
                       <Text style={styles.detailValue}>{appointment.amount}</Text>
                     </View>
                   </View>
@@ -269,7 +296,7 @@ export const ProfileScreen = () => {
               <Ionicons name="search-outline" size={20} color={colors.textSecondary} />
               <TextInput
                 style={styles.searchInput}
-                placeholder="Search prescriptions..."
+                placeholder={t('more.profile.searchPrescriptionsPlaceholder')}
                 placeholderTextColor={colors.textLight}
                 value={searchQuery}
                 onChangeText={setSearchQuery}
@@ -291,7 +318,9 @@ export const ProfileScreen = () => {
                     </View>
                   </View>
                   <View style={styles.itemDetails}>
-                    <Text style={styles.detailValue}>Date: {prescription.date}</Text>
+                    <Text style={styles.detailValue}>
+                      {t('more.profile.labels.dateWithValue', { value: prescription.date })}
+                    </Text>
                   </View>
                 </View>
               ))}
@@ -304,7 +333,7 @@ export const ProfileScreen = () => {
               <Ionicons name="search-outline" size={20} color={colors.textSecondary} />
               <TextInput
                 style={styles.searchInput}
-                placeholder="Search medical records..."
+                placeholder={t('more.profile.searchMedicalRecordsPlaceholder')}
                 placeholderTextColor={colors.textLight}
                 value={searchQuery}
                 onChangeText={setSearchQuery}
@@ -324,7 +353,9 @@ export const ProfileScreen = () => {
                       <Text style={styles.itemSubtitle}>{record.description}</Text>
                     </View>
                   </View>
-                  <Text style={styles.detailValue}>Date: {record.date}</Text>
+                  <Text style={styles.detailValue}>
+                    {t('more.profile.labels.dateWithValue', { value: record.date })}
+                  </Text>
                 </View>
               ))}
           </>
@@ -336,16 +367,16 @@ export const ProfileScreen = () => {
               <View key={index} style={styles.itemCard}>
                 <View style={styles.billingRow}>
                   <View>
-                    <Text style={styles.detailLabel}>Date</Text>
+                    <Text style={styles.detailLabel}>{t('more.profile.labels.date')}</Text>
                     <Text style={styles.itemTitle}>{bill.date}</Text>
                   </View>
                   <View style={styles.billingAmount}>
-                    <Text style={styles.detailLabel}>Amount</Text>
+                    <Text style={styles.detailLabel}>{t('more.profile.labels.amountNoColon')}</Text>
                     <Text style={styles.amountValue}>{bill.amount}</Text>
                   </View>
                   <View style={[styles.statusBadge, { backgroundColor: getStatusBadge(bill.status) + '20' }]}>
                     <Text style={[styles.statusText, { color: getStatusBadge(bill.status) }]}>
-                      {bill.status}
+                      {getStatusLabel(bill.status)}
                     </Text>
                   </View>
                 </View>
@@ -363,7 +394,7 @@ export const ProfileScreen = () => {
       <SafeAreaView style={styles.container}>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={colors.primary} />
-          <Text style={styles.loadingText}>Loading profile...</Text>
+          <Text style={styles.loadingText}>{t('more.profile.loadingProfile')}</Text>
         </View>
       </SafeAreaView>
     );
@@ -383,7 +414,7 @@ export const ProfileScreen = () => {
               {profileData.isVerified && (
                 <View style={styles.verifiedBadge}>
                   <Ionicons name="checkmark-circle" size={16} color={colors.success} />
-                  <Text style={styles.verifiedText}>Verified</Text>
+                  <Text style={styles.verifiedText}>{t('more.profile.verified')}</Text>
                 </View>
               )}
               <Text style={styles.patientName}>{profileData.name}</Text>
@@ -401,7 +432,11 @@ export const ProfileScreen = () => {
                   </>
                 )}
                 {profileData.experienceYears > 0 && (
-                  <Text style={styles.metaText}>{profileData.experienceYears} Years Experience</Text>
+                  <Text style={styles.metaText}>
+                    {profileData.experienceYears === 1
+                      ? t('more.profile.yearExperience', { count: profileData.experienceYears })
+                      : t('more.profile.yearsExperience', { count: profileData.experienceYears })}
+                  </Text>
                 )}
               </View>
             </>
@@ -410,7 +445,12 @@ export const ProfileScreen = () => {
               <Text style={styles.patientId}>#{userId?.slice(-4) || '0000'}</Text>
               <Text style={styles.patientName}>{profileData.name}</Text>
               <View style={styles.patientMeta}>
-                {profileData.dob && <Text style={styles.metaText}>Age: {new Date().getFullYear() - new Date(profileData.dob).getFullYear()}</Text>}
+                {profileData.dob && (
+                  <Text style={styles.metaText}>
+                    {t('more.profile.ageLabel')}{' '}
+                    {new Date().getFullYear() - new Date(profileData.dob).getFullYear()}
+                  </Text>
+                )}
                 {profileData.gender && (
                   <>
                     <Text style={styles.metaSeparator}>•</Text>
@@ -430,7 +470,7 @@ export const ProfileScreen = () => {
         {!isDoctor && (
           <View style={styles.lastBooking}>
             <Ionicons name="calendar-outline" size={16} color={colors.textSecondary} />
-            <Text style={styles.lastBookingLabel}>Last Booking</Text>
+            <Text style={styles.lastBookingLabel}>{t('more.profile.lastBooking')}</Text>
             <Text style={styles.lastBookingDate}>24 Mar 2024</Text>
           </View>
         )}
@@ -451,7 +491,13 @@ export const ProfileScreen = () => {
                 onPress={() => setActiveTab(tab as any)}
               >
                 <Text style={[styles.tabText, activeTab === tab && styles.activeTabText]}>
-                  {tab.charAt(0).toUpperCase() + tab.slice(1)}
+                  {tab === 'appointments'
+                    ? t('more.profile.tabs.appointments')
+                    : tab === 'prescription'
+                      ? t('more.profile.tabs.prescription')
+                      : tab === 'medical'
+                        ? t('more.profile.tabs.medical')
+                        : t('more.profile.tabs.billing')}
                 </Text>
               </TouchableOpacity>
             ))}
@@ -464,7 +510,7 @@ export const ProfileScreen = () => {
         <ScrollView showsVerticalScrollIndicator={false} style={styles.content}>
           <View style={styles.doctorProfileSection}>
             <View style={styles.infoCard}>
-              <Text style={styles.sectionTitle}>Contact Information</Text>
+              <Text style={styles.sectionTitle}>{t('more.profile.contactInformation')}</Text>
               {profileData.email && (
                 <View style={styles.infoRow}>
                   <Ionicons name="mail-outline" size={20} color={colors.textSecondary} />
@@ -481,7 +527,7 @@ export const ProfileScreen = () => {
 
             {profileData.biography && (
               <View style={styles.infoCard}>
-                <Text style={styles.sectionTitle}>Biography</Text>
+                <Text style={styles.sectionTitle}>{t('more.profile.biography')}</Text>
                 <Text style={styles.biographyText}>{profileData.biography}</Text>
               </View>
             )}
@@ -492,7 +538,7 @@ export const ProfileScreen = () => {
               activeOpacity={0.7}
             >
               <Ionicons name="create-outline" size={20} color={colors.primary} />
-              <Text style={styles.editButtonText}>Edit Profile</Text>
+              <Text style={styles.editButtonText}>{t('more.profile.editProfile')}</Text>
             </TouchableOpacity>
           </View>
         </ScrollView>

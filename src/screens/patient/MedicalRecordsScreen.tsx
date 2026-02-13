@@ -30,6 +30,7 @@ import { API_BASE_URL } from '../../config/api';
 import Toast from 'react-native-toast-message';
 import { Button } from '../../components/common/Button';
 import { Input } from '../../components/common/Input';
+import { useTranslation } from 'react-i18next';
 
 type MedicalRecordsScreenNavigationProp = NativeStackNavigationProp<MoreStackParamList>;
 
@@ -76,6 +77,7 @@ const normalizeImageUrl = (imageUri: string | undefined | null): string | null =
 export const MedicalRecordsScreen = () => {
   const navigation = useNavigation<MedicalRecordsScreenNavigationProp>();
   const queryClient = useQueryClient();
+  const { t, i18n } = useTranslation();
   const [activeTab, setActiveTab] = useState<'medical' | 'prescription'>('medical');
   const [searchQuery, setSearchQuery] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
@@ -186,7 +188,7 @@ export const MedicalRecordsScreen = () => {
           fileSize: data.file.size || undefined,
         });
       } else {
-        throw new Error('File is required');
+        throw new Error(t('more.medicalRecords.validation.fileRequired'));
       }
     },
     onSuccess: () => {
@@ -203,15 +205,16 @@ export const MedicalRecordsScreen = () => {
       setFilePreview(null);
       Toast.show({
         type: 'success',
-        text1: 'Success',
-        text2: 'Medical record created successfully!',
+        text1: t('common.success'),
+        text2: t('more.medicalRecords.toasts.created'),
       });
     },
     onError: (error: any) => {
-      const errorMessage = error.response?.data?.message || error.message || 'Failed to create medical record';
+      const errorMessage =
+        error.response?.data?.message || error.message || t('more.medicalRecords.errors.failedToCreate');
       Toast.show({
         type: 'error',
-        text1: 'Error',
+        text1: t('common.error'),
         text2: errorMessage,
       });
     },
@@ -224,15 +227,16 @@ export const MedicalRecordsScreen = () => {
       queryClient.invalidateQueries({ queryKey: ['medicalRecords'] });
       Toast.show({
         type: 'success',
-        text1: 'Success',
-        text2: 'Medical record deleted successfully!',
+        text1: t('common.success'),
+        text2: t('more.medicalRecords.toasts.deleted'),
       });
     },
     onError: (error: any) => {
-      const errorMessage = error.response?.data?.message || error.message || 'Failed to delete medical record';
+      const errorMessage =
+        error.response?.data?.message || error.message || t('more.medicalRecords.errors.failedToDelete');
       Toast.show({
         type: 'error',
-        text1: 'Error',
+        text1: t('common.error'),
         text2: errorMessage,
       });
     },
@@ -251,17 +255,20 @@ export const MedicalRecordsScreen = () => {
       // Request permissions
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert('Permission Required', 'Please grant permission to access your files.');
+        Alert.alert(
+          t('more.medicalRecords.alerts.permissionRequired.title'),
+          t('more.medicalRecords.alerts.permissionRequired.body')
+        );
         return;
       }
 
       // Show action sheet
       Alert.alert(
-        'Select File',
-        'Choose file source',
+        t('more.medicalRecords.alerts.selectFile.title'),
+        t('more.medicalRecords.alerts.selectFile.body'),
         [
           {
-            text: 'Camera',
+            text: t('more.medicalRecords.actions.camera'),
             onPress: async () => {
               const result = await ImagePicker.launchCameraAsync({
                 mediaTypes: ImagePicker.MediaTypeOptions.All,
@@ -287,7 +294,7 @@ export const MedicalRecordsScreen = () => {
             },
           },
           {
-            text: 'Gallery',
+            text: t('more.medicalRecords.actions.gallery'),
             onPress: async () => {
               const result = await ImagePicker.launchImageLibraryAsync({
                 mediaTypes: ImagePicker.MediaTypeOptions.All,
@@ -313,7 +320,7 @@ export const MedicalRecordsScreen = () => {
             },
           },
           {
-            text: 'Document',
+            text: t('more.medicalRecords.actions.document'),
             onPress: async () => {
               const result = await DocumentPicker.getDocumentAsync({
                 type: '*/*',
@@ -326,8 +333,8 @@ export const MedicalRecordsScreen = () => {
                 if (asset.size && asset.size > 10 * 1024 * 1024) {
                   Toast.show({
                     type: 'error',
-                    text1: 'File Too Large',
-                    text2: 'File size must be less than 10 MB',
+                    text1: t('more.profileSettings.fileTooLargeTitle'),
+                    text2: t('more.medicalRecords.validation.fileSizeMustBeLessThan10mb'),
                   });
                   return;
                 }
@@ -347,15 +354,15 @@ export const MedicalRecordsScreen = () => {
               }
             },
           },
-          { text: 'Cancel', style: 'cancel' },
+          { text: t('common.cancel'), style: 'cancel' },
         ],
         { cancelable: true }
       );
     } catch (error: any) {
       Toast.show({
         type: 'error',
-        text1: 'Error',
-        text2: error.message || 'Failed to pick file',
+        text1: t('common.error'),
+        text2: error.message || t('more.medicalRecords.errors.failedToPickFile'),
       });
     }
   };
@@ -365,16 +372,16 @@ export const MedicalRecordsScreen = () => {
     if (!formData.title.trim()) {
       Toast.show({
         type: 'error',
-        text1: 'Validation Error',
-        text2: 'Title is required',
+        text1: t('common.error'),
+        text2: t('more.medicalRecords.validation.titleRequired'),
       });
       return;
     }
     if (!formData.file) {
       Toast.show({
         type: 'error',
-        text1: 'Validation Error',
-        text2: 'File is required',
+        text1: t('common.error'),
+        text2: t('more.medicalRecords.validation.fileRequired'),
       });
       return;
     }
@@ -383,10 +390,10 @@ export const MedicalRecordsScreen = () => {
 
   // Handle delete
   const handleDelete = (recordId: string) => {
-    Alert.alert('Delete Record', 'Are you sure you want to delete this medical record?', [
-      { text: 'Cancel', style: 'cancel' },
+    Alert.alert(t('more.medicalRecords.alerts.deleteRecord.title'), t('more.medicalRecords.alerts.deleteRecord.body'), [
+      { text: t('common.cancel'), style: 'cancel' },
       {
-        text: 'Delete',
+        text: t('more.settings.delete'),
         style: 'destructive',
         onPress: () => deleteRecordMutation.mutate(recordId),
       },
@@ -395,9 +402,9 @@ export const MedicalRecordsScreen = () => {
 
   // Format date
   const formatDate = (dateString: string | undefined) => {
-    if (!dateString) return 'N/A';
+    if (!dateString) return t('common.na');
     const date = new Date(dateString);
-    return date.toLocaleDateString('en-GB', {
+    return date.toLocaleDateString(i18n.language, {
       day: '2-digit',
       month: 'short',
       year: 'numeric',
@@ -439,8 +446,8 @@ export const MedicalRecordsScreen = () => {
 
       const doctorName =
         prescription.doctorId && typeof prescription.doctorId === 'object'
-          ? prescription.doctorId.fullName || 'Unknown Doctor'
-          : 'Unknown Doctor';
+          ? prescription.doctorId.fullName || t('common.unknownDoctor')
+          : t('common.unknownDoctor');
       const doctorImage =
         prescription.doctorId && typeof prescription.doctorId === 'object'
           ? prescription.doctorId.profileImage
@@ -449,8 +456,8 @@ export const MedicalRecordsScreen = () => {
       const imageSource = normalizedImageUrl ? { uri: normalizedImageUrl } : defaultAvatar;
 
       const title = prescription.appointmentId?.appointmentNumber
-        ? `Prescription for ${prescription.appointmentId.appointmentNumber}`
-        : 'Prescription';
+        ? t('more.medicalRecords.prescriptionFor', { appointmentNumber: prescription.appointmentId.appointmentNumber })
+        : t('more.medicalRecords.prescription');
 
       return (
         <View style={styles.recordCard}>
@@ -468,7 +475,7 @@ export const MedicalRecordsScreen = () => {
           <View style={styles.doctorInfo}>
             <Image source={imageSource} style={styles.doctorImage} defaultSource={defaultAvatar} />
             <View style={styles.doctorDetails}>
-              <Text style={styles.doctorLabel}>Prescribed By</Text>
+              <Text style={styles.doctorLabel}>{t('more.medicalRecords.prescribedBy')}</Text>
               <Text style={styles.doctorName}>{doctorName}</Text>
             </View>
           </View>
@@ -479,14 +486,14 @@ export const MedicalRecordsScreen = () => {
               onPress={() => navigation.navigate('Prescription', { appointmentId })}
             >
               <Ionicons name="eye-outline" size={18} color={colors.primary} />
-              <Text style={styles.viewButtonText}>View</Text>
+              <Text style={styles.viewButtonText}>{t('common.view')}</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.downloadButton}
               onPress={() => navigation.navigate('Prescription', { appointmentId })}
             >
               <Ionicons name="download-outline" size={18} color={colors.primary} />
-              <Text style={styles.downloadButtonText}>Download</Text>
+              <Text style={styles.downloadButtonText}>{t('common.download')}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -497,10 +504,10 @@ export const MedicalRecordsScreen = () => {
     const recordId = `#${record._id.slice(-6).toUpperCase()}`;
     const doctorName =
       record.relatedDoctorId && typeof record.relatedDoctorId === 'object' && record.relatedDoctorId !== null
-        ? record.relatedDoctorId.fullName || 'Unknown Doctor'
+        ? record.relatedDoctorId.fullName || t('common.unknownDoctor')
         : record.relatedDoctorId
-        ? 'Unknown Doctor'
-        : 'Self';
+        ? t('common.unknownDoctor')
+        : t('more.medicalRecords.self');
     const doctorImage =
       record.relatedDoctorId && typeof record.relatedDoctorId === 'object' && record.relatedDoctorId !== null
         ? record.relatedDoctorId.profileImage
@@ -520,14 +527,16 @@ export const MedicalRecordsScreen = () => {
             <Text style={styles.recordDate}>{formatDate(record.uploadedDate || record.createdAt)}</Text>
             <View style={styles.recordTypeBadge}>
               <View style={[styles.badge, { backgroundColor: getRecordTypeBadgeColor(record.recordType) }]}>
-                <Text style={styles.badgeText}>{record.recordType?.replace('_', ' ') || 'OTHER'}</Text>
+                <Text style={styles.badgeText}>
+                  {t(`more.medicalRecords.recordTypes.${record.recordType || 'OTHER'}` as any)}
+                </Text>
               </View>
             </View>
           </View>
         </View>
         {record.description && (
           <View style={styles.descriptionContainer}>
-            <Text style={styles.descriptionLabel}>Description:</Text>
+            <Text style={styles.descriptionLabel}>{t('more.medicalRecords.descriptionLabel')}</Text>
             <Text style={styles.descriptionText} numberOfLines={2}>
               {record.description}
             </Text>
@@ -536,19 +545,22 @@ export const MedicalRecordsScreen = () => {
         <View style={styles.actionButtons}>
           <TouchableOpacity style={styles.viewButton} onPress={() => setViewRecord(record)}>
             <Ionicons name="eye-outline" size={18} color={colors.primary} />
-            <Text style={styles.viewButtonText}>View</Text>
+            <Text style={styles.viewButtonText}>{t('common.view')}</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.downloadButton}
             onPress={() => {
               const fileUrl = normalizeImageUrl(record.fileUrl);
               if (fileUrl) {
-                Alert.alert('Download', 'File download functionality would open here');
+                Alert.alert(
+                  t('more.medicalRecords.alerts.download.title'),
+                  t('more.medicalRecords.alerts.download.body')
+                );
               }
             }}
           >
             <Ionicons name="download-outline" size={18} color={colors.primary} />
-            <Text style={styles.downloadButtonText}>Download</Text>
+            <Text style={styles.downloadButtonText}>{t('common.download')}</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.deleteButton}
@@ -571,7 +583,7 @@ export const MedicalRecordsScreen = () => {
           onPress={() => handleTabChange('medical')}
         >
           <Text style={[styles.tabText, activeTab === 'medical' && styles.activeTabText]}>
-            Medical Records
+            {t('more.medicalRecords.tabs.medicalRecords')}
           </Text>
         </TouchableOpacity>
         <TouchableOpacity
@@ -579,7 +591,7 @@ export const MedicalRecordsScreen = () => {
           onPress={() => handleTabChange('prescription')}
         >
           <Text style={[styles.tabText, activeTab === 'prescription' && styles.activeTabText]}>
-            Prescriptions
+            {t('more.medicalRecords.tabs.prescriptions')}
           </Text>
         </TouchableOpacity>
       </View>
@@ -590,7 +602,11 @@ export const MedicalRecordsScreen = () => {
           <Ionicons name="search-outline" size={20} color={colors.textSecondary} />
           <TextInput
             style={styles.searchInput}
-            placeholder="Search..."
+            placeholder={
+              activeTab === 'prescription'
+                ? t('more.profile.searchPrescriptionsPlaceholder')
+                : t('more.profile.searchMedicalRecordsPlaceholder')
+            }
             placeholderTextColor={colors.textLight}
             value={searchQuery}
             onChangeText={setSearchQuery}
@@ -599,7 +615,7 @@ export const MedicalRecordsScreen = () => {
         {activeTab === 'medical' && (
           <TouchableOpacity style={styles.addButton} onPress={() => setShowAddModal(true)}>
             <Ionicons name="add" size={20} color={colors.textWhite} />
-            <Text style={styles.addButtonText}>Add</Text>
+            <Text style={styles.addButtonText}>{t('common.add')}</Text>
           </TouchableOpacity>
         )}
       </View>
@@ -608,7 +624,7 @@ export const MedicalRecordsScreen = () => {
       {((activeTab === 'prescription' ? prescriptionsLoading : medicalLoading) && currentPage === 1) ? (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={colors.primary} />
-          <Text style={styles.loadingText}>Loading records...</Text>
+          <Text style={styles.loadingText}>{t('more.medicalRecords.loadingRecords')}</Text>
         </View>
       ) : filteredRecords.length === 0 ? (
         <View style={styles.emptyContainer}>
@@ -618,7 +634,9 @@ export const MedicalRecordsScreen = () => {
             color={colors.textLight}
           />
           <Text style={styles.emptyText}>
-            {activeTab === 'prescription' ? 'No prescriptions found' : 'No medical records found'}
+            {activeTab === 'prescription'
+              ? t('more.medicalRecords.empty.noPrescriptionsFound')
+              : t('more.medicalRecords.empty.noMedicalRecordsFound')}
           </Text>
         </View>
       ) : (
@@ -638,11 +656,11 @@ export const MedicalRecordsScreen = () => {
                   disabled={currentPage === 1}
                 >
                   <Text style={[styles.paginationButtonText, currentPage === 1 && styles.paginationButtonTextDisabled]}>
-                    Prev
+                    {t('common.prev')}
                   </Text>
                 </TouchableOpacity>
                 <Text style={styles.paginationText}>
-                  Page {currentPage} of {pagination.pages}
+                  {t('more.medicalRecords.pagination.pageOf', { current: currentPage, total: pagination.pages })}
                 </Text>
                 <TouchableOpacity
                   style={[styles.paginationButton, currentPage === pagination.pages && styles.paginationButtonDisabled]}
@@ -655,7 +673,7 @@ export const MedicalRecordsScreen = () => {
                       currentPage === pagination.pages && styles.paginationButtonTextDisabled,
                     ]}
                   >
-                    Next
+                    {t('common.next')}
                   </Text>
                 </TouchableOpacity>
               </View>
@@ -669,22 +687,22 @@ export const MedicalRecordsScreen = () => {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Add Medical Record</Text>
+              <Text style={styles.modalTitle}>{t('more.medicalRecords.addModal.title')}</Text>
               <TouchableOpacity onPress={() => setShowAddModal(false)}>
                 <Ionicons name="close" size={24} color={colors.text} />
               </TouchableOpacity>
             </View>
             <ScrollView style={styles.modalBody} showsVerticalScrollIndicator={false}>
               <Input
-                label="Title *"
-                placeholder="Enter record title"
+                label={t('more.medicalRecords.addModal.titleLabel')}
+                placeholder={t('more.medicalRecords.addModal.titlePlaceholder')}
                 value={formData.title}
                 onChangeText={(text) => setFormData((prev) => ({ ...prev, title: text }))}
                 style={styles.modalInput}
               />
               <Input
-                label="Description"
-                placeholder="Enter description (optional)"
+                label={t('more.medicalRecords.addModal.descriptionLabel')}
+                placeholder={t('more.medicalRecords.addModal.descriptionPlaceholder')}
                 value={formData.description}
                 onChangeText={(text) => setFormData((prev) => ({ ...prev, description: text }))}
                 multiline
@@ -692,7 +710,7 @@ export const MedicalRecordsScreen = () => {
                 style={styles.modalInput}
               />
               <View style={styles.modalInput}>
-                <Text style={styles.inputLabel}>Record Type *</Text>
+                <Text style={styles.inputLabel}>{t('more.medicalRecords.addModal.recordTypeLabel')}</Text>
                 <View style={styles.recordTypeContainer}>
                   {(['PRESCRIPTION', 'LAB_REPORT', 'TEST_RESULT', 'IMAGE', 'PDF', 'OTHER'] as const).map((type) => (
                     <TouchableOpacity
@@ -709,18 +727,18 @@ export const MedicalRecordsScreen = () => {
                           formData.recordType === type && styles.recordTypeOptionTextActive,
                         ]}
                       >
-                        {type.replace('_', ' ')}
+                        {t(`more.medicalRecords.recordTypes.${type}` as any)}
                       </Text>
                     </TouchableOpacity>
                   ))}
                 </View>
               </View>
               <View style={styles.modalInput}>
-                <Text style={styles.inputLabel}>File *</Text>
+                <Text style={styles.inputLabel}>{t('more.medicalRecords.addModal.fileLabel')}</Text>
                 <TouchableOpacity style={styles.filePickerButton} onPress={handlePickFile}>
                   <Ionicons name="document-attach-outline" size={20} color={colors.primary} />
                   <Text style={styles.filePickerButtonText}>
-                    {formData.file ? formData.fileName : 'Choose File'}
+                    {formData.file ? formData.fileName : t('more.medicalRecords.addModal.chooseFile')}
                   </Text>
                 </TouchableOpacity>
                 {formData.file && (
@@ -733,19 +751,23 @@ export const MedicalRecordsScreen = () => {
                 {filePreview && (
                   <Image source={{ uri: filePreview }} style={styles.filePreview} resizeMode="contain" />
                 )}
-                <Text style={styles.fileHint}>Max file size: 10 MB</Text>
+                <Text style={styles.fileHint}>{t('more.medicalRecords.addModal.maxFileSize')}</Text>
               </View>
             </ScrollView>
             <View style={styles.modalFooter}>
               <Button
-                title="Cancel"
+                title={t('common.cancel')}
                 onPress={() => setShowAddModal(false)}
                 style={styles.cancelButton}
                 textStyle={styles.cancelButtonText}
                 variant="secondary"
               />
               <Button
-                title={createRecordMutation.isPending ? 'Uploading...' : 'Add Record'}
+                title={
+                  createRecordMutation.isPending
+                    ? t('more.medicalRecords.addModal.uploading')
+                    : t('more.medicalRecords.addModal.addRecord')
+                }
                 onPress={handleSubmit}
                 style={styles.submitButton}
                 disabled={createRecordMutation.isPending}
@@ -768,24 +790,26 @@ export const MedicalRecordsScreen = () => {
               </View>
               <ScrollView style={styles.modalBody} showsVerticalScrollIndicator={false}>
                 <View style={styles.viewRecordItem}>
-                  <Text style={styles.viewRecordLabel}>Type:</Text>
+                  <Text style={styles.viewRecordLabel}>{t('more.medicalRecords.viewModal.typeLabel')}</Text>
                   <View style={[styles.badge, { backgroundColor: getRecordTypeBadgeColor(viewRecord.recordType) }]}>
-                    <Text style={styles.badgeText}>{viewRecord.recordType?.replace('_', ' ') || 'OTHER'}</Text>
+                    <Text style={styles.badgeText}>
+                      {t(`more.medicalRecords.recordTypes.${viewRecord.recordType || 'OTHER'}` as any)}
+                    </Text>
                   </View>
                 </View>
                 {viewRecord.description && (
                   <View style={styles.viewRecordItem}>
-                    <Text style={styles.viewRecordLabel}>Description:</Text>
+                    <Text style={styles.viewRecordLabel}>{t('more.medicalRecords.viewModal.descriptionLabel')}</Text>
                     <Text style={styles.viewRecordText}>{viewRecord.description}</Text>
                   </View>
                 )}
                 <View style={styles.viewRecordItem}>
-                  <Text style={styles.viewRecordLabel}>Uploaded Date:</Text>
+                  <Text style={styles.viewRecordLabel}>{t('more.medicalRecords.viewModal.uploadedDateLabel')}</Text>
                   <Text style={styles.viewRecordText}>{formatDate(viewRecord.uploadedDate || viewRecord.createdAt)}</Text>
                 </View>
                 {viewRecord.fileName && (
                   <View style={styles.viewRecordItem}>
-                    <Text style={styles.viewRecordLabel}>File Name:</Text>
+                    <Text style={styles.viewRecordLabel}>{t('more.medicalRecords.viewModal.fileNameLabel')}</Text>
                     <Text style={styles.viewRecordText}>{viewRecord.fileName}</Text>
                   </View>
                 )}
@@ -796,18 +820,21 @@ export const MedicalRecordsScreen = () => {
                       onPress={() => {
                         const fileUrl = normalizeImageUrl(viewRecord.fileUrl);
                         if (fileUrl) {
-                          Alert.alert('Download', 'File download functionality would open here');
+                          Alert.alert(
+                            t('more.medicalRecords.alerts.download.title'),
+                            t('more.medicalRecords.alerts.download.body')
+                          );
                         }
                       }}
                     >
                       <Ionicons name="download-outline" size={20} color={colors.textWhite} />
-                      <Text style={styles.downloadButtonLargeText}>View/Download File</Text>
+                      <Text style={styles.downloadButtonLargeText}>{t('more.medicalRecords.viewModal.viewDownloadFile')}</Text>
                     </TouchableOpacity>
                   </View>
                 )}
               </ScrollView>
               <View style={styles.modalFooter}>
-                <Button title="Close" onPress={() => setViewRecord(null)} style={styles.closeButton} />
+                <Button title={t('common.close')} onPress={() => setViewRecord(null)} style={styles.closeButton} />
               </View>
             </View>
           </View>

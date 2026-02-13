@@ -26,6 +26,7 @@ import * as favoriteApi from '../../services/favorite';
 import * as doctorApi from '../../services/doctor';
 import { API_BASE_URL } from '../../config/api';
 import Toast from 'react-native-toast-message';
+import { useTranslation } from 'react-i18next';
 
 type FavouritesScreenNavigationProp = CompositeNavigationProp<
   NativeStackNavigationProp<MoreStackParamList>,
@@ -76,6 +77,7 @@ export const FavouritesScreen = () => {
   const navigation = useNavigation<FavouritesScreenNavigationProp>();
   const { user } = useAuth();
   const queryClient = useQueryClient();
+  const { t, i18n } = useTranslation();
   const [searchQuery, setSearchQuery] = useState('');
   const [page, setPage] = useState(1);
   const limit = 12;
@@ -198,17 +200,18 @@ export const FavouritesScreen = () => {
     onSuccess: () => {
       Toast.show({
         type: 'success',
-        text1: 'Success',
-        text2: 'Doctor removed from favorites',
+        text1: t('common.success'),
+        text2: t('more.favourites.toasts.removed'),
       });
       queryClient.invalidateQueries(['favorites', user?._id || user?.id]);
       refetch();
     },
     onError: (error: any) => {
-      const errorMessage = error.response?.data?.message || error.message || 'Failed to remove favorite';
+      const errorMessage =
+        error.response?.data?.message || error.message || t('more.favourites.errors.failedToRemove');
       Toast.show({
         type: 'error',
-        text1: 'Error',
+        text1: t('common.error'),
         text2: errorMessage,
       });
     },
@@ -216,10 +219,10 @@ export const FavouritesScreen = () => {
 
   // Handle remove favorite
   const handleRemoveFavorite = (favoriteId: string) => {
-    Alert.alert('Remove Favorite', 'Are you sure you want to remove this doctor from favorites?', [
-      { text: 'Cancel', style: 'cancel' },
+    Alert.alert(t('more.favourites.alerts.removeTitle'), t('more.favourites.alerts.removeBody'), [
+      { text: t('common.cancel'), style: 'cancel' },
       {
-        text: 'Remove',
+        text: t('common.remove'),
         style: 'destructive',
         onPress: () => removeFavoriteMutation.mutate(favoriteId),
       },
@@ -235,8 +238,8 @@ export const FavouritesScreen = () => {
 
   // Format date
   const formatDate = (date: string | undefined) => {
-    if (!date) return 'N/A';
-    return new Date(date).toLocaleDateString('en-US', {
+    if (!date) return t('common.na');
+    return new Date(date).toLocaleDateString(i18n.language, {
       year: 'numeric',
       month: 'short',
       day: 'numeric',
@@ -279,7 +282,7 @@ export const FavouritesScreen = () => {
       <SafeAreaView style={styles.container}>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={colors.primary} />
-          <Text style={styles.loadingText}>Loading favorites...</Text>
+          <Text style={styles.loadingText}>{t('more.favourites.loadingFavorites')}</Text>
         </View>
       </SafeAreaView>
     );
@@ -290,12 +293,12 @@ export const FavouritesScreen = () => {
       <SafeAreaView style={styles.container}>
         <View style={styles.errorContainer}>
           <Ionicons name="alert-circle-outline" size={64} color={colors.error} />
-          <Text style={styles.errorTitle}>Error loading favorites</Text>
+          <Text style={styles.errorTitle}>{t('more.favourites.error.title')}</Text>
           <Text style={styles.errorText}>
-            {error instanceof Error ? error.message : 'Please try refreshing the page'}
+            {error instanceof Error ? error.message : t('more.favourites.error.pleaseTryRefreshing')}
           </Text>
           <TouchableOpacity style={styles.retryButton} onPress={() => refetch()}>
-            <Text style={styles.retryButtonText}>Retry</Text>
+            <Text style={styles.retryButtonText}>{t('common.retry')}</Text>
           </TouchableOpacity>
         </View>
       </SafeAreaView>
@@ -309,7 +312,7 @@ export const FavouritesScreen = () => {
         <Ionicons name="search-outline" size={20} color={colors.textSecondary} />
         <TextInput
           style={styles.searchInput}
-          placeholder="Search favourites..."
+          placeholder={t('more.favourites.searchPlaceholder')}
           placeholderTextColor={colors.textLight}
           value={searchQuery}
           onChangeText={setSearchQuery}
@@ -320,13 +323,13 @@ export const FavouritesScreen = () => {
       {filteredFavorites.length === 0 ? (
         <View style={styles.emptyContainer}>
           <Ionicons name="heart-outline" size={64} color={colors.textLight} />
-          <Text style={styles.emptyTitle}>No favorites yet</Text>
-          <Text style={styles.emptyText}>Start adding doctors to your favorites to see them here.</Text>
+          <Text style={styles.emptyTitle}>{t('more.favourites.empty.title')}</Text>
+          <Text style={styles.emptyText}>{t('more.favourites.empty.body')}</Text>
           <TouchableOpacity
             style={styles.browseButton}
             onPress={() => (navigation as any).navigate('Home', { screen: 'Search' })}
           >
-            <Text style={styles.browseButtonText}>Browse Doctors</Text>
+            <Text style={styles.browseButtonText}>{t('more.favourites.empty.browseDoctors')}</Text>
           </TouchableOpacity>
         </View>
       ) : (
@@ -336,17 +339,17 @@ export const FavouritesScreen = () => {
           renderItem={({ item: fav }) => {
             const doctorId = fav.doctorId;
             const doctor = fav.doctor;
-            const doctorName = doctor?.userId?.fullName || doctor?.fullName || 'Unknown Doctor';
+            const doctorName = doctor?.userId?.fullName || doctor?.fullName || t('common.unknownDoctor');
             const doctorImage = doctor?.userId?.profileImage || doctor?.profileImage;
             const normalizedImageUrl = normalizeImageUrl(doctorImage);
             const imageSource = normalizedImageUrl ? { uri: normalizedImageUrl } : defaultAvatar;
-            const specialization = doctor?.specialization?.name || 'General';
+            const specialization = doctor?.specialization?.name || t('common.general');
             const rating = doctor?.ratingAvg || 0;
             const ratingCount = doctor?.ratingCount || 0;
             const location = doctor?.clinics?.[0]
               ? `${doctor.clinics[0].city || ''}${doctor.clinics[0].state ? `, ${doctor.clinics[0].state}` : ''}`.trim() ||
-                'Location not available'
-              : 'Location not available';
+                t('home.patient.locationNotAvailable')
+              : t('home.patient.locationNotAvailable');
             const lastBook = formatDate(fav.createdAt);
 
             return (
@@ -376,7 +379,7 @@ export const FavouritesScreen = () => {
                       <Ionicons name="location-outline" size={14} color={colors.textSecondary} />
                       <Text style={styles.infoText}>{location}</Text>
                     </View>
-                    <Text style={styles.lastBook}>Added on {lastBook}</Text>
+                    <Text style={styles.lastBook}>{t('more.favourites.addedOn', { date: lastBook })}</Text>
                   </View>
                 </TouchableOpacity>
                 <View style={styles.actionButtons}>
@@ -384,13 +387,13 @@ export const FavouritesScreen = () => {
                     style={styles.viewProfileButton}
                     onPress={() => handleViewProfile(doctorId)}
                   >
-                    <Text style={styles.viewProfileButtonText}>View Profile</Text>
+                    <Text style={styles.viewProfileButtonText}>{t('more.favourites.actions.viewProfile')}</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
                     style={styles.bookButton}
                     onPress={() => handleBookAppointment(doctorId)}
                   >
-                    <Text style={styles.bookButtonText}>Book Now</Text>
+                    <Text style={styles.bookButtonText}>{t('more.favourites.actions.bookNow')}</Text>
                   </TouchableOpacity>
                 </View>
               </View>
@@ -405,7 +408,7 @@ export const FavouritesScreen = () => {
             pagination && page < pagination.pages ? (
               <View style={styles.loadMoreContainer}>
                 <ActivityIndicator size="small" color={colors.primary} />
-                <Text style={styles.loadMoreText}>Loading more...</Text>
+                <Text style={styles.loadMoreText}>{t('more.favourites.loadingMore')}</Text>
               </View>
             ) : null
           }

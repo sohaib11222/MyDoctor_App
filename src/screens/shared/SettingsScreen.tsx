@@ -17,11 +17,13 @@ import { colors } from '../../constants/colors';
 import { Ionicons } from '@expo/vector-icons';
 import { Input } from '../../components/common/Input';
 import { Button } from '../../components/common/Button';
+import { useTranslation } from 'react-i18next';
 
 type SettingsScreenNavigationProp = NativeStackNavigationProp<MoreStackParamList>;
 
 export const SettingsScreen = () => {
   const navigation = useNavigation<SettingsScreenNavigationProp>();
+  const { t } = useTranslation();
   const [formData, setFormData] = useState({
     firstName: 'Adrian',
     lastName: 'Marshall',
@@ -36,11 +38,11 @@ export const SettingsScreen = () => {
     pincode: '10001',
   });
 
-  const bloodGroups = ['Select', 'B+ve', 'AB+ve', 'B-ve', 'O+ve', 'O-ve', 'A+ve', 'A-ve'];
+  const bloodGroups = [t('common.select'), 'B+ve', 'AB+ve', 'B-ve', 'O+ve', 'O-ve', 'A+ve', 'A-ve'];
 
   const handleSave = () => {
     // Handle save
-    Alert.alert('Success', 'Profile settings saved successfully');
+    Alert.alert(t('common.success'), t('more.settings.profileSettingsSaved'));
   };
 
   const handleChangePassword = () => {
@@ -53,11 +55,11 @@ export const SettingsScreen = () => {
 
   const handleDeleteAccount = () => {
     Alert.alert(
-      'Delete Account',
-      'Are you sure you want to delete your account? This action cannot be undone.',
+      t('more.settings.deleteAccountTitle'),
+      t('more.settings.deleteAccountBody'),
       [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Delete', style: 'destructive', onPress: () => {} },
+        { text: t('common.cancel'), style: 'cancel' },
+        { text: t('more.settings.delete'), style: 'destructive', onPress: () => {} },
       ]
     );
   };
@@ -67,62 +69,62 @@ export const SettingsScreen = () => {
       <ScrollView showsVerticalScrollIndicator={false}>
         {/* Profile Photo */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Profile Photo</Text>
+          <Text style={styles.sectionTitle}>{t('more.settings.profilePhoto')}</Text>
           <View style={styles.profilePhotoContainer}>
             <View style={styles.profilePhoto}>
               <Ionicons name="image-outline" size={40} color={colors.textSecondary} />
             </View>
             <View style={styles.photoActions}>
               <TouchableOpacity style={styles.photoButton}>
-                <Text style={styles.photoButtonText}>Upload New</Text>
+                <Text style={styles.photoButtonText}>{t('common.uploadNew')}</Text>
               </TouchableOpacity>
               <TouchableOpacity style={styles.photoButtonRemove}>
-                <Text style={styles.photoButtonRemoveText}>Remove</Text>
+                <Text style={styles.photoButtonRemoveText}>{t('common.remove')}</Text>
               </TouchableOpacity>
             </View>
           </View>
           <Text style={styles.photoHint}>
-            Your Image should Below 4 MB, Accepted format jpg,png,svg
+            {t('more.settings.photoHint')}
           </Text>
         </View>
 
         {/* Information */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Information</Text>
+          <Text style={styles.sectionTitle}>{t('more.settings.information')}</Text>
           <Input
-            label="First Name *"
+            label={t('more.settings.firstNameLabel')}
             value={formData.firstName}
             onChangeText={(text) => setFormData({ ...formData, firstName: text })}
-            placeholder="Enter first name"
+            placeholder={t('more.settings.firstNamePlaceholder')}
           />
           <Input
-            label="Last Name *"
+            label={t('more.settings.lastNameLabel')}
             value={formData.lastName}
             onChangeText={(text) => setFormData({ ...formData, lastName: text })}
-            placeholder="Enter last name"
+            placeholder={t('more.settings.lastNamePlaceholder')}
           />
           <Input
-            label="Date of Birth *"
+            label={t('more.settings.dateOfBirthLabel')}
             value={formData.dateOfBirth}
             onChangeText={(text) => setFormData({ ...formData, dateOfBirth: text })}
-            placeholder="dd/mm/yyyy"
+            placeholder={t('more.settings.dateOfBirthPlaceholder')}
           />
           <Input
-            label="Phone Number *"
+            label={t('more.settings.phoneNumberLabel')}
             value={formData.phone}
             onChangeText={(text) => setFormData({ ...formData, phone: text })}
-            placeholder="Enter phone number"
+            placeholder={t('more.settings.phoneNumberPlaceholder')}
             keyboardType="phone-pad"
           />
           <Input
-            label="Email Address *"
+            label={t('more.settings.emailAddressLabel')}
             value={formData.email}
             onChangeText={(text) => setFormData({ ...formData, email: text })}
-            placeholder="Enter email"
+            placeholder={t('more.settings.emailPlaceholder')}
             keyboardType="email-address"
           />
           <View style={styles.selectContainer}>
-            <Text style={styles.label}>Blood Group *</Text>
+            <Text style={styles.label}>{t('more.settings.bloodGroupLabel')}</Text>
             <TouchableOpacity style={styles.select}>
               <Text style={styles.selectText}>{formData.bloodGroup}</Text>
               <Ionicons name="chevron-down" size={20} color={colors.textSecondary} />
@@ -132,51 +134,51 @@ export const SettingsScreen = () => {
 
         {/* Address */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Address</Text>
+          <Text style={styles.sectionTitle}>{t('more.settings.address')}</Text>
           <Input
-            label="Address *"
+            label={t('more.settings.addressLabel')}
             value={formData.address}
             onChangeText={(text) => setFormData({ ...formData, address: text })}
-            placeholder="Enter address"
+            placeholder={t('more.settings.addressPlaceholder')}
           />
           <Input
-            label="City *"
+            label={t('more.settings.cityLabel')}
             value={formData.city}
             onChangeText={(text) => setFormData({ ...formData, city: text })}
-            placeholder="Enter city"
+            placeholder={t('more.settings.cityPlaceholder')}
           />
           <Input
-            label="State *"
+            label={t('more.settings.stateLabel')}
             value={formData.state}
             onChangeText={(text) => setFormData({ ...formData, state: text })}
-            placeholder="Enter state"
+            placeholder={t('more.settings.statePlaceholder')}
           />
           <Input
-            label="Country *"
+            label={t('more.settings.countryLabel')}
             value={formData.country}
             onChangeText={(text) => setFormData({ ...formData, country: text })}
-            placeholder="Enter country"
+            placeholder={t('more.settings.countryPlaceholder')}
           />
           <Input
-            label="Pincode *"
+            label={t('more.settings.pincodeLabel')}
             value={formData.pincode}
             onChangeText={(text) => setFormData({ ...formData, pincode: text })}
-            placeholder="Enter pincode"
+            placeholder={t('more.settings.pincodePlaceholder')}
             keyboardType="numeric"
           />
         </View>
 
         {/* Action Buttons */}
         <View style={styles.actionsSection}>
-          <Button title="Save Changes" onPress={handleSave} style={styles.saveButton} />
+          <Button title={t('common.saveChanges')} onPress={handleSave} style={styles.saveButton} />
           <TouchableOpacity style={styles.actionButton} onPress={handleChangePassword}>
-            <Text style={styles.actionButtonText}>Change Password</Text>
+            <Text style={styles.actionButtonText}>{t('more.settings.changePassword')}</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.actionButton} onPress={handleTwoFactorAuth}>
-            <Text style={styles.actionButtonText}>2 Factor Authentication</Text>
+            <Text style={styles.actionButtonText}>{t('more.settings.twoFactorAuth')}</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.deleteButton} onPress={handleDeleteAccount}>
-            <Text style={styles.deleteButtonText}>Delete Account</Text>
+            <Text style={styles.deleteButtonText}>{t('more.settings.deleteAccount')}</Text>
           </TouchableOpacity>
         </View>
       </ScrollView>

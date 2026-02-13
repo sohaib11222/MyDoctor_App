@@ -9,6 +9,7 @@ export type AuthStackParamList = {
   ForgotPassword: undefined;
   DoctorRegister: undefined;
   DoctorVerificationUpload: undefined;
+  PharmacyPhoneVerification: undefined;
   PharmacyVerificationUpload: undefined;
   PendingApproval: undefined;
 };

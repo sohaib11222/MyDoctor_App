@@ -2,6 +2,7 @@ import React from 'react';
 import { View, StyleSheet, TouchableOpacity, Text } from 'react-native';
 import { createNativeStackNavigator, NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useNavigation } from '@react-navigation/native';
+import { useTranslation } from 'react-i18next';
 import { Ionicons } from '@expo/vector-icons';
 import { PharmacyStackParamList } from '../types';
 import { PharmacyHomeScreen } from '../../screens/pharmacy/PharmacyHomeScreen';
@@ -21,6 +22,8 @@ import { colors } from '../../constants/colors';
 const Stack = createNativeStackNavigator<PharmacyStackParamList>();
 
 export const PharmacyStack = () => {
+  const { t } = useTranslation();
+
   // Cart icon component for header - defined inside to access context
   const CartIconHeader = () => {
     const navigation = useNavigation<NativeStackNavigationProp<PharmacyStackParamList>>();
@@ -68,52 +71,52 @@ export const PharmacyStack = () => {
       <Stack.Screen 
         name="PharmacyHome" 
         component={PharmacyHomeScreen}
-        options={{ title: 'Pharmacy', headerShown: false }}
+        options={{ title: t('pharmacy.nav.pharmacy'), headerShown: false }}
       />
       <Stack.Screen 
         name="PharmacySearch" 
         component={PharmacySearchScreen}
-        options={{ title: 'Search Pharmacies' }}
+        options={{ title: t('pharmacy.nav.searchPharmacies') }}
       />
       <Stack.Screen 
         name="PharmacyDetails" 
         component={PharmacyDetailsScreen}
-        options={{ title: 'Pharmacy Details' }}
+        options={{ title: t('pharmacy.nav.pharmacyDetails') }}
       />
       <Stack.Screen 
         name="ProductCatalog" 
         component={ProductCatalogScreen}
-        options={{ title: 'Products' }}
+        options={{ title: t('pharmacy.nav.products') }}
       />
       <Stack.Screen 
         name="ProductDetails" 
         component={ProductDetailsScreen}
-        options={{ title: 'Product Details' }}
+        options={{ title: t('pharmacy.nav.productDetails') }}
       />
       <Stack.Screen 
         name="Cart" 
         component={CartScreen}
-        options={{ title: 'Shopping Cart' }}
+        options={{ title: t('pharmacy.nav.cart') }}
       />
       <Stack.Screen 
         name="Checkout" 
         component={CheckoutScreen}
-        options={{ title: 'Checkout' }}
+        options={{ title: t('pharmacy.nav.checkout') }}
       />
       <Stack.Screen 
         name="OrderHistory" 
         component={OrderHistoryScreen}
-        options={{ title: 'Order History', headerShown: false }}
+        options={{ title: t('pharmacy.nav.orderHistory'), headerShown: false }}
       />
       <Stack.Screen 
         name="OrderDetails" 
         component={OrderDetailsScreen}
-        options={{ title: 'Order Details' }}
+        options={{ title: t('pharmacy.nav.orderDetails') }}
       />
       <Stack.Screen 
         name="PaymentSuccess" 
         component={PaymentSuccessScreen}
-        options={{ title: 'Payment Success', headerShown: false }}
+        options={{ title: t('pharmacy.nav.paymentSuccess'), headerShown: false }}
       />
     </Stack.Navigator>
   );

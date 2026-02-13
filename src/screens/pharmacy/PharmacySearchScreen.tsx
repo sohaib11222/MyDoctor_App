@@ -21,6 +21,7 @@ import { colors } from '../../constants/colors';
 import { Ionicons } from '@expo/vector-icons';
 import * as pharmacyApi from '../../services/pharmacy';
 import { API_BASE_URL } from '../../config/api';
+import { useTranslation } from 'react-i18next';
 
 type PharmacySearchScreenNavigationProp = NativeStackNavigationProp<PharmacyStackParamList, 'PharmacySearch'>;
 type PharmacySearchRouteProp = RouteProp<PharmacyStackParamList, 'PharmacySearch'>;
@@ -59,6 +60,7 @@ const normalizeImageUrl = (imageUri: string | undefined | null): string | null =
 export const PharmacySearchScreen = () => {
   const navigation = useNavigation<PharmacySearchScreenNavigationProp>();
   const route = useRoute<PharmacySearchRouteProp>();
+  const { t } = useTranslation();
   const [searchTerm, setSearchTerm] = useState('');
   const [cityFilter, setCityFilter] = useState('');
   const [kind, setKind] = useState<'PHARMACY' | 'PARAPHARMACY'>('PHARMACY');
@@ -101,7 +103,7 @@ export const PharmacySearchScreen = () => {
   };
 
   const formatAddress = (address: pharmacyApi.Pharmacy['address']) => {
-    if (!address) return 'Address not available';
+    if (!address) return t('pharmacy.common.addressNotAvailable');
     const parts = [
       address.line1,
       address.line2,
@@ -110,7 +112,7 @@ export const PharmacySearchScreen = () => {
       address.country,
       address.zip,
     ].filter(Boolean);
-    return parts.join(', ') || 'Address not available';
+    return parts.join(', ') || t('pharmacy.common.addressNotAvailable');
   };
 
   const handleCall = (phone: string) => {
@@ -137,7 +139,7 @@ export const PharmacySearchScreen = () => {
           : null
       : null;
     const pharmacyAddress = formatAddress(pharmacy.address);
-    const pharmacyPhone = pharmacy.phone || 'Phone not available';
+    const pharmacyPhone = pharmacy.phone || t('pharmacy.common.phoneNotAvailable');
 
     return (
       <View style={styles.pharmacyCard}>
@@ -187,7 +189,7 @@ export const PharmacySearchScreen = () => {
                   });
                 }}
               >
-                <Text style={styles.browseButtonText}>Browse Products</Text>
+                <Text style={styles.browseButtonText}>{t('pharmacy.search.browseProducts')}</Text>
               </TouchableOpacity>
             )}
             {pharmacy.phone && (
@@ -196,7 +198,7 @@ export const PharmacySearchScreen = () => {
                 onPress={() => handleCall(pharmacy.phone!)}
               >
                 <Ionicons name="call" size={16} color={colors.textWhite} />
-                <Text style={styles.callButtonText}>Call</Text>
+                <Text style={styles.callButtonText}>{t('pharmacy.search.call')}</Text>
               </TouchableOpacity>
             )}
           </View>
@@ -213,14 +215,14 @@ export const PharmacySearchScreen = () => {
           onPress={() => handleKindChange('PHARMACY')}
           activeOpacity={0.8}
         >
-          <Text style={[styles.kindTabText, kind === 'PHARMACY' && styles.kindTabTextActive]}>Pharmacies</Text>
+          <Text style={[styles.kindTabText, kind === 'PHARMACY' && styles.kindTabTextActive]}>{t('pharmacy.search.pharmaciesTab')}</Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.kindTab, kind === 'PARAPHARMACY' && styles.kindTabActive]}
           onPress={() => handleKindChange('PARAPHARMACY')}
           activeOpacity={0.8}
         >
-          <Text style={[styles.kindTabText, kind === 'PARAPHARMACY' && styles.kindTabTextActive]}>Parapharmacies</Text>
+          <Text style={[styles.kindTabText, kind === 'PARAPHARMACY' && styles.kindTabTextActive]}>{t('pharmacy.search.parapharmaciesTab')}</Text>
         </TouchableOpacity>
       </View>
       {/* Search and Filter Section */}
@@ -229,7 +231,11 @@ export const PharmacySearchScreen = () => {
           <Ionicons name="search-outline" size={20} color={colors.textSecondary} />
           <TextInput
             style={styles.searchInput}
-            placeholder={kind === 'PARAPHARMACY' ? 'Search parapharmacies...' : 'Search pharmacies...'}
+            placeholder={
+              kind === 'PARAPHARMACY'
+                ? t('pharmacy.search.searchParapharmaciesPlaceholder')
+                : t('pharmacy.search.searchPharmaciesPlaceholder')
+            }
             placeholderTextColor={colors.textLight}
             value={searchTerm}
             onChangeText={setSearchTerm}
@@ -244,7 +250,7 @@ export const PharmacySearchScreen = () => {
             <Ionicons name="location-outline" size={16} color={colors.textSecondary} />
             <TextInput
               style={styles.filterInput}
-              placeholder="Enter city..."
+              placeholder={t('pharmacy.search.enterCityPlaceholder')}
               placeholderTextColor={colors.textLight}
               value={cityFilter}
               onChangeText={setCityFilter}
@@ -281,7 +287,7 @@ export const PharmacySearchScreen = () => {
               setPage(1);
             }}
           >
-            <Text style={styles.clearButtonText}>Clear Filters</Text>
+            <Text style={styles.clearButtonText}>{t('pharmacy.common.clearFilters')}</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -290,27 +296,31 @@ export const PharmacySearchScreen = () => {
       {isLoading && page === 1 ? (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={colors.primary} />
-          <Text style={styles.loadingText}>{kind === 'PARAPHARMACY' ? 'Loading parapharmacies...' : 'Loading pharmacies...'}</Text>
+          <Text style={styles.loadingText}>
+            {kind === 'PARAPHARMACY'
+              ? t('pharmacy.search.loadingParapharmacies')
+              : t('pharmacy.search.loadingPharmacies')}
+          </Text>
         </View>
       ) : error ? (
         <View style={styles.errorContainer}>
           <Ionicons name="alert-circle-outline" size={64} color={colors.error} />
-          <Text style={styles.errorText}>Failed to load pharmacies</Text>
+          <Text style={styles.errorText}>{t('pharmacy.search.failedToLoadPharmacies')}</Text>
           <TouchableOpacity style={styles.retryButton} onPress={() => refetch()}>
-            <Text style={styles.retryButtonText}>Retry</Text>
+            <Text style={styles.retryButtonText}>{t('common.retry')}</Text>
           </TouchableOpacity>
         </View>
       ) : pharmacies.length === 0 ? (
         <View style={styles.emptyContainer}>
           <Ionicons name="storefront-outline" size={64} color={colors.textLight} />
-          <Text style={styles.emptyText}>No pharmacies found</Text>
-          <Text style={styles.emptySubtext}>Try adjusting your search filters</Text>
+          <Text style={styles.emptyText}>{t('pharmacy.search.noPharmaciesFound')}</Text>
+          <Text style={styles.emptySubtext}>{t('pharmacy.search.tryAdjustingFilters')}</Text>
         </View>
       ) : (
         <>
           <View style={styles.resultsHeader}>
             <Text style={styles.resultsText}>
-              Showing {pharmacies.length} of {pagination.total} pharmacies
+              {t('pharmacy.search.showingPharmacies', { shown: pharmacies.length, total: pagination.total })}
             </Text>
           </View>
           <FlatList
@@ -331,11 +341,11 @@ export const PharmacySearchScreen = () => {
                     disabled={page === 1}
                   >
                     <Text style={[styles.pageButtonText, page === 1 && styles.pageButtonTextDisabled]}>
-                      Previous
+                      {t('pharmacy.common.previous')}
                     </Text>
                   </TouchableOpacity>
                   <Text style={styles.pageInfo}>
-                    Page {page} of {pagination.pages}
+                    {t('pharmacy.common.pageOf', { page, pages: pagination.pages })}
                   </Text>
                   <TouchableOpacity
                     style={[styles.pageButton, page === pagination.pages && styles.pageButtonDisabled]}
@@ -348,7 +358,7 @@ export const PharmacySearchScreen = () => {
                         page === pagination.pages && styles.pageButtonTextDisabled,
                       ]}
                     >
-                      Next
+                      {t('pharmacy.common.next')}
                     </Text>
                   </TouchableOpacity>
                 </View>

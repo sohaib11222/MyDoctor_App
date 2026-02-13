@@ -22,6 +22,7 @@ import { Button } from '../../components/common/Button';
 import * as weeklyScheduleApi from '../../services/weeklySchedule';
 import { to12Hour, isValidTime, isStartBeforeEnd } from '../../utils/timeFormat';
 import Toast from 'react-native-toast-message';
+import { useTranslation } from 'react-i18next';
 
 type AvailableTimingsScreenNavigationProp = StackNavigationProp<AppointmentsStackParamList, 'AvailableTimings'>;
 
@@ -31,6 +32,7 @@ const APPOINTMENT_DURATIONS = [15, 30, 45, 60];
 export const AvailableTimingsScreen = () => {
   const navigation = useNavigation<AvailableTimingsScreenNavigationProp>();
   const queryClient = useQueryClient();
+  const { t } = useTranslation();
   const [activeDay, setActiveDay] = useState('Monday');
   const [showSlotModal, setShowSlotModal] = useState(false);
   const [modalMode, setModalMode] = useState<'add' | 'edit'>('add');
@@ -52,6 +54,15 @@ export const AvailableTimingsScreen = () => {
   const [endTime, setEndTime] = useState('');
   const [isAvailable, setIsAvailable] = useState(true);
   const [errors, setErrors] = useState<{ startTime?: string; endTime?: string }>({});
+
+  const getDayLabel = (dayOfWeek: string, variant: 'short' | 'long' = 'long'): string => {
+    const normalizedDay = (dayOfWeek || '').toLowerCase();
+    const key =
+      variant === 'short'
+        ? `doctor.availableTimings.daysShort.${normalizedDay}`
+        : `doctor.availableTimings.days.${normalizedDay}`;
+    return t(key, { defaultValue: variant === 'short' ? dayOfWeek.substring(0, 3) : dayOfWeek });
+  };
 
   // Fetch weekly schedule
   const { data: scheduleData, isLoading, error, refetch } = useQuery({
@@ -82,17 +93,18 @@ export const AvailableTimingsScreen = () => {
       queryClient.invalidateQueries({ queryKey: ['weeklySchedule'] });
       Toast.show({
         type: 'success',
-        text1: 'Success',
-        text2: 'Time slot added successfully!',
+        text1: t('common.success'),
+        text2: t('doctor.availableTimings.toasts.slotAdded'),
       });
       setShowSlotModal(false);
       resetModal();
     },
     onError: (error: any) => {
-      const errorMessage = error?.response?.data?.message || error?.message || 'Failed to add time slot';
+      const errorMessage =
+        error?.response?.data?.message || error?.message || t('doctor.availableTimings.errors.failedToAddSlot');
       Toast.show({
         type: 'error',
-        text1: 'Error',
+        text1: t('common.error'),
         text2: errorMessage,
       });
     },
@@ -106,17 +118,18 @@ export const AvailableTimingsScreen = () => {
       queryClient.invalidateQueries({ queryKey: ['weeklySchedule'] });
       Toast.show({
         type: 'success',
-        text1: 'Success',
-        text2: 'Time slot updated successfully!',
+        text1: t('common.success'),
+        text2: t('doctor.availableTimings.toasts.slotUpdated'),
       });
       setShowSlotModal(false);
       resetModal();
     },
     onError: (error: any) => {
-      const errorMessage = error?.response?.data?.message || error?.message || 'Failed to update time slot';
+      const errorMessage =
+        error?.response?.data?.message || error?.message || t('doctor.availableTimings.errors.failedToUpdateSlot');
       Toast.show({
         type: 'error',
-        text1: 'Error',
+        text1: t('common.error'),
         text2: errorMessage,
       });
     },
@@ -130,15 +143,16 @@ export const AvailableTimingsScreen = () => {
       queryClient.invalidateQueries({ queryKey: ['weeklySchedule'] });
       Toast.show({
         type: 'success',
-        text1: 'Success',
-        text2: 'Time slot deleted successfully!',
+        text1: t('common.success'),
+        text2: t('doctor.availableTimings.toasts.slotDeleted'),
       });
     },
     onError: (error: any) => {
-      const errorMessage = error?.response?.data?.message || error?.message || 'Failed to delete time slot';
+      const errorMessage =
+        error?.response?.data?.message || error?.message || t('doctor.availableTimings.errors.failedToDeleteSlot');
       Toast.show({
         type: 'error',
-        text1: 'Error',
+        text1: t('common.error'),
         text2: errorMessage,
       });
     },
@@ -152,17 +166,18 @@ export const AvailableTimingsScreen = () => {
       queryClient.invalidateQueries({ queryKey: ['weeklySchedule'] });
       Toast.show({
         type: 'success',
-        text1: 'Success',
-        text2: 'All slots deleted successfully!',
+        text1: t('common.success'),
+        text2: t('doctor.availableTimings.toasts.allSlotsDeleted'),
       });
       setShowDeleteConfirm(false);
       setDayToDelete(null);
     },
     onError: (error: any) => {
-      const errorMessage = error?.response?.data?.message || error?.message || 'Failed to delete slots';
+      const errorMessage =
+        error?.response?.data?.message || error?.message || t('doctor.availableTimings.errors.failedToDeleteSlots');
       Toast.show({
         type: 'error',
-        text1: 'Error',
+        text1: t('common.error'),
         text2: errorMessage,
       });
     },
@@ -176,15 +191,16 @@ export const AvailableTimingsScreen = () => {
       queryClient.invalidateQueries({ queryKey: ['weeklySchedule'] });
       Toast.show({
         type: 'success',
-        text1: 'Success',
-        text2: 'Appointment duration updated successfully!',
+        text1: t('common.success'),
+        text2: t('doctor.availableTimings.toasts.durationUpdated'),
       });
     },
     onError: (error: any) => {
-      const errorMessage = error?.response?.data?.message || error?.message || 'Failed to update duration';
+      const errorMessage =
+        error?.response?.data?.message || error?.message || t('doctor.availableTimings.errors.failedToUpdateDuration');
       Toast.show({
         type: 'error',
-        text1: 'Error',
+        text1: t('common.error'),
         text2: errorMessage,
       });
     },
@@ -312,10 +328,10 @@ export const AvailableTimingsScreen = () => {
 
   // Handle delete slot
   const handleDeleteSlot = (dayOfWeek: string, slotId: string) => {
-    Alert.alert('Delete Time Slot', 'Are you sure you want to delete this time slot?', [
-      { text: 'Cancel', style: 'cancel' },
+    Alert.alert(t('doctor.availableTimings.confirmDeleteSlot.title'), t('doctor.availableTimings.confirmDeleteSlot.message'), [
+      { text: t('common.cancel'), style: 'cancel' },
       {
-        text: 'Delete',
+        text: t('common.delete'),
         style: 'destructive',
         onPress: () => {
           deleteSlotMutation.mutate({ dayOfWeek, slotId });
@@ -342,19 +358,19 @@ export const AvailableTimingsScreen = () => {
     const newErrors: { startTime?: string; endTime?: string } = {};
 
     if (!startTime) {
-      newErrors.startTime = 'Start time is required';
+      newErrors.startTime = t('doctor.availableTimings.validation.startTimeRequired');
     } else if (!isValidTime(startTime)) {
-      newErrors.startTime = 'Invalid time format. Use HH:MM (e.g., 09:00)';
+      newErrors.startTime = t('doctor.availableTimings.validation.invalidTimeFormat');
     }
 
     if (!endTime) {
-      newErrors.endTime = 'End time is required';
+      newErrors.endTime = t('doctor.availableTimings.validation.endTimeRequired');
     } else if (!isValidTime(endTime)) {
-      newErrors.endTime = 'Invalid time format. Use HH:MM (e.g., 10:00)';
+      newErrors.endTime = t('doctor.availableTimings.validation.invalidTimeFormat');
     }
 
     if (startTime && endTime && !isStartBeforeEnd(startTime, endTime)) {
-      newErrors.endTime = 'End time must be after start time';
+      newErrors.endTime = t('doctor.availableTimings.validation.endTimeAfterStart');
     }
 
     setErrors(newErrors);
@@ -375,19 +391,19 @@ export const AvailableTimingsScreen = () => {
     const newErrors: { startTime?: string; endTime?: string } = {};
 
     if (!currentStartTime) {
-      newErrors.startTime = 'Start time is required';
+      newErrors.startTime = t('doctor.availableTimings.validation.startTimeRequired');
     } else if (!isValidTime(currentStartTime)) {
-      newErrors.startTime = 'Invalid time format. Use HH:MM (e.g., 09:00)';
+      newErrors.startTime = t('doctor.availableTimings.validation.invalidTimeFormat');
     }
 
     if (!currentEndTime) {
-      newErrors.endTime = 'End time is required';
+      newErrors.endTime = t('doctor.availableTimings.validation.endTimeRequired');
     } else if (!isValidTime(currentEndTime)) {
-      newErrors.endTime = 'Invalid time format. Use HH:MM (e.g., 10:00)';
+      newErrors.endTime = t('doctor.availableTimings.validation.invalidTimeFormat');
     }
 
     if (currentStartTime && currentEndTime && !isStartBeforeEnd(currentStartTime, currentEndTime)) {
-      newErrors.endTime = 'End time must be after start time';
+      newErrors.endTime = t('doctor.availableTimings.validation.endTimeAfterStart');
     }
 
     setErrors(newErrors);
@@ -428,7 +444,7 @@ export const AvailableTimingsScreen = () => {
     if (slots.length === 0) {
       return (
         <View style={styles.noSlotsContainer}>
-          <Text style={styles.noSlotsText}>No Slots Available</Text>
+          <Text style={styles.noSlotsText}>{t('doctor.availableTimings.empty.noSlotsAvailable')}</Text>
         </View>
       );
     }
@@ -444,7 +460,7 @@ export const AvailableTimingsScreen = () => {
               </Text>
               {!slot.isAvailable && (
                 <View style={styles.unavailableBadge}>
-                  <Text style={styles.unavailableText}>Unavailable</Text>
+                  <Text style={styles.unavailableText}>{t('doctor.availableTimings.badges.unavailable')}</Text>
                 </View>
               )}
             </View>
@@ -475,11 +491,13 @@ export const AvailableTimingsScreen = () => {
       <SafeAreaView style={styles.container}>
         <View style={styles.errorContainer}>
           <Ionicons name="alert-circle-outline" size={48} color={colors.error} />
-          <Text style={styles.errorTitle}>Error Loading Schedule</Text>
+          <Text style={styles.errorTitle}>{t('doctor.availableTimings.errorTitle')}</Text>
           <Text style={styles.errorText}>
-            {(error as any)?.response?.data?.message || (error as any)?.message || 'Failed to load schedule'}
+            {(error as any)?.response?.data?.message ||
+              (error as any)?.message ||
+              t('doctor.availableTimings.errors.failedToLoadSchedule')}
           </Text>
-          <Button title="Retry" onPress={() => refetch()} style={styles.retryButton} />
+          <Button title={t('common.retry')} onPress={() => refetch()} style={styles.retryButton} />
         </View>
       </SafeAreaView>
     );
@@ -493,7 +511,7 @@ export const AvailableTimingsScreen = () => {
         refreshControl={<RefreshControl refreshing={isLoading} onRefresh={refetch} />}
       >
           <View style={styles.card}>
-            <Text style={styles.cardTitle}>Select Available Slots</Text>
+            <Text style={styles.cardTitle}>{t('doctor.availableTimings.title')}</Text>
 
             {/* Day Tabs */}
             <ScrollView
@@ -509,7 +527,7 @@ export const AvailableTimingsScreen = () => {
                   onPress={() => setActiveDay(day)}
                 >
                   <Text style={[styles.dayTabText, activeDay === day && styles.dayTabTextActive]}>
-                    {day.substring(0, 3)}
+                    {getDayLabel(day, 'short')}
                   </Text>
                 </TouchableOpacity>
               ))}
@@ -518,7 +536,7 @@ export const AvailableTimingsScreen = () => {
             {/* Day Content */}
             <View style={styles.slotBox}>
               <View style={styles.slotHeader}>
-                <Text style={styles.slotDayTitle}>{activeDay}</Text>
+                <Text style={styles.slotDayTitle}>{getDayLabel(activeDay, 'long')}</Text>
                 <View style={styles.slotActions}>
                   <TouchableOpacity
                     style={styles.slotActionBtn}
@@ -526,7 +544,7 @@ export const AvailableTimingsScreen = () => {
                     disabled={isLoading}
                   >
                     <Ionicons name="add" size={18} color={colors.primary} />
-                    <Text style={styles.slotActionText}>Add Slots</Text>
+                    <Text style={styles.slotActionText}>{t('doctor.availableTimings.actions.addSlots')}</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
                     style={styles.slotActionBtn}
@@ -534,7 +552,7 @@ export const AvailableTimingsScreen = () => {
                     disabled={isLoading}
                   >
                     <Ionicons name="trash-outline" size={18} color={colors.error} />
-                    <Text style={[styles.slotActionText, { color: colors.error }]}>Delete All</Text>
+                    <Text style={[styles.slotActionText, { color: colors.error }]}>{t('doctor.availableTimings.actions.deleteAll')}</Text>
                   </TouchableOpacity>
                 </View>
               </View>
@@ -553,7 +571,7 @@ export const AvailableTimingsScreen = () => {
             {/* Appointment Duration */}
             <View style={styles.durationContainer}>
               <Text style={styles.durationLabel}>
-                Appointment Duration (minutes) <Text style={styles.required}>*</Text>
+                {t('doctor.availableTimings.durationLabel')} <Text style={styles.required}>*</Text>
               </Text>
               <View style={styles.durationSelect}>
                 {APPOINTMENT_DURATIONS.map((duration) => (
@@ -577,7 +595,7 @@ export const AvailableTimingsScreen = () => {
                   </TouchableOpacity>
                 ))}
               </View>
-              <Text style={styles.durationHint}>Default duration for appointments</Text>
+              <Text style={styles.durationHint}>{t('doctor.availableTimings.durationHint')}</Text>
             </View>
           </View>
         </ScrollView>
@@ -596,7 +614,8 @@ export const AvailableTimingsScreen = () => {
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>
-                {modalMode === 'edit' ? 'Edit Time Slot' : 'Add Time Slot'} - {selectedDayForModal}
+                {modalMode === 'edit' ? t('doctor.availableTimings.actions.editSlot') : t('doctor.availableTimings.actions.addSlot')} -{' '}
+                {getDayLabel(selectedDayForModal, 'long')}
               </Text>
               <TouchableOpacity
                 onPress={() => {
@@ -611,12 +630,12 @@ export const AvailableTimingsScreen = () => {
             <ScrollView style={styles.modalBody} showsVerticalScrollIndicator={false}>
               <View style={styles.formGroup}>
                 <Text style={styles.formLabel}>
-                  Start Time <Text style={styles.required}>*</Text>
+                  {t('doctor.availableTimings.modal.startTime')} <Text style={styles.required}>*</Text>
                 </Text>
                 <View style={styles.timePickerContainer}>
                   <View style={styles.timePickerRow}>
                     <View style={styles.pickerWrapper}>
-                      <Text style={styles.pickerLabel}>Hour</Text>
+                      <Text style={styles.pickerLabel}>{t('doctor.availableTimings.modal.hour')}</Text>
                       <View style={[styles.pickerContainer, errors.startTime && styles.pickerError]}>
                         <ScrollView 
                           style={styles.pickerScroll} 
@@ -649,7 +668,7 @@ export const AvailableTimingsScreen = () => {
                     </View>
                     <Text style={styles.timeSeparator}>:</Text>
                     <View style={styles.pickerWrapper}>
-                      <Text style={styles.pickerLabel}>Minute</Text>
+                      <Text style={styles.pickerLabel}>{t('doctor.availableTimings.modal.minute')}</Text>
                       <View style={[styles.pickerContainer, errors.startTime && styles.pickerError]}>
                         <ScrollView style={styles.pickerScroll} nestedScrollEnabled>
                           {Array.from({ length: 12 }, (_, i) => (i * 5).toString().padStart(2, '0')).map((min) => (
@@ -675,7 +694,7 @@ export const AvailableTimingsScreen = () => {
                       </View>
                     </View>
                     <View style={styles.pickerWrapper}>
-                      <Text style={styles.pickerLabel}>Period</Text>
+                      <Text style={styles.pickerLabel}>{t('doctor.availableTimings.modal.period')}</Text>
                       <View style={[styles.pickerContainer, errors.startTime && styles.pickerError]}>
                         <ScrollView 
                           style={styles.pickerScroll} 
@@ -725,18 +744,18 @@ export const AvailableTimingsScreen = () => {
                 </View>
                 {errors.startTime && <Text style={styles.errorText}>{errors.startTime}</Text>}
                 <Text style={styles.formHint}>
-                  Selected: {startHour}:{startMinute} {startPeriod} ({startTime && to12Hour(startTime)})
+                  {t('doctor.availableTimings.modal.selected')} {startHour}:{startMinute} {startPeriod} ({startTime && to12Hour(startTime)})
                 </Text>
               </View>
 
               <View style={styles.formGroup}>
                 <Text style={styles.formLabel}>
-                  End Time <Text style={styles.required}>*</Text>
+                  {t('doctor.availableTimings.modal.endTime')} <Text style={styles.required}>*</Text>
                 </Text>
                 <View style={styles.timePickerContainer}>
                   <View style={styles.timePickerRow}>
                     <View style={styles.pickerWrapper}>
-                      <Text style={styles.pickerLabel}>Hour</Text>
+                      <Text style={styles.pickerLabel}>{t('doctor.availableTimings.modal.hour')}</Text>
                       <View style={[styles.pickerContainer, errors.endTime && styles.pickerError]}>
                         <ScrollView 
                           style={styles.pickerScroll} 
@@ -769,7 +788,7 @@ export const AvailableTimingsScreen = () => {
                     </View>
                     <Text style={styles.timeSeparator}>:</Text>
                     <View style={styles.pickerWrapper}>
-                      <Text style={styles.pickerLabel}>Minute</Text>
+                      <Text style={styles.pickerLabel}>{t('doctor.availableTimings.modal.minute')}</Text>
                       <View style={[styles.pickerContainer, errors.endTime && styles.pickerError]}>
                         <ScrollView 
                           style={styles.pickerScroll} 
@@ -801,7 +820,7 @@ export const AvailableTimingsScreen = () => {
                       </View>
                     </View>
                     <View style={styles.pickerWrapper}>
-                      <Text style={styles.pickerLabel}>Period</Text>
+                      <Text style={styles.pickerLabel}>{t('doctor.availableTimings.modal.period')}</Text>
                       <View style={[styles.pickerContainer, errors.endTime && styles.pickerError]}>
                         <ScrollView 
                           style={styles.pickerScroll} 
@@ -851,7 +870,7 @@ export const AvailableTimingsScreen = () => {
                 </View>
                 {errors.endTime && <Text style={styles.errorText}>{errors.endTime}</Text>}
                 <Text style={styles.formHint}>
-                  Selected: {endHour}:{endMinute} {endPeriod} ({endTime && to12Hour(endTime)})
+                  {t('doctor.availableTimings.modal.selected')} {endHour}:{endMinute} {endPeriod} ({endTime && to12Hour(endTime)})
                 </Text>
               </View>
 
@@ -863,15 +882,15 @@ export const AvailableTimingsScreen = () => {
                   <View style={[styles.checkbox, isAvailable && styles.checkboxChecked]}>
                     {isAvailable && <Ionicons name="checkmark" size={16} color={colors.textWhite} />}
                   </View>
-                  <Text style={styles.checkboxLabel}>Available</Text>
+                  <Text style={styles.checkboxLabel}>{t('doctor.availableTimings.modal.availableLabel')}</Text>
                 </TouchableOpacity>
-                <Text style={styles.formHint}>Uncheck to mark this slot as unavailable</Text>
+                <Text style={styles.formHint}>{t('doctor.availableTimings.modal.availableHint')}</Text>
               </View>
             </ScrollView>
 
             <View style={styles.modalFooter}>
               <Button
-                title="Cancel"
+                title={t('common.cancel')}
                 onPress={() => {
                   setShowSlotModal(false);
                   resetModal();
@@ -880,7 +899,7 @@ export const AvailableTimingsScreen = () => {
                 style={styles.modalButton}
               />
               <Button
-                title={modalMode === 'edit' ? 'Update Slot' : 'Add Slot'}
+                title={modalMode === 'edit' ? t('doctor.availableTimings.actions.updateSlot') : t('doctor.availableTimings.actions.addSlotButton')}
                 onPress={handleSaveSlot}
                 style={styles.modalButton}
                 disabled={addSlotMutation.isPending || updateSlotMutation.isPending}
@@ -902,14 +921,16 @@ export const AvailableTimingsScreen = () => {
       >
         <View style={styles.modalOverlay}>
           <View style={styles.confirmModalContent}>
-            <Text style={styles.confirmModalTitle}>Confirm Delete</Text>
+            <Text style={styles.confirmModalTitle}>{t('doctor.availableTimings.confirmDeleteAll.title')}</Text>
             <Text style={styles.confirmModalText}>
-              Are you sure you want to delete all time slots for <Text style={styles.bold}>{dayToDelete}</Text>?
+              {t('doctor.availableTimings.confirmDeleteAll.messagePrefix')}{' '}
+              <Text style={styles.bold}>{getDayLabel(dayToDelete || '', 'long')}</Text>
+              {t('doctor.availableTimings.confirmDeleteAll.messageSuffix')}
             </Text>
-            <Text style={styles.confirmModalHint}>This action cannot be undone.</Text>
+            <Text style={styles.confirmModalHint}>{t('doctor.availableTimings.confirmDeleteAll.hint')}</Text>
             <View style={styles.confirmModalButtons}>
               <Button
-                title="Cancel"
+                title={t('common.cancel')}
                 onPress={() => {
                   setShowDeleteConfirm(false);
                   setDayToDelete(null);
@@ -919,7 +940,11 @@ export const AvailableTimingsScreen = () => {
                 disabled={deleteAllSlotsMutation.isPending}
               />
               <Button
-                title={deleteAllSlotsMutation.isPending ? 'Deleting...' : 'Delete All'}
+                title={
+                  deleteAllSlotsMutation.isPending
+                    ? t('doctor.availableTimings.actions.deleting')
+                    : t('doctor.availableTimings.actions.deleteAll')
+                }
                 onPress={confirmDeleteAll}
                 style={[styles.confirmModalButton, { backgroundColor: colors.error }]}
                 disabled={deleteAllSlotsMutation.isPending}

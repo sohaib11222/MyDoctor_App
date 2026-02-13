@@ -35,11 +35,13 @@ import DoctorRescheduleRequestsScreen from '../../screens/doctor/DoctorReschedul
 import { useAuth } from '../../contexts/AuthContext';
 import { PrescriptionScreen } from '../../screens/shared/PrescriptionScreen';
 import { LanguageScreen } from '../../screens/shared/LanguageScreen';
+import { useTranslation } from 'react-i18next';
 
 const Stack = createNativeStackNavigator<MoreStackParamList>();
 
 export const MoreStack = () => {
   const { user } = useAuth();
+  const { t } = useTranslation();
   const isDoctor = user?.role === 'doctor' || false;
   const isPatient = user?.role === 'patient' || false;
   const isAdmin = ((user as any)?.role === 'admin' || (user as any)?.role === 'ADMIN') || false;
@@ -58,138 +60,138 @@ export const MoreStack = () => {
       <Stack.Screen 
         name="MoreScreen" 
         component={MoreScreen}
-        options={{ title: 'More', headerShown: false }}
+        options={{ title: t('screens.more'), headerShown: false }}
       />
       <Stack.Screen 
         name="PatientDashboard" 
         component={PatientDashboardScreen}
-        options={{ title: 'Dashboard' }}
+        options={{ title: t('screens.dashboard') }}
       />
       <Stack.Screen 
         name="Profile" 
         component={ProfileScreen}
-        options={{ title: 'Profile' }}
+        options={{ title: t('screens.profile') }}
       />
       <Stack.Screen 
         name="Settings" 
         component={SettingsScreen}
-        options={{ title: 'Settings' }}
+        options={{ title: t('screens.settings') }}
       />
       <Stack.Screen 
         name="Language" 
         component={LanguageScreen}
-        options={{ title: 'Language' }}
+        options={{ title: t('screens.language') }}
       />
       <Stack.Screen 
         name="ChangePassword" 
         component={ChangePasswordScreen}
-        options={{ title: 'Change Password' }}
+        options={{ title: t('screens.changePassword') }}
       />
       {isDoctor ? (
         <>
           <Stack.Screen 
             name="ProfileSettings" 
             component={ProfileSettingsScreen}
-            options={{ title: 'Profile Settings' }}
+            options={{ title: t('screens.profileSettings') }}
           />
           <Stack.Screen 
             name="SocialLinks" 
             component={SocialLinksScreen}
-            options={{ title: 'Social Media Links' }}
+            options={{ title: t('screens.socialLinks') }}
           />
         </>
       ) : (
         <Stack.Screen 
           name="PatientProfileSettings" 
           component={PatientProfileSettingsScreen}
-          options={{ title: 'Profile Settings' }}
+          options={{ title: t('screens.profileSettings') }}
         />
       )}
       <Stack.Screen 
         name="MedicalRecords" 
         component={MedicalRecordsScreen}
-        options={{ title: 'Medical Records' }}
+        options={{ title: t('screens.medicalRecords') }}
       />
       <Stack.Screen
         name="Prescription"
         component={PrescriptionScreen}
-        options={{ title: 'Prescription', headerShown: false }}
+        options={{ title: t('screens.prescription'), headerShown: false }}
       />
       <Stack.Screen 
         name="Dependents" 
         component={DependentsScreen}
-        options={{ title: 'Dependents' }}
+        options={{ title: t('screens.dependents') }}
       />
       <Stack.Screen 
         name="Favourites" 
         component={FavouritesScreen}
-        options={{ title: 'Favourites' }}
+        options={{ title: t('screens.favourites') }}
       />
       {isPatient && (
         <Stack.Screen 
           name="OrderHistory" 
           component={require('../../screens/pharmacy/OrderHistoryScreen').OrderHistoryScreen}
-          options={{ title: 'Order History' }}
+          options={{ title: t('screens.orderHistory') }}
         />
       )}
       {isPatient && (
         <Stack.Screen 
           name="OrderDetails" 
           component={require('../../screens/pharmacy/OrderDetailsScreen').OrderDetailsScreen}
-          options={{ title: 'Order Details' }}
+          options={{ title: t('screens.orderDetails') }}
         />
       )}
       <Stack.Screen 
         name="Notifications" 
         component={NotificationsScreen}
-        options={{ title: 'Notifications', headerShown: false }}
+        options={{ title: t('screens.notifications'), headerShown: false }}
       />
       <Stack.Screen 
         name="Invoices" 
         component={isDoctor ? DoctorInvoicesScreen : InvoicesScreen}
-        options={{ title: 'Invoices' }}
+        options={{ title: t('screens.invoices') }}
       />
       <Stack.Screen 
         name="Documents" 
         component={DocumentsScreen}
-        options={{ title: 'Documents' }}
+        options={{ title: t('screens.documents') }}
       />
       {/* Doctor-specific screens */}
       <Stack.Screen 
         name="DoctorDashboard" 
         component={DoctorDashboardScreen}
-        options={{ title: 'Dashboard' }}
+        options={{ title: t('screens.dashboard') }}
       />
       <Stack.Screen 
         name="MyPatients" 
         component={MyPatientsScreen}
-        options={{ title: 'My Patients' }}
+        options={{ title: t('screens.myPatients') }}
       />
       <Stack.Screen 
         name="Reviews" 
         component={ReviewsScreen}
-        options={{ title: 'Reviews' }}
+        options={{ title: t('screens.reviews') }}
       />
       <Stack.Screen 
         name="Subscription" 
         component={SubscriptionPlansScreen}
-        options={{ title: 'Subscription Plans' }}
+        options={{ title: t('screens.subscriptionPlans') }}
       />
       <Stack.Screen 
         name="PayoutSettings" 
         component={PayoutSettingsScreen}
-        options={{ title: 'Payout Settings' }}
+        options={{ title: t('screens.payoutSettings') }}
       />
       <Stack.Screen 
         name="Announcements" 
         component={AnnouncementsScreen}
-        options={{ title: 'Announcements' }}
+        options={{ title: t('screens.announcements') }}
       />
       {isAdmin && (
         <Stack.Screen 
           name="AdminOrders" 
           component={AdminOrdersScreen}
-          options={{ title: 'All Orders' }}
+          options={{ title: t('screens.adminOrders') }}
         />
       )}
       {/* Reschedule Requests */}
@@ -197,31 +199,31 @@ export const MoreStack = () => {
         <Stack.Screen 
           name="PatientRescheduleRequests" 
           component={PatientRescheduleRequestsScreen}
-          options={{ title: 'My Reschedule Requests' }}
+          options={{ title: t('screens.patientRescheduleRequestsTitle') }}
         />
       )}
       {isDoctor && (
         <Stack.Screen 
           name="DoctorRescheduleRequests" 
           component={DoctorRescheduleRequestsScreen}
-          options={{ title: 'Reschedule Requests' }}
+          options={{ title: t('screens.doctorRescheduleRequestsTitle') }}
         />
       )}
       {/* Pharmacy-specific screens */}
       <Stack.Screen 
         name="PharmacyProfile" 
         component={PharmacyProfileScreen}
-        options={{ title: 'Profile' }}
+        options={{ title: t('screens.profile') }}
       />
       <Stack.Screen 
         name="PharmacySettings" 
         component={PharmacySettingsScreen}
-        options={{ title: 'Settings' }}
+        options={{ title: t('screens.settings') }}
       />
       <Stack.Screen 
         name="PharmacySubscription" 
         component={PharmacySubscriptionPlansScreen}
-        options={{ title: 'Subscription Plans' }}
+        options={{ title: t('screens.subscriptionPlans') }}
       />
     </Stack.Navigator>
   );

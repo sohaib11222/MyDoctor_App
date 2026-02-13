@@ -14,6 +14,7 @@ import { PharmacyStackParamList } from '../../navigation/types';
 import { colors } from '../../constants/colors';
 import { Ionicons } from '@expo/vector-icons';
 import { Button } from '../../components/common/Button';
+import { useTranslation } from 'react-i18next';
 import * as orderApi from '../../services/order';
 
 type PaymentSuccessScreenNavigationProp = NativeStackNavigationProp<PharmacyStackParamList>;
@@ -23,6 +24,7 @@ export const PaymentSuccessScreen = () => {
   const navigation = useNavigation<PaymentSuccessScreenNavigationProp>();
   const route = useRoute<PaymentSuccessScreenRouteProp>();
   const { orderId } = route.params || {};
+  const { t } = useTranslation();
 
   // Fetch order details if orderId is provided
   const { data: orderResponse } = useQuery({
@@ -31,7 +33,7 @@ export const PaymentSuccessScreen = () => {
     enabled: !!orderId,
   });
 
-  const orderNumber = orderResponse?.data?.orderNumber || 'N/A';
+  const orderNumber = orderResponse?.data?.orderNumber || t('common.na');
 
   return (
     <SafeAreaView style={styles.container}>
@@ -40,13 +42,13 @@ export const PaymentSuccessScreen = () => {
           <View style={styles.iconContainer}>
             <Ionicons name="checkmark-circle" size={80} color={colors.success} />
           </View>
-          <Text style={styles.successTitle}>Payment Successfully!</Text>
-          <Text style={styles.productId}>Order Number: {orderNumber}</Text>
+          <Text style={styles.successTitle}>{t('pharmacy.paymentSuccess.paymentSuccessful')}</Text>
+          <Text style={styles.productId}>{t('pharmacy.paymentSuccess.orderNumberLabel', { orderNumber })}</Text>
         </View>
 
         <View style={styles.actionsContainer}>
           <Button
-            title="View Order History"
+            title={t('pharmacy.paymentSuccess.viewOrderHistory')}
             onPress={() => navigation.navigate('OrderHistory')}
             style={styles.actionButton}
           />
@@ -54,7 +56,7 @@ export const PaymentSuccessScreen = () => {
             style={styles.secondaryButton}
             onPress={() => navigation.navigate('PharmacyHome')}
           >
-            <Text style={styles.secondaryButtonText}>Continue Shopping</Text>
+            <Text style={styles.secondaryButtonText}>{t('pharmacy.paymentSuccess.continueShopping')}</Text>
           </TouchableOpacity>
         </View>
       </View>

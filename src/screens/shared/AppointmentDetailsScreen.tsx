@@ -24,6 +24,7 @@ import * as reviewApi from '../../services/review';
 import * as rescheduleApi from '../../services/rescheduleRequest';
 import Toast from 'react-native-toast-message';
 import { API_BASE_URL } from '../../config/api';
+import { useTranslation } from 'react-i18next';
 
 /**
  * Normalize image URL for mobile app
@@ -92,6 +93,7 @@ const AppointmentDetailsScreen = () => {
   const navigation = useNavigation<AppointmentDetailsScreenNavigationProp>();
   const route = useRoute<AppointmentDetailsRouteProp>();
   const { user } = useAuth();
+  const { t } = useTranslation();
   const isDoctor = user?.role === 'doctor';
   const { appointmentId } = route.params;
 
@@ -157,9 +159,26 @@ const AppointmentDetailsScreen = () => {
         // Also check if appointment time has passed
         if (isEligible && appointment.appointmentDate && appointment.appointmentTime) {
           const now = new Date();
-          const appointmentDateTime = new Date(appointment.appointmentDate);
-          const [hours, minutes] = appointment.appointmentTime.split(':').map(Number);
-          appointmentDateTime.setHours(hours, minutes, 0, 0);
+          let appointmentDateTime: Date;
+          const tzOffsetMinutes =
+            typeof (appointment as any).timezoneOffset === 'number' && Number.isFinite((appointment as any).timezoneOffset)
+              ? (appointment as any).timezoneOffset
+              : null;
+
+          if (tzOffsetMinutes !== null) {
+            const appointmentDateUTC = new Date(appointment.appointmentDate);
+            const appointmentDateInTz = new Date(appointmentDateUTC.getTime() + tzOffsetMinutes * 60 * 1000);
+            const year = appointmentDateInTz.getUTCFullYear();
+            const month = appointmentDateInTz.getUTCMonth() + 1;
+            const day = appointmentDateInTz.getUTCDate();
+            const [hours, minutes] = String(appointment.appointmentTime).split(':').map(Number);
+            const appointmentDateTimeUTC = new Date(Date.UTC(year, month - 1, day, hours, minutes, 0, 0));
+            appointmentDateTime = new Date(appointmentDateTimeUTC.getTime() - tzOffsetMinutes * 60 * 1000);
+          } else {
+            appointmentDateTime = new Date(appointment.appointmentDate);
+            const [hours, minutes] = appointment.appointmentTime.split(':').map(Number);
+            appointmentDateTime.setHours(hours, minutes, 0, 0);
+          }
           
           if (now > appointmentDateTime) {
             setCanReschedule(true);
@@ -172,9 +191,26 @@ const AppointmentDetailsScreen = () => {
       } else if (appointment.appointmentDate && appointment.appointmentTime) {
         // Basic check if API fails
         const now = new Date();
-        const appointmentDateTime = new Date(appointment.appointmentDate);
-        const [hours, minutes] = appointment.appointmentTime.split(':').map(Number);
-        appointmentDateTime.setHours(hours, minutes, 0, 0);
+        let appointmentDateTime: Date;
+        const tzOffsetMinutes =
+          typeof (appointment as any).timezoneOffset === 'number' && Number.isFinite((appointment as any).timezoneOffset)
+            ? (appointment as any).timezoneOffset
+            : null;
+
+        if (tzOffsetMinutes !== null) {
+          const appointmentDateUTC = new Date(appointment.appointmentDate);
+          const appointmentDateInTz = new Date(appointmentDateUTC.getTime() + tzOffsetMinutes * 60 * 1000);
+          const year = appointmentDateInTz.getUTCFullYear();
+          const month = appointmentDateInTz.getUTCMonth() + 1;
+          const day = appointmentDateInTz.getUTCDate();
+          const [hours, minutes] = String(appointment.appointmentTime).split(':').map(Number);
+          const appointmentDateTimeUTC = new Date(Date.UTC(year, month - 1, day, hours, minutes, 0, 0));
+          appointmentDateTime = new Date(appointmentDateTimeUTC.getTime() - tzOffsetMinutes * 60 * 1000);
+        } else {
+          appointmentDateTime = new Date(appointment.appointmentDate);
+          const [hours, minutes] = appointment.appointmentTime.split(':').map(Number);
+          appointmentDateTime.setHours(hours, minutes, 0, 0);
+        }
         
         if (now > appointmentDateTime) {
           setCanReschedule(true);
@@ -195,18 +231,21 @@ const AppointmentDetailsScreen = () => {
       queryClient.invalidateQueries({ queryKey: ['reviews'] });
       Toast.show({
         type: 'success',
-        text1: 'Review Submitted',
-        text2: 'Thank you for your feedback!',
+        text1: t('appointments.review.submittedToastTitle'),
+        text2: t('appointments.review.submittedToastBody'),
       });
       setShowReviewModal(false);
       setReviewText('');
       setReviewRating(5);
     },
     onError: (error: any) => {
-      const errorMessage = error?.response?.data?.message || error?.message || 'Failed to submit review';
+      const errorMessage =
+        error?.response?.data?.message ||
+        error?.message ||
+        t('appointments.review.failedFallback');
       Toast.show({
         type: 'error',
-        text1: 'Review Failed',
+        text1: t('appointments.review.failedToastTitle'),
         text2: errorMessage,
       });
     },
@@ -217,16 +256,16 @@ const AppointmentDetailsScreen = () => {
     if (!reviewText.trim()) {
       Toast.show({
         type: 'error',
-        text1: 'Review Required',
-        text2: 'Please provide a review text',
+        text1: t('appointments.review.requiredToastTitle'),
+        text2: t('appointments.review.requiredToastBody'),
       });
       return;
     }
     if (!appointment || !appointment.doctorId) {
       Toast.show({
         type: 'error',
-        text1: 'Error',
-        text2: 'Doctor information not available',
+        text1: t('common.error'),
+        text2: t('appointments.chat.doctorInfoNotAvailable'),
       });
       return;
     }
@@ -238,8 +277,8 @@ const AppointmentDetailsScreen = () => {
     if (!doctorId) {
       Toast.show({
         type: 'error',
-        text1: 'Error',
-        text2: 'Doctor ID not available',
+        text1: t('common.error'),
+        text2: t('appointments.chat.doctorIdNotAvailable'),
       });
       return;
     }
@@ -263,16 +302,19 @@ const AppointmentDetailsScreen = () => {
       queryClient.invalidateQueries({ queryKey: ['appointmentTabCounts'] });
       Toast.show({
         type: 'success',
-        text1: 'Status Updated',
-        text2: 'Appointment status updated successfully!',
+        text1: t('appointments.updateStatus.toastTitle'),
+        text2: t('appointments.updateStatus.toastBody'),
       });
       refetch();
     },
     onError: (error: any) => {
-      const errorMessage = error?.response?.data?.message || error?.message || 'Failed to update appointment status';
+      const errorMessage =
+        error?.response?.data?.message ||
+        error?.message ||
+        t('appointments.updateStatus.failedFallback');
       Toast.show({
         type: 'error',
-        text1: 'Update Failed',
+        text1: t('appointments.updateStatus.failedToastTitle'),
         text2: errorMessage,
       });
     },
@@ -280,14 +322,17 @@ const AppointmentDetailsScreen = () => {
 
   // Handle status update
   const handleStatusUpdate = (newStatus: 'COMPLETED' | 'NO_SHOW') => {
-    const statusText = newStatus === 'COMPLETED' ? 'completed' : 'marked as no-show';
+    const statusText =
+      newStatus === 'COMPLETED'
+        ? t('appointments.updateStatus.completed')
+        : t('appointments.updateStatus.noShow');
     Alert.alert(
-      'Update Status',
-      `Are you sure you want to mark this appointment as ${statusText}?`,
+      t('appointments.updateStatus.alertTitle'),
+      t('appointments.updateStatus.alertBody', { status: statusText }),
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: t('common.cancel'), style: 'cancel' },
         {
-          text: 'Confirm',
+          text: t('common.confirm'),
           onPress: () => {
             updateStatusMutation.mutate({ status: newStatus });
           },
@@ -305,16 +350,19 @@ const AppointmentDetailsScreen = () => {
       queryClient.invalidateQueries({ queryKey: ['appointmentTabCounts'] });
       Toast.show({
         type: 'success',
-        text1: 'Appointment Cancelled',
-        text2: 'Your appointment has been cancelled successfully',
+        text1: t('appointments.cancel.toastTitle'),
+        text2: t('appointments.cancel.toastBody'),
       });
       refetch();
     },
     onError: (error: any) => {
       Toast.show({
         type: 'error',
-        text1: 'Failed to Cancel',
-        text2: error.response?.data?.message || error.message || 'Please try again',
+        text1: t('appointments.cancel.failedToastTitle'),
+        text2:
+          error.response?.data?.message ||
+          error.message ||
+          t('appointments.cancel.pleaseTryAgain'),
       });
     },
   });
@@ -322,12 +370,12 @@ const AppointmentDetailsScreen = () => {
   // Handle appointment cancellation
   const handleCancelAppointment = () => {
     Alert.alert(
-      'Cancel Appointment',
-      'Are you sure you want to cancel this appointment?',
+      t('appointments.cancel.alertTitle'),
+      t('appointments.cancel.alertBody'),
       [
-        { text: 'No', style: 'cancel' },
+        { text: t('common.no'), style: 'cancel' },
         {
-          text: 'Yes, Cancel',
+          text: t('appointments.cancel.alertConfirm'),
           style: 'destructive',
           onPress: () => {
             cancelAppointmentMutation.mutate(appointmentId);
@@ -342,8 +390,8 @@ const AppointmentDetailsScreen = () => {
     if (!appointment) {
       Toast.show({
         type: 'error',
-        text1: 'Error',
-        text2: 'Appointment information not available',
+        text1: t('common.error'),
+        text2: t('appointments.chat.appointmentInfoNotAvailable'),
       });
       return;
     }
@@ -357,8 +405,8 @@ const AppointmentDetailsScreen = () => {
       if (!patientId) {
         Toast.show({
           type: 'error',
-          text1: 'Error',
-          text2: 'Patient information not available',
+          text1: t('common.error'),
+          text2: t('appointments.chat.patientInfoNotAvailable'),
         });
         return;
       }
@@ -366,8 +414,8 @@ const AppointmentDetailsScreen = () => {
       if (!appointment._id) {
         Toast.show({
           type: 'error',
-          text1: 'Error',
-          text2: 'Appointment information not available',
+          text1: t('common.error'),
+          text2: t('appointments.chat.appointmentInfoNotAvailable'),
         });
         return;
       }
@@ -375,7 +423,8 @@ const AppointmentDetailsScreen = () => {
       (navigation as any).navigate('Chat', {
         screen: 'ChatDetail',
         params: {
-          recipientName: appointment.patientId?.fullName || 'Patient',
+          recipientName:
+            appointment.patientId?.fullName || t('appointments.chat.patientFallback'),
           patientId: patientId,
           appointmentId: appointment._id,
         },
@@ -389,8 +438,8 @@ const AppointmentDetailsScreen = () => {
       if (!doctorId) {
         Toast.show({
           type: 'error',
-          text1: 'Error',
-          text2: 'Doctor information not available',
+          text1: t('common.error'),
+          text2: t('appointments.chat.doctorInfoNotAvailable'),
         });
         return;
       }
@@ -398,8 +447,8 @@ const AppointmentDetailsScreen = () => {
       if (!appointment._id) {
         Toast.show({
           type: 'error',
-          text1: 'Error',
-          text2: 'Appointment information not available',
+          text1: t('common.error'),
+          text2: t('appointments.chat.appointmentInfoNotAvailable'),
         });
         return;
       }
@@ -407,7 +456,8 @@ const AppointmentDetailsScreen = () => {
       (navigation as any).navigate('Chat', {
         screen: 'ChatDetail',
         params: {
-          recipientName: appointment.doctorId?.fullName || 'Doctor',
+          recipientName:
+            appointment.doctorId?.fullName || t('appointments.chat.doctorFallback'),
           doctorId: doctorId,
           appointmentId: appointment._id,
         },
@@ -440,35 +490,41 @@ const AppointmentDetailsScreen = () => {
     if (isDoctor) {
       return {
         id: appointment.appointmentNumber || appointment._id,
-        name: appointment.patientId?.fullName || 'Unknown Patient',
+        name: appointment.patientId?.fullName || t('common.unknownPatient'),
         imageUri: appointment.patientId?.profileImage,
         email: appointment.patientId?.email || '',
         phone: appointment.patientId?.phone || '',
         date: dateTimeString,
-        clinic: appointment.clinicName || 'Not specified',
-        location: appointment.clinicName || 'Not specified',
-        visitType: appointment.patientNotes || 'General Visit',
-        appointmentType: appointment.bookingType === 'VISIT' ? 'Direct Visit' : 'Online',
+        clinic: appointment.clinicName || t('appointments.details.notSpecified'),
+        location: appointment.clinicName || t('appointments.details.notSpecified'),
+        visitType: appointment.patientNotes || t('appointments.details.generalVisit'),
+        appointmentType:
+          appointment.bookingType === 'VISIT'
+            ? t('appointments.bookingType.directVisit')
+            : t('appointments.bookingType.online'),
         fee: 0, // Fee not in appointment model
         personWithPatient: undefined,
       };
     } else {
       return {
         id: appointment.appointmentNumber || appointment._id,
-        name: appointment.doctorId?.fullName || 'Unknown Doctor',
+        name: appointment.doctorId?.fullName || t('common.unknownDoctor'),
         imageUri: appointment.doctorId?.profileImage,
         email: appointment.doctorId?.email || '',
         phone: appointment.doctorId?.phone || '',
         date: dateTimeString,
-        clinic: appointment.clinicName || 'Not specified',
-        location: appointment.clinicName || 'Not specified',
-        visitType: appointment.patientNotes || 'General Visit',
-        appointmentType: appointment.bookingType === 'VISIT' ? 'Direct Visit' : 'Online',
+        clinic: appointment.clinicName || t('appointments.details.notSpecified'),
+        location: appointment.clinicName || t('appointments.details.notSpecified'),
+        visitType: appointment.patientNotes || t('appointments.details.generalVisit'),
+        appointmentType:
+          appointment.bookingType === 'VISIT'
+            ? t('appointments.bookingType.directVisit')
+            : t('appointments.bookingType.online'),
         fee: 0, // Fee not in appointment model
         personWithPatient: undefined,
       };
     }
-  }, [appointment, isDoctor]);
+  }, [appointment, isDoctor, t]);
 
   const recentAppointments = [
     { id: '#Apt0002', doctor: isDoctor ? 'Kelly Stevens' : 'Dr.Shanta Nesmith', doctorImg: require('../../../assets/avatar.png'), date: '11 Nov 2024 10.45 AM', types: ['General Visit', 'Chat'], email: 'shanta@example.com', phone: '+1 504 368 6874' },
@@ -477,25 +533,33 @@ const AppointmentDetailsScreen = () => {
 
   const getStatusBadge = () => {
     if (!appointment) {
-      return { bg: colors.backgroundLight, text: colors.text, label: 'Unknown' };
+      return {
+        bg: colors.backgroundLight,
+        text: colors.text,
+        label: t('appointments.status.unknown'),
+      };
     }
     
     const backendStatus = appointment.status;
     switch (backendStatus) {
       case 'PENDING':
-        return { bg: '#FEF3C7', text: '#92400E', label: 'Pending' };
+        return { bg: '#FEF3C7', text: '#92400E', label: t('appointments.status.pending') };
       case 'CONFIRMED':
-        return { bg: '#DBEAFE', text: '#1E40AF', label: 'Confirmed' };
+        return { bg: '#DBEAFE', text: '#1E40AF', label: t('appointments.status.confirmed') };
       case 'COMPLETED':
-        return { bg: '#D1FAE5', text: '#065F46', label: 'Completed' };
+        return { bg: '#D1FAE5', text: '#065F46', label: t('appointments.status.completed') };
       case 'CANCELLED':
-        return { bg: '#FEE2E2', text: '#991B1B', label: 'Cancelled' };
+        return { bg: '#FEE2E2', text: '#991B1B', label: t('appointments.status.cancelled') };
       case 'REJECTED':
-        return { bg: '#FEE2E2', text: '#991B1B', label: 'Rejected' };
+        return { bg: '#FEE2E2', text: '#991B1B', label: t('appointments.status.rejected') };
       case 'NO_SHOW':
-        return { bg: '#F3F4F6', text: '#374151', label: 'No Show' };
+        return { bg: '#F3F4F6', text: '#374151', label: t('appointments.status.noShow') };
       default:
-        return { bg: colors.backgroundLight, text: colors.text, label: backendStatus || 'Unknown' };
+        return {
+          bg: colors.backgroundLight,
+          text: colors.text,
+          label: backendStatus || t('appointments.status.unknown'),
+        };
     }
   };
 
@@ -523,7 +587,7 @@ const AppointmentDetailsScreen = () => {
       <SafeAreaView style={styles.container}>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={colors.primary} />
-          <Text style={styles.loadingText}>Loading appointment details...</Text>
+          <Text style={styles.loadingText}>{t('appointments.details.loading')}</Text>
         </View>
       </SafeAreaView>
     );
@@ -534,9 +598,9 @@ const AppointmentDetailsScreen = () => {
       <SafeAreaView style={styles.container}>
         <View style={styles.emptyContainer}>
           <Ionicons name="alert-circle-outline" size={64} color={colors.error} />
-          <Text style={styles.emptyText}>Failed to load appointment details</Text>
+          <Text style={styles.emptyText}>{t('appointments.details.failedToLoad')}</Text>
           <TouchableOpacity style={styles.retryButton} onPress={() => navigation.goBack()}>
-            <Text style={styles.retryButtonText}>Go Back</Text>
+            <Text style={styles.retryButtonText}>{t('common.goBack')}</Text>
           </TouchableOpacity>
         </View>
       </SafeAreaView>
@@ -588,11 +652,15 @@ const AppointmentDetailsScreen = () => {
                 </Text>
               </View>
               <View style={styles.feeContainer}>
-                <Text style={styles.feeLabel}>Payment Status</Text>
+                <Text style={styles.feeLabel}>{t('appointments.details.paymentStatus')}</Text>
                 <Text style={styles.feeAmount}>
-                  {appointment?.paymentStatus === 'PAID' ? 'Paid' : 
-                   appointment?.paymentStatus === 'UNPAID' ? 'Unpaid' : 
-                   appointment?.paymentStatus === 'REFUNDED' ? 'Refunded' : 'N/A'}
+                  {appointment?.paymentStatus === 'PAID'
+                    ? t('appointments.details.paid')
+                    : appointment?.paymentStatus === 'UNPAID'
+                      ? t('appointments.details.unpaid')
+                      : appointment?.paymentStatus === 'REFUNDED'
+                        ? t('appointments.details.refunded')
+                        : t('common.na')}
                 </Text>
               </View>
               <View style={styles.actionButtons}>
@@ -618,10 +686,14 @@ const AppointmentDetailsScreen = () => {
           </View>
 
           <View style={styles.appointmentTypeSection}>
-            <Text style={styles.sectionLabel}>Type of Appointment</Text>
+            <Text style={styles.sectionLabel}>{t('appointments.details.typeOfAppointment')}</Text>
             <View style={styles.typeBadge}>
               <Ionicons 
-                name={appointmentData.appointmentType === 'Direct Visit' ? 'medical-outline' : 'calendar-outline'} 
+                name={
+                  appointmentData.appointmentType === t('appointments.bookingType.directVisit')
+                    ? 'medical-outline'
+                    : 'calendar-outline'
+                }
                 size={16} 
                 color={colors.success} 
               />
@@ -631,24 +703,24 @@ const AppointmentDetailsScreen = () => {
 
           <View style={styles.detailsSection}>
             <View style={styles.detailItem}>
-              <Text style={styles.detailLabel}>Appointment Date & Time</Text>
+              <Text style={styles.detailLabel}>{t('appointments.details.appointmentDateTime')}</Text>
               <Text style={styles.detailValue}>{appointmentData.date}</Text>
             </View>
-            {appointmentData.clinic && appointmentData.clinic !== 'Not specified' && (
+            {!!appointment?.clinicName && (
               <View style={styles.detailItem}>
-                <Text style={styles.detailLabel}>Clinic Location</Text>
+                <Text style={styles.detailLabel}>{t('appointments.details.clinicLocation')}</Text>
                 <Text style={styles.detailValue}>{appointmentData.clinic}</Text>
               </View>
             )}
             {appointmentData.visitType && (
               <View style={styles.detailItem}>
-                <Text style={styles.detailLabel}>Visit Type / Notes</Text>
+                <Text style={styles.detailLabel}>{t('appointments.details.visitTypeNotes')}</Text>
                 <Text style={styles.detailValue}>{appointmentData.visitType}</Text>
               </View>
             )}
             {appointment?.appointmentNumber && (
               <View style={styles.detailItem}>
-                <Text style={styles.detailLabel}>Appointment Number</Text>
+                <Text style={styles.detailLabel}>{t('appointments.details.appointmentNumber')}</Text>
                 <Text style={styles.detailValue}>{appointment.appointmentNumber}</Text>
               </View>
             )}
@@ -668,7 +740,7 @@ const AppointmentDetailsScreen = () => {
                 ) : (
                   <>
                     <Ionicons name="checkmark-circle" size={18} color={colors.textWhite} />
-                    <Text style={styles.statusActionBtnText}>Mark as Completed</Text>
+                    <Text style={styles.statusActionBtnText}>{t('appointments.details.markAsCompleted')}</Text>
                   </>
                 )}
               </TouchableOpacity>
@@ -683,7 +755,7 @@ const AppointmentDetailsScreen = () => {
                 ) : (
                   <>
                     <Ionicons name="close-circle" size={18} color={colors.textWhite} />
-                    <Text style={styles.statusActionBtnText}>Mark as No Show</Text>
+                    <Text style={styles.statusActionBtnText}>{t('appointments.details.markAsNoShow')}</Text>
                   </>
                 )}
               </TouchableOpacity>
@@ -707,7 +779,7 @@ const AppointmentDetailsScreen = () => {
                   onPress={() => navigation.navigate('VideoCall', { appointmentId: appointmentId })}
                 >
                   <Ionicons name="videocam" size={18} color={colors.textWhite} />
-                  <Text style={styles.startSessionText}>Start Video Call</Text>
+                  <Text style={styles.startSessionText}>{t('appointments.details.startVideoCall')}</Text>
                 </TouchableOpacity>
               )}
               {/* <TouchableOpacity 
@@ -719,19 +791,21 @@ const AppointmentDetailsScreen = () => {
               </TouchableOpacity> */}
             </>
           )}
+
           {status === 'upcoming' && !isDoctor && appointment?.bookingType === 'ONLINE' && appointment?.status === 'CONFIRMED' && (
             <TouchableOpacity 
-              style={[styles.startSessionBtn, { backgroundColor: colors.primary }]} 
+              style={[styles.startSessionBtn, { backgroundColor: colors.primary }]}
               activeOpacity={0.8}
               onPress={() => navigation.navigate('VideoCall', { appointmentId: appointmentId })}
             >
               <Ionicons name="videocam" size={18} color={colors.textWhite} />
-              <Text style={styles.startSessionText}>Start Video Call</Text>
+              <Text style={styles.startSessionText}>{t('appointments.details.startVideoCall')}</Text>
             </TouchableOpacity>
           )}
+
           {status === 'upcoming' && !isDoctor && appointment?.bookingType !== 'ONLINE' && (
             <TouchableOpacity style={styles.startSessionBtn} activeOpacity={0.8}>
-              <Text style={styles.startSessionText}>View Details</Text>
+              <Text style={styles.startSessionText}>{t('appointments.viewDetails')}</Text>
             </TouchableOpacity>
           )}
 
@@ -741,9 +815,9 @@ const AppointmentDetailsScreen = () => {
               <View style={styles.rescheduleWarning}>
                 <Ionicons name="warning-outline" size={20} color={colors.warning} />
                 <View style={styles.rescheduleWarningContent}>
-                  <Text style={styles.rescheduleWarningTitle}>Missed Appointment?</Text>
+                  <Text style={styles.rescheduleWarningTitle}>{t('appointments.details.missedAppointmentTitle')}</Text>
                   <Text style={styles.rescheduleWarningText}>
-                    If you were unable to join the video call, you can request to reschedule.
+                    {t('appointments.details.missedAppointmentBody')}
                   </Text>
                 </View>
               </View>
@@ -755,7 +829,7 @@ const AppointmentDetailsScreen = () => {
                 }}
               >
                 <Ionicons name="calendar-outline" size={18} color={colors.textWhite} />
-                <Text style={styles.rescheduleRequestBtnText}>Request Reschedule</Text>
+                <Text style={styles.rescheduleRequestBtnText}>{t('appointments.details.requestReschedule')}</Text>
               </TouchableOpacity>
             </View>
           )}
@@ -768,8 +842,11 @@ const AppointmentDetailsScreen = () => {
                 onPress={() => navigation.navigate('Prescription', { appointmentId })}
               >
                 <Ionicons name="download-outline" size={18} color={colors.text} />
-                <Text style={styles.downloadBtnText}>{isDoctor ? 'Prescription' : 'Download Prescription'}</Text>
+                <Text style={styles.downloadBtnText}>
+                  {isDoctor ? t('appointments.details.prescription') : t('appointments.details.downloadPrescription')}
+                </Text>
               </TouchableOpacity>
+
               {!isDoctor && !existingReview && (
                 <TouchableOpacity
                   style={styles.reviewBtn}
@@ -777,17 +854,19 @@ const AppointmentDetailsScreen = () => {
                   onPress={() => setShowReviewModal(true)}
                 >
                   <Ionicons name="star-outline" size={18} color={colors.textWhite} />
-                  <Text style={styles.reviewBtnText}>Write a Review</Text>
+                  <Text style={styles.reviewBtnText}>{t('appointments.details.writeReview')}</Text>
                 </TouchableOpacity>
               )}
+
               {!isDoctor && existingReview && (
                 <View style={styles.reviewSubmitted}>
                   <Ionicons name="checkmark-circle" size={18} color={colors.success} />
-                  <Text style={styles.reviewSubmittedText}>Review Submitted</Text>
+                  <Text style={styles.reviewSubmittedText}>{t('appointments.details.reviewSubmitted')}</Text>
                 </View>
               )}
+
               <TouchableOpacity style={styles.rescheduleBtn} activeOpacity={0.8}>
-                <Text style={styles.rescheduleBtnText}>Reschedule Appointment</Text>
+                <Text style={styles.rescheduleBtnText}>{t('appointments.details.rescheduleAppointment')}</Text>
               </TouchableOpacity>
             </View>
           )}
@@ -795,14 +874,14 @@ const AppointmentDetailsScreen = () => {
           {status === 'cancelled' && (
             <View style={styles.cancelledActions}>
               <TouchableOpacity style={styles.reasonBtn} activeOpacity={0.7}>
-                <Text style={styles.reasonBtnText}>Reason</Text>
+                <Text style={styles.reasonBtnText}>{t('appointments.details.reason')}</Text>
               </TouchableOpacity>
               <View style={styles.rescheduleContainer}>
                 <View style={styles.rescheduleBadge}>
-                  <Text style={styles.rescheduleBadgeText}>Status : Reschedule</Text>
+                  <Text style={styles.rescheduleBadgeText}>{t('appointments.details.statusReschedule')}</Text>
                 </View>
                 <TouchableOpacity style={styles.rescheduleBtn} activeOpacity={0.8}>
-                  <Text style={styles.rescheduleBtnText}>Reschedule Appointment</Text>
+                  <Text style={styles.rescheduleBtnText}>{t('appointments.details.rescheduleAppointment')}</Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -826,7 +905,7 @@ const AppointmentDetailsScreen = () => {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Write a Review</Text>
+              <Text style={styles.modalTitle}>{t('appointments.review.modalTitle')}</Text>
               <TouchableOpacity
                 onPress={() => {
                   setShowReviewModal(false);
@@ -841,7 +920,9 @@ const AppointmentDetailsScreen = () => {
 
             <ScrollView style={styles.modalBody} showsVerticalScrollIndicator={false}>
               <Text style={styles.modalSubtitle}>
-                How would you rate your experience with {appointmentData?.name || 'the doctor'}?
+                {t('appointments.review.modalSubtitle', {
+                  name: appointmentData?.name || t('appointments.review.modalSubtitleFallbackName'),
+                })}
               </Text>
 
               {/* Rating Stars */}
@@ -867,10 +948,10 @@ const AppointmentDetailsScreen = () => {
 
               {/* Review Text */}
               <View style={styles.reviewInputContainer}>
-                <Text style={styles.inputLabel}>Your Review</Text>
+                <Text style={styles.inputLabel}>{t('appointments.review.yourReviewLabel')}</Text>
                 <TextInput
                   style={styles.reviewInput}
-                  placeholder="Share your experience..."
+                  placeholder={t('appointments.review.placeholder')}
                   placeholderTextColor={colors.textLight}
                   value={reviewText}
                   onChangeText={setReviewText}
@@ -892,7 +973,7 @@ const AppointmentDetailsScreen = () => {
                 }}
                 activeOpacity={0.7}
               >
-                <Text style={styles.modalCancelBtnText}>Cancel</Text>
+                <Text style={styles.modalCancelBtnText}>{t('common.cancel')}</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[
@@ -906,7 +987,7 @@ const AppointmentDetailsScreen = () => {
                 {createReviewMutation.isPending ? (
                   <ActivityIndicator size="small" color={colors.textWhite} />
                 ) : (
-                  <Text style={styles.modalSubmitBtnText}>Submit Review</Text>
+                  <Text style={styles.modalSubmitBtnText}>{t('appointments.review.submit')}</Text>
                 )}
               </TouchableOpacity>
             </View>
