@@ -4,7 +4,7 @@
     "slug": "mydoctor-app",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/app_icon.png",
+    "icon": "./assets/app_icon.jpeg",
     "userInterfaceStyle": "light",
     "newArchEnabled": false,
     "splash": {
@@ -21,9 +21,9 @@
       }
     },
     "android": {
-      "icon": "./assets/app_icon.png",
+      "icon": "./assets/app_icon.jpeg",
       "adaptiveIcon": {
-        "foregroundImage": "./assets/app_icon.png",
+        "foregroundImage": "./assets/app_icon.jpeg",
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
