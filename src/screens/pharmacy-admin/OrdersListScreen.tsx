@@ -341,16 +341,19 @@ const styles = StyleSheet.create({
   },
   filtersContainer: {
     marginBottom: 12,
-    maxHeight: 50,
+    maxHeight: 56,
+    minHeight: 44,
   },
   filtersContent: {
     paddingHorizontal: 16,
+    paddingVertical: 6,
+    paddingRight: 24,
     gap: 8,
     alignItems: 'center',
   },
   filterChip: {
+    height: 32,
     paddingHorizontal: 12,
-    paddingVertical: 6,
     borderRadius: 16,
     backgroundColor: colors.background,
     borderWidth: 1,
@@ -366,7 +369,9 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '500',
     color: colors.textSecondary,
-    lineHeight: 18,
+    lineHeight: 16,
+    includeFontPadding: false,
+    textAlignVertical: 'center',
   },
   filterChipTextActive: {
     color: colors.textWhite,

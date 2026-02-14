@@ -65,8 +65,14 @@ export const ProductDetailsScreen = () => {
   const route = useRoute<ProductDetailsRouteProp>();
   const { productId } = route.params;
   const { addToCart } = useCart();
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [quantity, setQuantity] = useState(1);
+
+  useEffect(() => {
+    navigation.setOptions({
+      title: t('pharmacy.nav.productDetails'),
+    });
+  }, [navigation, t, i18n.language]);
 
   // Fetch product details
   const { data: productData, isLoading, error } = useQuery({

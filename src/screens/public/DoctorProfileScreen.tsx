@@ -26,6 +26,7 @@ import * as favoriteApi from '../../services/favorite';
 import * as reviewApi from '../../services/review';
 import { API_BASE_URL } from '../../config/api';
 import Toast from 'react-native-toast-message';
+import { useTranslation } from 'react-i18next';
 
 type DoctorProfileScreenNavigationProp = StackNavigationProp<HomeStackParamList, 'DoctorProfile'>;
 type DoctorProfileRouteProp = RouteProp<HomeStackParamList, 'DoctorProfile'>;
@@ -63,6 +64,7 @@ const DoctorProfileScreen = () => {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState('bio');
+  const { t } = useTranslation();
 
   // Fetch doctor profile
   const { data: doctorResponse, isLoading: doctorLoading, error: doctorError } = useQuery({
@@ -164,16 +166,16 @@ const DoctorProfileScreen = () => {
     onSuccess: () => {
       Toast.show({
         type: 'success',
-        text1: 'Added to Favorites',
-        text2: 'Doctor added to your favorites',
+        text1: t('screens.doctorProfile.toasts.addedToFavoritesTitle'),
+        text2: t('screens.doctorProfile.toasts.addedToFavoritesBody'),
       });
       queryClient.invalidateQueries({ queryKey: ['favorites', user?._id || user?.id] });
     },
     onError: (error: any) => {
-      const errorMessage = error.response?.data?.message || error.message || 'Failed to add favorite';
+      const errorMessage = error.response?.data?.message || error.message || t('screens.doctorProfile.errors.failedToAddFavorite');
       Toast.show({
         type: 'error',
-        text1: 'Error',
+        text1: t('common.error'),
         text2: errorMessage,
       });
     },
@@ -185,16 +187,16 @@ const DoctorProfileScreen = () => {
     onSuccess: () => {
       Toast.show({
         type: 'success',
-        text1: 'Removed from Favorites',
-        text2: 'Doctor removed from your favorites',
+        text1: t('screens.doctorProfile.toasts.removedFromFavoritesTitle'),
+        text2: t('screens.doctorProfile.toasts.removedFromFavoritesBody'),
       });
       queryClient.invalidateQueries({ queryKey: ['favorites', user?._id || user?.id] });
     },
     onError: (error: any) => {
-      const errorMessage = error.response?.data?.message || error.message || 'Failed to remove favorite';
+      const errorMessage = error.response?.data?.message || error.message || t('screens.doctorProfile.errors.failedToRemoveFavorite');
       Toast.show({
         type: 'error',
-        text1: 'Error',
+        text1: t('common.error'),
         text2: errorMessage,
       });
     },
@@ -205,8 +207,8 @@ const DoctorProfileScreen = () => {
     if (!user || user?.role !== 'patient') {
       Toast.show({
         type: 'error',
-        text1: 'Login Required',
-        text2: 'Please login as a patient to add favorites',
+        text1: t('screens.doctorProfile.errors.loginRequiredTitle'),
+        text2: t('screens.doctorProfile.errors.loginRequiredBody'),
       });
       return;
     }
@@ -214,8 +216,8 @@ const DoctorProfileScreen = () => {
     if (!doctorId) {
       Toast.show({
         type: 'error',
-        text1: 'Error',
-        text2: 'Doctor ID not found',
+        text1: t('common.error'),
+        text2: t('screens.doctorProfile.errors.doctorIdNotFound'),
       });
       return;
     }
@@ -233,9 +235,9 @@ const DoctorProfileScreen = () => {
   // Handle share
   const handleShare = async () => {
     try {
-      const doctorName = doctor?.userId?.fullName || doctor?.fullName || 'Doctor';
+      const doctorName = doctor?.userId?.fullName || doctor?.fullName || t('screens.doctorProfile.defaults.doctor');
       await Share.share({
-        message: `Check out ${doctorName} on Mydoctor+ App!`,
+        message: t('screens.doctorProfile.share.message', { name: doctorName }),
         title: doctorName,
       });
     } catch (error) {
@@ -250,8 +252,8 @@ const DoctorProfileScreen = () => {
     } else {
       Toast.show({
         type: 'info',
-        text1: 'Location Not Available',
-        text2: 'This doctor has not set their clinic location',
+        text1: t('screens.doctorProfile.location.notAvailableTitle'),
+        text2: t('screens.doctorProfile.location.notAvailableBody'),
       });
     }
   };
@@ -276,14 +278,14 @@ const DoctorProfileScreen = () => {
   };
 
   // Extract doctor information
-  const doctorName = doctor?.userId?.fullName || doctor?.fullName || 'Unknown Doctor';
+  const doctorName = doctor?.userId?.fullName || doctor?.fullName || t('screens.doctorProfile.defaults.unknownDoctor');
   const doctorImage = normalizeImageUrl(doctor?.userId?.profileImage || doctor?.profileImage);
-  const specialization = doctor?.specialization?.name || 'General';
+  const specialization = doctor?.specialization?.name || t('screens.doctorProfile.defaults.general');
   const rating = doctor?.ratingAvg || 0;
   const firstClinic = doctor?.clinics?.[0];
   const clinicAddress = firstClinic
     ? `${firstClinic.address || ''}, ${firstClinic.city || ''}, ${firstClinic.state || ''}`.trim()
-    : 'Location not available';
+    : t('screens.doctorProfile.defaults.locationNotAvailable');
   const consultationFees = doctor?.consultationFees;
   const priceRange = consultationFees?.clinic && consultationFees?.online
     ? `$${consultationFees.clinic} - $${consultationFees.online}`
@@ -291,14 +293,14 @@ const DoctorProfileScreen = () => {
     ? `$${consultationFees.clinic}`
     : consultationFees?.online
     ? `$${consultationFees.online}`
-    : 'Contact for pricing';
+    : t('screens.doctorProfile.defaults.contactForPricing');
 
   if (doctorLoading) {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={colors.primary} />
-          <Text style={styles.loadingText}>Loading doctor profile...</Text>
+          <Text style={styles.loadingText}>{t('screens.doctorProfile.loadingProfile')}</Text>
         </View>
       </SafeAreaView>
     );
@@ -309,17 +311,17 @@ const DoctorProfileScreen = () => {
       <SafeAreaView style={styles.container}>
         <View style={styles.errorContainer}>
           <Ionicons name="alert-circle-outline" size={64} color={colors.error} />
-          <Text style={styles.errorTitle}>Doctor Not Found</Text>
+          <Text style={styles.errorTitle}>{t('screens.doctorProfile.doctorNotFoundTitle')}</Text>
           <Text style={styles.errorText}>
             {(doctorError as any)?.response?.data?.message ||
               (doctorError as any)?.message ||
-              "The doctor you're looking for doesn't exist."}
+              t('screens.doctorProfile.doctorNotFoundBody')}
           </Text>
           <TouchableOpacity
             style={styles.backButton}
             onPress={() => navigation.goBack()}
           >
-            <Text style={styles.backButtonText}>Go Back</Text>
+            <Text style={styles.backButtonText}>{t('screens.doctorProfile.goBack')}</Text>
           </TouchableOpacity>
         </View>
       </SafeAreaView>
@@ -327,25 +329,25 @@ const DoctorProfileScreen = () => {
   }
 
   const tabs = [
-    { id: 'bio', label: 'Bio' },
-    { id: 'experience', label: 'Experience' },
-    { id: 'education', label: 'Education' },
-    { id: 'awards', label: 'Awards' },
-    { id: 'services', label: 'Services' },
-    { id: 'speciality', label: 'Speciality' },
-    { id: 'clinic', label: 'Clinics' },
-    { id: 'membership', label: 'Memberships' },
-    { id: 'review', label: 'Reviews' },
+    { id: 'bio', label: t('screens.doctorProfile.tabs.bio') },
+    { id: 'experience', label: t('screens.doctorProfile.tabs.experience') },
+    { id: 'education', label: t('screens.doctorProfile.tabs.education') },
+    { id: 'awards', label: t('screens.doctorProfile.tabs.awards') },
+    { id: 'services', label: t('screens.doctorProfile.tabs.services') },
+    { id: 'speciality', label: t('screens.doctorProfile.tabs.speciality') },
+    { id: 'clinic', label: t('screens.doctorProfile.tabs.clinic') },
+    { id: 'membership', label: t('screens.doctorProfile.tabs.membership') },
+    { id: 'review', label: t('screens.doctorProfile.tabs.review') },
   ];
 
   // Add insurance tab if doctor accepts insurance
   if (doctor?.convenzionato === true && doctor?.insuranceCompanies && Array.isArray(doctor.insuranceCompanies) && doctor.insuranceCompanies.length > 0) {
-    tabs.push({ id: 'insurance', label: 'Insurance' });
+    tabs.push({ id: 'insurance', label: t('screens.doctorProfile.tabs.insurance') });
   }
 
   // Add products tab if doctor has products
   if (doctor?.products && Array.isArray(doctor.products) && doctor.products.length > 0) {
-    tabs.push({ id: 'products', label: 'Products' });
+    tabs.push({ id: 'products', label: t('screens.doctorProfile.tabs.products') });
   }
 
   const renderTabContent = () => {
@@ -353,11 +355,11 @@ const DoctorProfileScreen = () => {
       case 'bio':
         return (
           <View style={styles.tabContent}>
-            <Text style={styles.tabTitle}>Doctor Bio</Text>
+            <Text style={styles.tabTitle}>{t('screens.doctorProfile.sections.doctorBio')}</Text>
             {doctor?.biography ? (
               <Text style={styles.tabText}>{doctor.biography}</Text>
             ) : (
-              <Text style={styles.emptyText}>Biography not available.</Text>
+              <Text style={styles.emptyText}>{t('screens.doctorProfile.empty.biography')}</Text>
             )}
           </View>
         );
@@ -365,25 +367,25 @@ const DoctorProfileScreen = () => {
       case 'experience':
         return (
           <View style={styles.tabContent}>
-            <Text style={styles.tabTitle}>Experience</Text>
+            <Text style={styles.tabTitle}>{t('screens.doctorProfile.sections.experience')}</Text>
             {doctor?.experience && Array.isArray(doctor.experience) && doctor.experience.length > 0 ? (
               <View style={styles.listContainer}>
                 {doctor.experience.map((exp: any, index: number) => (
                   <View key={index} style={styles.listItem}>
-                    <Text style={styles.listItemTitle}>{exp.hospital || 'Hospital Name Not Available'}</Text>
+                    <Text style={styles.listItemTitle}>{exp.hospital || t('screens.doctorProfile.defaults.hospitalNameNotAvailable')}</Text>
                     {exp.designation && <Text style={styles.listItemSubtitle}>{exp.designation}</Text>}
                     <Text style={styles.listItemText}>
                       {exp.fromYear && exp.toYear
                         ? `${exp.fromYear} - ${exp.toYear}`
                         : exp.fromYear
-                        ? `Since ${exp.fromYear}`
-                        : 'Dates not available'}
+                        ? t('screens.doctorProfile.defaults.sinceYear', { year: exp.fromYear })
+                        : t('screens.doctorProfile.defaults.datesNotAvailable')}
                     </Text>
                   </View>
                 ))}
               </View>
             ) : (
-              <Text style={styles.emptyText}>Experience information not available.</Text>
+              <Text style={styles.emptyText}>{t('screens.doctorProfile.empty.experience')}</Text>
             )}
           </View>
         );
@@ -391,19 +393,19 @@ const DoctorProfileScreen = () => {
       case 'education':
         return (
           <View style={styles.tabContent}>
-            <Text style={styles.tabTitle}>Education</Text>
+            <Text style={styles.tabTitle}>{t('screens.doctorProfile.sections.education')}</Text>
             {doctor?.education && Array.isArray(doctor.education) && doctor.education.length > 0 ? (
               <View style={styles.listContainer}>
                 {doctor.education.map((edu: any, index: number) => (
                   <View key={index} style={styles.listItem}>
-                    <Text style={styles.listItemTitle}>{edu.degree || 'Degree Not Available'}</Text>
+                    <Text style={styles.listItemTitle}>{edu.degree || t('screens.doctorProfile.defaults.degreeNotAvailable')}</Text>
                     {edu.college && <Text style={styles.listItemSubtitle}>{edu.college}</Text>}
                     {edu.year && <Text style={styles.listItemText}>{edu.year}</Text>}
                   </View>
                 ))}
               </View>
             ) : (
-              <Text style={styles.emptyText}>Education information not available.</Text>
+              <Text style={styles.emptyText}>{t('screens.doctorProfile.empty.education')}</Text>
             )}
           </View>
         );
@@ -411,18 +413,18 @@ const DoctorProfileScreen = () => {
       case 'awards':
         return (
           <View style={styles.tabContent}>
-            <Text style={styles.tabTitle}>Awards</Text>
+            <Text style={styles.tabTitle}>{t('screens.doctorProfile.sections.awards')}</Text>
             {doctor?.awards && Array.isArray(doctor.awards) && doctor.awards.length > 0 ? (
               <View style={styles.listContainer}>
                 {doctor.awards.map((award: any, index: number) => (
                   <View key={index} style={styles.listItem}>
-                    <Text style={styles.listItemTitle}>{award.title || 'Award Title Not Available'}</Text>
+                    <Text style={styles.listItemTitle}>{award.title || t('screens.doctorProfile.defaults.awardTitleNotAvailable')}</Text>
                     {award.year && <Text style={styles.listItemText}>{award.year}</Text>}
                   </View>
                 ))}
               </View>
             ) : (
-              <Text style={styles.emptyText}>Awards information not available.</Text>
+              <Text style={styles.emptyText}>{t('screens.doctorProfile.empty.awards')}</Text>
             )}
           </View>
         );
@@ -430,14 +432,14 @@ const DoctorProfileScreen = () => {
       case 'services':
         return (
           <View style={styles.tabContent}>
-            <Text style={styles.tabTitle}>Services & Treatments</Text>
+            <Text style={styles.tabTitle}>{t('screens.doctorProfile.sections.services')}</Text>
             {doctor?.services && Array.isArray(doctor.services) && doctor.services.length > 0 ? (
               <View style={styles.listContainer}>
                 {doctor.services.map((service: any, index: number) => (
                   <View key={index} style={styles.serviceItem}>
                     <Ionicons name="checkmark-circle" size={20} color={colors.primary} />
                     <View style={styles.serviceContent}>
-                      <Text style={styles.serviceName}>{service.name || 'Service Name'}</Text>
+                      <Text style={styles.serviceName}>{service.name || t('screens.doctorProfile.defaults.serviceName')}</Text>
                       {service.price && (
                         <Text style={styles.servicePrice}>${service.price}</Text>
                       )}
@@ -446,7 +448,7 @@ const DoctorProfileScreen = () => {
                 ))}
               </View>
             ) : (
-              <Text style={styles.emptyText}>Services information not available.</Text>
+              <Text style={styles.emptyText}>{t('screens.doctorProfile.empty.services')}</Text>
             )}
           </View>
         );
@@ -454,7 +456,7 @@ const DoctorProfileScreen = () => {
       case 'speciality':
         return (
           <View style={styles.tabContent}>
-            <Text style={styles.tabTitle}>Speciality</Text>
+            <Text style={styles.tabTitle}>{t('screens.doctorProfile.sections.speciality')}</Text>
             {doctor?.specialization ? (
               <View>
                 <Text style={styles.specialityName}>{doctor.specialization.name || specialization}</Text>
@@ -463,7 +465,7 @@ const DoctorProfileScreen = () => {
                 )}
               </View>
             ) : (
-              <Text style={styles.emptyText}>Specialization information not available.</Text>
+              <Text style={styles.emptyText}>{t('screens.doctorProfile.empty.speciality')}</Text>
             )}
           </View>
         );
@@ -471,12 +473,12 @@ const DoctorProfileScreen = () => {
       case 'clinic':
         return (
           <View style={styles.tabContent}>
-            <Text style={styles.tabTitle}>Clinics</Text>
+            <Text style={styles.tabTitle}>{t('screens.doctorProfile.sections.clinics')}</Text>
             {doctor?.clinics && Array.isArray(doctor.clinics) && doctor.clinics.length > 0 ? (
               <View style={styles.listContainer}>
                 {doctor.clinics.map((clinic: any, index: number) => (
                   <View key={index} style={styles.clinicItem}>
-                    <Text style={styles.clinicName}>{clinic.name || 'Clinic Name Not Available'}</Text>
+                    <Text style={styles.clinicName}>{clinic.name || t('screens.doctorProfile.defaults.clinicNameNotAvailable')}</Text>
                     {clinic.address && (
                       <View style={styles.clinicDetail}>
                         <Ionicons name="location-outline" size={16} color={colors.primary} />
@@ -502,14 +504,14 @@ const DoctorProfileScreen = () => {
                         onPress={() => navigation.navigate('MapView')}
                       >
                         <Ionicons name="navigate-outline" size={16} color={colors.primary} />
-                        <Text style={styles.directionsButtonText}>Get Directions</Text>
+                        <Text style={styles.directionsButtonText}>{t('screens.doctorProfile.actions.getDirections')}</Text>
                       </TouchableOpacity>
                     )}
                   </View>
                 ))}
               </View>
             ) : (
-              <Text style={styles.emptyText}>Clinic information not available.</Text>
+              <Text style={styles.emptyText}>{t('screens.doctorProfile.empty.clinic')}</Text>
             )}
           </View>
         );
@@ -517,20 +519,20 @@ const DoctorProfileScreen = () => {
       case 'membership':
         return (
           <View style={styles.tabContent}>
-            <Text style={styles.tabTitle}>Memberships</Text>
+            <Text style={styles.tabTitle}>{t('screens.doctorProfile.sections.memberships')}</Text>
             {doctor?.memberships && Array.isArray(doctor.memberships) && doctor.memberships.length > 0 ? (
               <View style={styles.listContainer}>
                 {doctor.memberships.map((membership: any, index: number) => (
                   <View key={index} style={styles.membershipItem}>
                     <Ionicons name="ribbon-outline" size={20} color={colors.primary} />
                     <Text style={styles.membershipText}>
-                      {membership.name || 'Membership Name Not Available'}
+                      {membership.name || t('screens.doctorProfile.defaults.membershipNameNotAvailable')}
                     </Text>
                   </View>
                 ))}
               </View>
             ) : (
-              <Text style={styles.emptyText}>Membership information not available.</Text>
+              <Text style={styles.emptyText}>{t('screens.doctorProfile.empty.membership')}</Text>
             )}
           </View>
         );
@@ -538,11 +540,11 @@ const DoctorProfileScreen = () => {
       case 'review':
         return (
           <View style={styles.tabContent}>
-            <Text style={styles.tabTitle}>Reviews ({reviewCount})</Text>
+            <Text style={styles.tabTitle}>{t('screens.doctorProfile.sections.reviewsWithCount', { count: reviewCount })}</Text>
             {reviewsLoading ? (
               <View style={styles.loadingContainer}>
                 <ActivityIndicator size="small" color={colors.primary} />
-                <Text style={styles.loadingText}>Loading reviews...</Text>
+                <Text style={styles.loadingText}>{t('screens.doctorProfile.loadingReviews')}</Text>
               </View>
             ) : reviews && reviews.length > 0 ? (
               <View style={styles.listContainer}>
@@ -558,7 +560,7 @@ const DoctorProfileScreen = () => {
                         />
                         <View style={styles.reviewInfo}>
                           <Text style={styles.reviewerName}>
-                            {review.patientId?.fullName || 'Anonymous'}
+                            {review.patientId?.fullName || t('screens.doctorProfile.defaults.anonymous')}
                           </Text>
                           <View style={styles.reviewRating}>
                             {renderStars(review.rating || 0)}
@@ -579,7 +581,7 @@ const DoctorProfileScreen = () => {
                 })}
               </View>
             ) : (
-              <Text style={styles.emptyText}>No reviews yet. Be the first to review this doctor!</Text>
+              <Text style={styles.emptyText}>{t('screens.doctorProfile.empty.reviews')}</Text>
             )}
           </View>
         );
@@ -587,22 +589,22 @@ const DoctorProfileScreen = () => {
       case 'insurance':
         return (
           <View style={styles.tabContent}>
-            <Text style={styles.tabTitle}>Accepted Insurance Companies</Text>
+            <Text style={styles.tabTitle}>{t('screens.doctorProfile.sections.acceptedInsuranceCompanies')}</Text>
             {doctor?.convenzionato === true && doctor?.insuranceCompanies && Array.isArray(doctor.insuranceCompanies) && doctor.insuranceCompanies.length > 0 ? (
               <View>
                 <View style={styles.insuranceHeader}>
                   <Ionicons name="checkmark-circle" size={24} color={colors.success} />
-                  <Text style={styles.insuranceHeaderText}>This doctor accepts insurance</Text>
+                  <Text style={styles.insuranceHeaderText}>{t('screens.doctorProfile.insurance.acceptsInsurance')}</Text>
                 </View>
                 <Text style={styles.insuranceSubtitle}>
-                  The following insurance companies are accepted:
+                  {t('screens.doctorProfile.insurance.subtitle')}
                 </Text>
                 <View style={styles.insuranceGrid}>
                   {doctor.insuranceCompanies.map((insurance: any, index: number) => {
                     const insuranceId = insurance._id || insurance.id || insurance;
                     const insuranceName = typeof insurance === 'object' && insurance !== null
-                      ? (insurance.name || 'Insurance Company')
-                      : 'Insurance Company';
+                      ? (insurance.name || t('screens.doctorProfile.defaults.insuranceCompany'))
+                      : t('screens.doctorProfile.defaults.insuranceCompany');
                     const logoUrl = typeof insurance === 'object' && insurance !== null && insurance.logo
                       ? normalizeImageUrl(insurance.logo)
                       : null;
@@ -629,7 +631,7 @@ const DoctorProfileScreen = () => {
                 </View>
               </View>
             ) : (
-              <Text style={styles.emptyText}>Insurance information not available.</Text>
+              <Text style={styles.emptyText}>{t('screens.doctorProfile.empty.insurance')}</Text>
             )}
           </View>
         );
@@ -637,7 +639,7 @@ const DoctorProfileScreen = () => {
       case 'products':
         return (
           <View style={styles.tabContent}>
-            <Text style={styles.tabTitle}>Products ({doctor?.products?.length || 0})</Text>
+            <Text style={styles.tabTitle}>{t('screens.doctorProfile.sections.productsWithCount', { count: doctor?.products?.length || 0 })}</Text>
             {doctor?.products && Array.isArray(doctor.products) && doctor.products.length > 0 ? (
               <FlatList
                 data={doctor.products}
@@ -657,8 +659,8 @@ const DoctorProfileScreen = () => {
                         // Navigate to product details if needed
                         Toast.show({
                           type: 'info',
-                          text1: 'Product Details',
-                          text2: 'Product details screen coming soon',
+                          text1: t('screens.doctorProfile.toasts.productDetailsTitle'),
+                          text2: t('screens.doctorProfile.toasts.productDetailsBody'),
                         });
                       }}
                     >
@@ -682,7 +684,7 @@ const DoctorProfileScreen = () => {
                 scrollEnabled={false}
               />
             ) : (
-              <Text style={styles.emptyText}>No products available.</Text>
+              <Text style={styles.emptyText}>{t('screens.doctorProfile.empty.products')}</Text>
             )}
           </View>
         );
@@ -691,7 +693,7 @@ const DoctorProfileScreen = () => {
         return (
           <View style={styles.tabContent}>
             <Text style={styles.tabTitle}>{tabs.find(t => t.id === activeTab)?.label}</Text>
-            <Text style={styles.emptyText}>Content coming soon...</Text>
+            <Text style={styles.emptyText}>{t('screens.doctorProfile.empty.comingSoon')}</Text>
           </View>
         );
     }
@@ -711,7 +713,7 @@ const DoctorProfileScreen = () => {
             <View style={styles.profileInfo}>
               <View style={styles.availabilityBadge}>
                 <View style={styles.availabilityDot} />
-                <Text style={styles.availabilityText}>Available</Text>
+                <Text style={styles.availabilityText}>{t('screens.doctorProfile.badges.available')}</Text>
               </View>
               <Text style={styles.doctorName}>
                 {doctorName}
@@ -737,7 +739,7 @@ const DoctorProfileScreen = () => {
               </View>
               {firstClinic?.lat && firstClinic?.lng && (
                 <TouchableOpacity onPress={handleViewLocation} activeOpacity={0.7}>
-                  <Text style={styles.viewLocationText}>( View Location )</Text>
+                  <Text style={styles.viewLocationText}>{t('screens.doctorProfile.actions.viewLocation')}</Text>
                 </TouchableOpacity>
               )}
             </View>
@@ -748,7 +750,7 @@ const DoctorProfileScreen = () => {
               <View style={styles.activityHeader}>
                 <Ionicons name="time-outline" size={18} color={colors.primary} />
                 <Text style={styles.activityText}>
-                  Full Time{doctor?.isAvailableOnline ? ', Online Therapy Available' : ''}
+                  {t('screens.doctorProfile.activity.fullTime')}{doctor?.isAvailableOnline ? `, ${t('screens.doctorProfile.activity.onlineTherapyAvailable')}` : ''}
                 </Text>
               </View>
               <View style={styles.actionButtons}>
@@ -772,8 +774,8 @@ const DoctorProfileScreen = () => {
                     // Copy link functionality
                     Toast.show({
                       type: 'info',
-                      text1: 'Link Copied',
-                      text2: 'Doctor profile link copied to clipboard',
+                      text1: t('screens.doctorProfile.toasts.linkCopiedTitle'),
+                      text2: t('screens.doctorProfile.toasts.linkCopiedBody'),
                     });
                   }}
                   activeOpacity={0.7}
@@ -790,7 +792,7 @@ const DoctorProfileScreen = () => {
                   <Text style={styles.boldText}>
                     {rating >= 4.5 ? '94%' : rating >= 4 ? '85%' : rating >= 3.5 ? '75%' : '60%'}
                   </Text>{' '}
-                  Recommended
+                  {t('screens.doctorProfile.activity.recommended')}
                 </Text>
               </View>
             </View>
@@ -799,12 +801,12 @@ const DoctorProfileScreen = () => {
               <View style={styles.activityHeader}>
                 <Ionicons name="business-outline" size={18} color={colors.primary} />
                 <Text style={styles.activityText}>
-                  {firstClinic?.name || 'Clinic Name Not Available'}
+                  {firstClinic?.name || t('screens.doctorProfile.defaults.clinicNameNotAvailable')}
                 </Text>
               </View>
               <View style={styles.acceptingBadge}>
                 <Ionicons name="checkmark-circle" size={14} color={colors.success} />
-                <Text style={styles.acceptingText}>Accepting New Patients</Text>
+                <Text style={styles.acceptingText}>{t('screens.doctorProfile.badges.acceptingNewPatients')}</Text>
               </View>
             </View>
 
@@ -817,7 +819,7 @@ const DoctorProfileScreen = () => {
                   activeOpacity={0.7}
                 >
                   <Text style={styles.reviewsLink}>
-                    {reviewCount} {reviewCount === 1 ? 'Review' : 'Reviews'}
+                    {t('screens.doctorProfile.reviewsLink', { count: reviewCount })}
                   </Text>
                 </TouchableOpacity>
               </View>
@@ -861,7 +863,7 @@ const DoctorProfileScreen = () => {
                 <Ionicons name="calendar-outline" size={18} color={colors.textWhite} />
               </View>
               <Text style={styles.statText}>
-                {reviewCount > 0 ? `${reviewCount}+ Reviews` : 'No Reviews Yet'}
+                {reviewCount > 0 ? t('screens.doctorProfile.stats.reviewsCount', { count: reviewCount }) : t('screens.doctorProfile.stats.noReviewsYet')}
               </Text>
             </View>
             <View style={styles.statItem}>
@@ -870,8 +872,8 @@ const DoctorProfileScreen = () => {
               </View>
               <Text style={styles.statText}>
                 {experienceYears > 0
-                  ? `In Practice for ${experienceYears} ${experienceYears === 1 ? 'Year' : 'Years'}`
-                  : 'Experience Not Available'}
+                  ? t('screens.doctorProfile.stats.inPracticeForYears', { count: experienceYears })
+                  : t('screens.doctorProfile.stats.experienceNotAvailable')}
               </Text>
             </View>
             <View style={styles.statItem}>
@@ -879,21 +881,21 @@ const DoctorProfileScreen = () => {
                 <Ionicons name="star-outline" size={18} color={colors.textWhite} />
               </View>
               <Text style={styles.statText}>
-                {awardsCount > 0 ? `${awardsCount}+ Awards` : 'No Awards Listed'}
+                {awardsCount > 0 ? t('screens.doctorProfile.stats.awardsCount', { count: awardsCount }) : t('screens.doctorProfile.stats.noAwardsListed')}
               </Text>
             </View>
           </View>
 
           <View style={styles.bookingContainer}>
             <Text style={styles.priceText}>
-              Price : <Text style={styles.priceAmount}>{priceRange}</Text> for a Session
+              {t('screens.doctorProfile.booking.priceForSession', { price: priceRange })}
             </Text>
             <TouchableOpacity
               style={styles.bookAppointmentBtn}
               activeOpacity={0.8}
               onPress={() => navigation.navigate('Booking', { doctorId })}
             >
-              <Text style={styles.bookAppointmentText}>Book Appointment</Text>
+              <Text style={styles.bookAppointmentText}>{t('screens.doctorProfile.booking.bookAppointment')}</Text>
             </TouchableOpacity>
           </View>
         </View>

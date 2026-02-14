@@ -56,9 +56,11 @@ const VideoCallScreen = () => {
   const checkAppointmentTime = () => {
     if (!appointment) return { isValid: false, message: 'Appointment not found' };
 
+    const appt: any = appointment as any;
+
     const tzOffsetMinutes =
-      typeof appointment.timezoneOffset === 'number' && Number.isFinite(appointment.timezoneOffset)
-        ? appointment.timezoneOffset
+      typeof appt.timezoneOffset === 'number' && Number.isFinite(appt.timezoneOffset)
+        ? appt.timezoneOffset
         : null;
 
     // If the appointment doesn't have a timezone offset, avoid doing client-side blocking.
@@ -74,23 +76,23 @@ const VideoCallScreen = () => {
 
     const now = new Date();
 
-    const appointmentDateUTC = new Date(appointment.appointmentDate);
+    const appointmentDateUTC = new Date(appt.appointmentDate);
     const appointmentDateInTz = new Date(appointmentDateUTC.getTime() + tzOffsetMinutes * 60 * 1000);
     const year = appointmentDateInTz.getUTCFullYear();
     const month = appointmentDateInTz.getUTCMonth() + 1;
     const day = appointmentDateInTz.getUTCDate();
 
-    const [startHours, startMinutes] = String(appointment.appointmentTime).split(':').map(Number);
+    const [startHours, startMinutes] = String(appt.appointmentTime).split(':').map(Number);
     const appointmentStartDateTimeUTC = new Date(Date.UTC(year, month - 1, day, startHours, startMinutes, 0, 0));
     const appointmentStartDateTime = new Date(
       appointmentStartDateTimeUTC.getTime() - tzOffsetMinutes * 60 * 1000
     );
     
     // Calculate end time
-    const duration = appointment.appointmentDuration || 30;
+    const duration = appt.appointmentDuration || 30;
     let appointmentEndDateTime: Date;
-    if (appointment.appointmentEndTime) {
-      const [endHours, endMinutes] = appointment.appointmentEndTime.split(':').map(Number);
+    if (appt.appointmentEndTime) {
+      const [endHours, endMinutes] = String(appt.appointmentEndTime).split(':').map(Number);
 
       const startTimeMinutes = startHours * 60 + startMinutes;
       const endTimeMinutes = endHours * 60 + endMinutes;
@@ -152,7 +154,7 @@ const VideoCallScreen = () => {
       // Show single Alert instead of toast
       Alert.alert(
         'Appointment Time Issue',
-        timeCheck.message,
+        timeCheck.message ?? '',
         [
           {
             text: 'OK',
@@ -193,7 +195,7 @@ const VideoCallScreen = () => {
           // Show single Alert instead of toast
           Alert.alert(
             'Appointment Time Issue',
-            timeCheck.message,
+            timeCheck.message ?? '',
             [
               {
                 text: 'OK',
@@ -468,6 +470,7 @@ const VideoCallContent = ({
             {uniqueRemoteParticipants.length > 0 ? (
               <ParticipantView
                 participant={uniqueRemoteParticipants[0]}
+                videoZOrder={0}
                 style={styles.participantView}
               />
             ) : (
@@ -492,7 +495,11 @@ const VideoCallContent = ({
           {/* Local participant (small overlay) */}
           {localParticipant ? (
             <View style={styles.localVideoContainer}>
-              <ParticipantView participant={localParticipant} style={styles.participantView} />
+              <ParticipantView
+                participant={localParticipant}
+                videoZOrder={1}
+                style={styles.participantView}
+              />
               <View style={styles.participantLabel}>
                 <View style={[styles.statusDot, { backgroundColor: '#2196F3' }]} />
                 <Text style={styles.participantLabelText}>You</Text>
@@ -670,6 +677,7 @@ const styles = StyleSheet.create({
   videoArea: {
     flex: 1,
     position: 'relative',
+    overflow: 'visible',
   },
   remoteVideoContainer: {
     flex: 1,
@@ -677,6 +685,8 @@ const styles = StyleSheet.create({
     borderRadius: 0,
     overflow: 'hidden',
     position: 'relative',
+    zIndex: 1,
+    elevation: 1,
   },
   localVideoContainer: {
     width: 120,
@@ -688,6 +698,7 @@ const styles = StyleSheet.create({
     right: 12,
     top: Platform.OS === 'ios' ? 90 : 70,
     zIndex: 30,
+    elevation: 30,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.25)',
   },

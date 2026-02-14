@@ -86,6 +86,19 @@ const BookingScreen = () => {
       currency: 'EUR',
     }).format(Number.isFinite(value) ? value : 0);
   };
+
+  const formatLocalYMD = (d: Date) => {
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
+  const parseLocalYMD = (ymd: string) => {
+    const [year, month, day] = String(ymd).split('-').map((x) => Number(x));
+    if (!Number.isFinite(year) || !Number.isFinite(month) || !Number.isFinite(day)) return null;
+    return new Date(year, month - 1, day, 0, 0, 0, 0);
+  };
   
   const [currentStep, setCurrentStep] = useState(1);
   const [formData, setFormData] = useState({
@@ -328,14 +341,13 @@ const BookingScreen = () => {
   // Format date for display
   const formatDate = (dateString: string) => {
     if (!dateString) return '';
-    const date = new Date(dateString);
+    const date = parseLocalYMD(dateString) || new Date(dateString);
     return date.toLocaleDateString(locale, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
   };
 
   // Get minimum date (today)
   const getMinDate = () => {
-    const today = new Date();
-    return today.toISOString().split('T')[0];
+    return formatLocalYMD(new Date());
   };
 
   // Calendar helper functions
@@ -366,12 +378,12 @@ const BookingScreen = () => {
     // Add all days of the month
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    const selectedDate = formData.appointmentDate ? new Date(formData.appointmentDate) : null;
+    const selectedDate = formData.appointmentDate ? parseLocalYMD(formData.appointmentDate) : null;
     
     for (let day = 1; day <= daysInMonth; day++) {
       const date = new Date(year, month, day);
       date.setHours(0, 0, 0, 0);
-      const fullDate = date.toISOString().split('T')[0];
+      const fullDate = formatLocalYMD(date);
       const isPast = date < today;
       const isToday = date.getTime() === today.getTime();
       const isSelected = selectedDate ? date.getTime() === selectedDate.getTime() : false;

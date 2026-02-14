@@ -133,7 +133,7 @@ export const PharmacyHomeScreen = () => {
 
 
         {/* Categories Section */}
-        {categories.length > 0 && (
+        {/* {categories.length > 0 && (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>{t('pharmacy.home.shopPopularCategories')}</Text>
             <ScrollView
@@ -159,11 +159,11 @@ export const PharmacyHomeScreen = () => {
               ))}
             </ScrollView>
           </View>
-        )}
+        )} */}
 
 
         {/* Featured Products Section */}
-        <View style={styles.section}>
+        <View style={[styles.section, {paddingTop:20}]}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>{t('pharmacy.home.featuredProducts')}</Text>
             <TouchableOpacity onPress={() => navigation.navigate('ProductCatalog')}>

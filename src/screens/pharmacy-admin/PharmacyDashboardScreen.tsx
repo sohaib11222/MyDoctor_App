@@ -11,6 +11,7 @@ import {
   RefreshControl,
   Platform,
   StatusBar,
+  Dimensions,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -25,6 +26,7 @@ import * as productApi from '../../services/product';
 import * as pharmacySubscriptionApi from '../../services/pharmacySubscription';
 import { Button } from '../../components/common/Button';
 import { useTranslation } from 'react-i18next';
+import Svg, { G, Path, Rect, Text as SvgText } from 'react-native-svg';
 
 type PharmacyDashboardScreenNavigationProp = NativeStackNavigationProp<PharmacyDashboardStackParamList>;
 
@@ -51,6 +53,7 @@ export const PharmacyDashboardScreen = () => {
   const { user } = useAuth();
   const { t, i18n } = useTranslation();
   const [refreshing, setRefreshing] = useState(false);
+  const [chartsWidth, setChartsWidth] = useState<number>(Math.min(Dimensions.get('window').width - 64, 420));
   const userId = user?._id || user?.id;
   const isPharmacy = user?.role === 'pharmacy' || (user as any)?.role === 'PHARMACY';
   const isParapharmacy = user?.role === 'parapharmacy' || (user as any)?.role === 'PARAPHARMACY';
@@ -143,7 +146,13 @@ export const PharmacyDashboardScreen = () => {
     retry: 1,
   });
 
-  const orders = useMemo(() => ordersResponse?.data?.orders || [], [ordersResponse]);
+  const orders = useMemo(() => {
+    const r: any = ordersResponse as any;
+    const data = r?.data ?? r;
+    return (data?.orders || data?.data?.orders || []) as any[];
+  }, [ordersResponse]);
+
+  const normalizeEnum = (v: any) => String(v || '').trim().toUpperCase();
 
   const totalProducts = useMemo(() => {
     return productsResponse?.data?.pagination?.total || 0;
@@ -159,13 +168,167 @@ export const PharmacyDashboardScreen = () => {
       .filter((o) => {
         const d = new Date(o.createdAt);
         const key = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
-        return key === todayKey && o.paymentStatus === 'PAID';
+        return key === todayKey && normalizeEnum(o.paymentStatus) === 'PAID';
       })
       .reduce((sum, o) => sum + (o.total || 0), 0);
   }, [orders, todayKey]);
 
-  const pendingCount = useMemo(() => orders.filter((o) => o.status === 'PENDING').length, [orders]);
+  const pendingCount = useMemo(
+    () => orders.filter((o) => normalizeEnum(o.status) === 'PENDING').length,
+    [orders]
+  );
   const totalOrders = useMemo(() => orders.length, [orders]);
+
+  const revenueLast7Days = useMemo(() => {
+    const today = new Date();
+    const start = new Date(today);
+    start.setHours(0, 0, 0, 0);
+    start.setDate(start.getDate() - 6);
+
+    const dayBuckets: { key: string; label: string; total: number }[] = [];
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(start);
+      d.setDate(start.getDate() + i);
+      const key = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+      const label = d.toLocaleDateString(i18n.language, { weekday: 'short' });
+      dayBuckets.push({ key, label, total: 0 });
+    }
+
+    const idxByKey = new Map(dayBuckets.map((b, idx) => [b.key, idx] as const));
+
+    orders.forEach((o: any) => {
+      if (normalizeEnum(o?.paymentStatus) !== 'PAID') return;
+      const d = new Date(o.createdAt);
+      const key = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+      const idx = idxByKey.get(key);
+      if (idx === undefined) return;
+      dayBuckets[idx].total += Number(o.total) || 0;
+    });
+
+    return dayBuckets;
+  }, [i18n.language, orders]);
+
+  const statusBreakdown = useMemo(() => {
+    const counts = new Map<string, number>();
+    orders.forEach((o: any) => {
+      const s = normalizeEnum(o?.status) || 'UNKNOWN';
+      counts.set(s, (counts.get(s) || 0) + 1);
+    });
+
+    const statusColorMap: Record<string, string> = {
+      PENDING: colors.warning,
+      CONFIRMED: colors.primary,
+      PROCESSING: colors.primary,
+      SHIPPED: colors.info,
+      DELIVERED: colors.success,
+      CANCELLED: colors.error,
+      REFUNDED: colors.error,
+    };
+
+    const items = Array.from(counts.entries())
+      .map(([status, count]) => ({
+        status,
+        count,
+        color: statusColorMap[status] || colors.textSecondary,
+        label: t(`pharmacy.checkout.orders.status.${status}` as any, { defaultValue: status }),
+      }))
+      .sort((a, b) => b.count - a.count);
+
+    const total = items.reduce((sum, it) => sum + it.count, 0);
+    return { items, total };
+  }, [orders, t]);
+
+  const renderRevenueChart = () => {
+    const width = Math.max(240, chartsWidth);
+    const height = 170;
+    const paddingX = 12;
+    const paddingTop = 10;
+    const paddingBottom = 28;
+    const chartHeight = height - paddingTop - paddingBottom;
+    const values = revenueLast7Days.map((d) => d.total);
+    const maxValue = Math.max(...values, 1);
+    const barCount = revenueLast7Days.length;
+    const barSpace = (width - paddingX * 2) / barCount;
+    const barWidth = Math.max(10, Math.min(26, barSpace * 0.55));
+
+    return (
+      <Svg width={width} height={height}>
+        {revenueLast7Days.map((d, idx) => {
+          const barH = (d.total / maxValue) * chartHeight;
+          const x = paddingX + idx * barSpace + (barSpace - barWidth) / 2;
+          const y = paddingTop + (chartHeight - barH);
+          return (
+            <G key={d.key}>
+              <Rect x={x} y={y} width={barWidth} height={barH} rx={6} fill={colors.primary} opacity={0.9} />
+              <SvgText
+                x={paddingX + idx * barSpace + barSpace / 2}
+                y={height - 10}
+                fontSize={11}
+                fill={colors.textSecondary}
+                textAnchor="middle"
+              >
+                {d.label}
+              </SvgText>
+            </G>
+          );
+        })}
+      </Svg>
+    );
+  };
+
+  const polarToCartesian = (cx: number, cy: number, r: number, angle: number) => {
+    const a = ((angle - 90) * Math.PI) / 180.0;
+    return {
+      x: cx + r * Math.cos(a),
+      y: cy + r * Math.sin(a),
+    };
+  };
+
+  const describeArc = (cx: number, cy: number, rOuter: number, rInner: number, startAngle: number, endAngle: number) => {
+    const startOuter = polarToCartesian(cx, cy, rOuter, endAngle);
+    const endOuter = polarToCartesian(cx, cy, rOuter, startAngle);
+    const startInner = polarToCartesian(cx, cy, rInner, startAngle);
+    const endInner = polarToCartesian(cx, cy, rInner, endAngle);
+    const largeArcFlag = endAngle - startAngle <= 180 ? '0' : '1';
+
+    return [
+      `M ${startOuter.x} ${startOuter.y}`,
+      `A ${rOuter} ${rOuter} 0 ${largeArcFlag} 0 ${endOuter.x} ${endOuter.y}`,
+      `L ${startInner.x} ${startInner.y}`,
+      `A ${rInner} ${rInner} 0 ${largeArcFlag} 1 ${endInner.x} ${endInner.y}`,
+      'Z',
+    ].join(' ');
+  };
+
+  const renderStatusChart = () => {
+    const size = 170;
+    const cx = size / 2;
+    const cy = size / 2;
+    const rOuter = 72;
+    const rInner = 46;
+    const total = Math.max(statusBreakdown.total, 1);
+
+    let startAngle = 0;
+
+    return (
+      <Svg width={size} height={size}>
+        {statusBreakdown.items.map((it) => {
+          const sweep = (it.count / total) * 360;
+          const endAngle = startAngle + sweep;
+          const path = describeArc(cx, cy, rOuter, rInner, startAngle, endAngle);
+          const el = <Path key={it.status} d={path} fill={it.color} opacity={0.9} />;
+          startAngle = endAngle;
+          return el;
+        })}
+        <SvgText x={cx} y={cy - 2} fontSize={18} fill={colors.text} fontWeight="700" textAnchor="middle">
+          {statusBreakdown.total}
+        </SvgText>
+        <SvgText x={cx} y={cy + 18} fontSize={11} fill={colors.textSecondary} textAnchor="middle">
+          {t('pharmacyAdmin.dashboard.charts.status.total')}
+        </SvgText>
+      </Svg>
+    );
+  };
 
   const stats = useMemo<StatCard[]>(() => {
     return [
@@ -361,25 +524,57 @@ export const PharmacyDashboardScreen = () => {
             </View>
 
             {/* Charts Section */}
-            <View style={styles.chartsSection}>
+            <View
+              style={styles.chartsSection}
+              onLayout={(e) => {
+                const w = e.nativeEvent.layout.width;
+                if (w && Number.isFinite(w)) {
+                  setChartsWidth(Math.min(w - 32, 520));
+                }
+              }}
+            >
               <View style={styles.chartCard}>
                 <View style={styles.chartHeader}>
                   <Text style={styles.chartTitle}>{t('pharmacyAdmin.dashboard.charts.revenue.title')}</Text>
                 </View>
-                <View style={styles.chartPlaceholder}>
-                  <Ionicons name="bar-chart" size={48} color={colors.textLight} />
-                  <Text style={styles.chartPlaceholderText}>{t('pharmacyAdmin.dashboard.charts.revenue.placeholder')}</Text>
-                </View>
+                {orders.length > 0 ? (
+                  <View style={styles.chartBody}>
+                    {renderRevenueChart()}
+                    <Text style={styles.chartHintText}>{t('pharmacyAdmin.dashboard.charts.revenue.last7Days')}</Text>
+                  </View>
+                ) : (
+                  <View style={styles.chartPlaceholder}>
+                    <Ionicons name="bar-chart" size={48} color={colors.textLight} />
+                    <Text style={styles.chartPlaceholderText}>{t('pharmacyAdmin.dashboard.charts.revenue.placeholder')}</Text>
+                  </View>
+                )}
               </View>
 
               <View style={styles.chartCard}>
                 <View style={styles.chartHeader}>
                   <Text style={styles.chartTitle}>{t('pharmacyAdmin.dashboard.charts.status.title')}</Text>
                 </View>
-                <View style={styles.chartPlaceholder}>
-                  <Ionicons name="trending-up" size={48} color={colors.textLight} />
-                  <Text style={styles.chartPlaceholderText}>{t('pharmacyAdmin.dashboard.charts.status.placeholder')}</Text>
-                </View>
+                {statusBreakdown.total > 0 ? (
+                  <View style={styles.statusChartBody}>
+                    {renderStatusChart()}
+                    <View style={styles.statusLegend}>
+                      {statusBreakdown.items.slice(0, 6).map((it) => (
+                        <View key={it.status} style={styles.legendRow}>
+                          <View style={[styles.legendDot, { backgroundColor: it.color }]} />
+                          <Text style={styles.legendLabel} numberOfLines={1}>
+                            {it.label}
+                          </Text>
+                          <Text style={styles.legendValue}>{it.count}</Text>
+                        </View>
+                      ))}
+                    </View>
+                  </View>
+                ) : (
+                  <View style={styles.chartPlaceholder}>
+                    <Ionicons name="trending-up" size={48} color={colors.textLight} />
+                    <Text style={styles.chartPlaceholderText}>{t('pharmacyAdmin.dashboard.charts.status.placeholder')}</Text>
+                  </View>
+                )}
               </View>
             </View>
 
@@ -581,6 +776,18 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: colors.text,
   },
+  chartBody: {
+    backgroundColor: colors.backgroundLight,
+    borderRadius: 8,
+    paddingVertical: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  chartHintText: {
+    marginTop: 6,
+    fontSize: 12,
+    color: colors.textSecondary,
+  },
   chartPlaceholder: {
     height: 200,
     alignItems: 'center',
@@ -592,6 +799,42 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: colors.textLight,
     marginTop: 8,
+  },
+  statusChartBody: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: colors.backgroundLight,
+    borderRadius: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 10,
+    gap: 10,
+  },
+  statusLegend: {
+    flex: 1,
+    paddingLeft: 4,
+  },
+  legendRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 4,
+  },
+  legendDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    marginRight: 8,
+  },
+  legendLabel: {
+    flex: 1,
+    fontSize: 12,
+    color: colors.text,
+    marginRight: 8,
+  },
+  legendValue: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: colors.textSecondary,
   },
   customersSection: {
     padding: 16,

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -84,6 +84,12 @@ export const ProductDetailsScreen = () => {
   const userId = user?._id || user?.id;
 
   const requiresSubscription = isPharmacy;
+
+  useEffect(() => {
+    navigation.setOptions({
+      title: t('screens.productDetails'),
+    });
+  }, [navigation, t, i18n.language]);
 
   const { data: subscriptionResponse, isLoading: subscriptionLoading } = useQuery({
     queryKey: ['my-pharmacy-subscription', userId],
