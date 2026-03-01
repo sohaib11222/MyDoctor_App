@@ -24,7 +24,7 @@
         "icon": "./assets/app_icon.png",
 
       "adaptiveIcon": {
-    "foregroundImage": "./assets/adaptive-icon.png",
+    "foregroundImage": "./assets/app_icon.png",
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
